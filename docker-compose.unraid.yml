@@ -13,7 +13,7 @@ services:
       - "30800:8000"
     environment:
       # Point to existing unRAID containers
-      DATABASE_URL: postgresql+asyncpg://litellm:bierschinggeh@192.168.0.111:25432/recommendarr
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://user:password@192.168.0.111:25432/recommendarr}
       CHROMADB_URL: http://192.168.0.111:20002
       EMBEDDING_URL: http://192.168.0.111:20434
       LLM_BASE_URL: http://192.168.0.111:20434

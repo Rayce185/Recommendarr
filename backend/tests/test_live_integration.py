@@ -167,7 +167,7 @@ async def main():
     tautulli_url = os.environ.get("TAUTULLI_URL", "http://192.168.0.111:30181")
     tautulli_key = os.environ.get("TAUTULLI_API_KEY", "")
     tmdb_key = os.environ.get("TMDB_API_KEY", "")
-    db_url = os.environ.get("DATABASE_URL", "postgresql://litellm:bierschinggeh@192.168.0.111:25432/recommendarr")
+    db_url = os.environ.get("DATABASE_URL", "")
     ollama_url = os.environ.get("LLM_BASE_URL", "http://192.168.0.111:11434")
     chroma_url = os.environ.get("CHROMADB_URL", "http://192.168.0.111:20002")
 
