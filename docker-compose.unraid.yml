@@ -13,10 +13,10 @@ services:
       - "30800:8000"
     environment:
       # Point to existing unRAID containers
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@192.168.0.111:25432/recommendarr
+      DATABASE_URL: postgresql+asyncpg://litellm:bierschinggeh@192.168.0.111:25432/recommendarr
       CHROMADB_URL: http://192.168.0.111:20002
-      EMBEDDING_URL: http://192.168.0.111:11434
-      LLM_BASE_URL: http://192.168.0.111:11434
+      EMBEDDING_URL: http://192.168.0.111:20434
+      LLM_BASE_URL: http://192.168.0.111:20434
     # No depends_on — external containers managed by unRAID
 
   # Disable bundled services
