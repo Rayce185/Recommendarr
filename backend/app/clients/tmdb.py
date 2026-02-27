@@ -18,16 +18,25 @@ class TmdbClient:
     def __init__(self, api_key: str, language: str = "en-US"):
         self.api_key = api_key
         self.language = language
+        # Detect auth mode: JWT (v4 bearer) vs plain key (v3 query param)
+        self._is_bearer = api_key.startswith("eyJ")
 
     async def _get(self, path: str, params: dict | None = None) -> dict:
-        """Make authenticated GET request to TMDB."""
-        all_params = {
-            "api_key": self.api_key,
-            "language": self.language,
-            **(params or {}),
-        }
+        """Make authenticated GET request to TMDB.
+
+        Supports both v3 (api_key query param) and v4 (Bearer token header).
+        v4 bearer tokens work with v3 endpoints via Authorization header.
+        """
+        all_params = {"language": self.language, **(params or {})}
+        headers = {}
+
+        if self._is_bearer:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        else:
+            all_params["api_key"] = self.api_key
+
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(f"{self.BASE_URL}{path}", params=all_params)
+            resp = await client.get(f"{self.BASE_URL}{path}", params=all_params, headers=headers)
             resp.raise_for_status()
             return resp.json()
 
