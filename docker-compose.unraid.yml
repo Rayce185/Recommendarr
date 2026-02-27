@@ -1,0 +1,30 @@
+# Override for unRAID deployments using existing infrastructure.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.unraid.yml up -d
+#
+# This disables the bundled PostgreSQL and ChromaDB containers,
+# connecting instead to Ray's existing services.
+
+version: "3.8"
+
+services:
+  recommendarr:
+    network_mode: bridge
+    ports:
+      - "30800:8000"
+    environment:
+      # Point to existing unRAID containers
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@192.168.0.111:25432/recommendarr
+      CHROMADB_URL: http://192.168.0.111:20002
+      EMBEDDING_URL: http://192.168.0.111:11434
+      LLM_BASE_URL: http://192.168.0.111:11434
+    # No depends_on — external containers managed by unRAID
+
+  # Disable bundled services
+  recommendarr-db:
+    profiles: ["standalone"]
+  recommendarr-chromadb:
+    profiles: ["standalone"]
+
+networks:
+  recommendarr:
+    driver: bridge
