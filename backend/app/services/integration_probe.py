@@ -66,8 +66,8 @@ async def probe_all(settings: Settings) -> dict:
         # Ollama
         results["ollama"] = await _probe(client, f"{settings.llm_base_url}/api/tags")
 
-        # ChromaDB
-        results["chromadb"] = await _probe(client, f"{settings.chromadb_url}/api/v1/heartbeat")
+        # ChromaDB (v2 API)
+        results["chromadb"] = await _probe(client, f"{settings.chromadb_url}/api/v2/tenants/default_tenant/databases/default_database/collections")
 
     return results
 
