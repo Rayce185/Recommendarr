@@ -1,0 +1,211 @@
+"""TMDB client — direct TMDB API access for discover/trending features.
+
+Used for expanded trending sources (by country, streaming provider, new releases)
+that Seerr's proxy doesn't support with full parameterization.
+"""
+
+import httpx
+import logging
+from dataclasses import dataclass, field
+from typing import Optional
+from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TMDBDiscoverResult:
+    """Lightweight result from TMDB discover/trending endpoints."""
+    tmdb_id: int
+    media_type: str
+    title: str
+    year: Optional[int] = None
+    overview: Optional[str] = None
+    poster_path: Optional[str] = None
+    backdrop_path: Optional[str] = None
+    vote_average: float = 0.0
+    genre_ids: list[int] = field(default_factory=list)
+    popularity: float = 0.0
+    original_language: Optional[str] = None
+    release_date: Optional[str] = None
+
+
+@dataclass
+class StreamingProvider:
+    """A streaming provider available in a region."""
+    provider_id: int
+    provider_name: str
+    logo_path: Optional[str] = None
+    display_priority: int = 999
+
+
+# Major streaming providers we highlight (subset of TMDB's full list)
+FEATURED_PROVIDERS = {8, 119, 337, 350, 2, 3, 9, 384, 15, 531, 1899}
+# 8=Netflix, 119=Amazon Prime, 337=Disney+, 350=Apple TV+, 2=Apple TV Store,
+# 3=Google Play, 9=Amazon Video, 384=HBO Max, 15=Hulu, 531=Paramount+, 1899=Max
+
+COUNTRY_OPTIONS = [
+    {"code": "CH", "name": "Switzerland"},
+    {"code": "DE", "name": "Germany"},
+    {"code": "US", "name": "United States"},
+    {"code": "GB", "name": "United Kingdom"},
+    {"code": "FR", "name": "France"},
+    {"code": "KR", "name": "South Korea"},
+    {"code": "JP", "name": "Japan"},
+    {"code": "IN", "name": "India"},
+    {"code": "IT", "name": "Italy"},
+    {"code": "ES", "name": "Spain"},
+    {"code": "BR", "name": "Brazil"},
+    {"code": "AU", "name": "Australia"},
+]
+
+
+class TMDBClient:
+    """Direct TMDB API client for discover/trending features."""
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://api.themoviedb.org/3"
+
+    async def _get(self, path: str, params: dict | None = None) -> dict:
+        """GET request to TMDB API."""
+        p = {"api_key": self.api_key}
+        if params:
+            p.update(params)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(f"{self.base_url}{path}", params=p)
+            resp.raise_for_status()
+            return resp.json()
+
+    async def test_connection(self) -> bool:
+        """Test TMDB API reachability."""
+        try:
+            d = await self._get("/configuration")
+            return bool(d.get("images"))
+        except Exception:
+            return False
+
+    # ── Trending ─────────────────────────────────────────────────
+
+    async def get_trending(self, media_type: str = "all", window: str = "week",
+                           page: int = 1) -> tuple[list[TMDBDiscoverResult], int]:
+        """Global trending. media_type: all|movie|tv. window: day|week."""
+        d = await self._get(f"/trending/{media_type}/{window}", {"page": page})
+        results = [self._parse_result(r) for r in d.get("results", [])]
+        return results, d.get("total_pages", 1)
+
+    # ── Discover by Country ──────────────────────────────────────
+
+    async def discover_by_country(self, region: str, media_type: str = "movie",
+                                   page: int = 1) -> tuple[list[TMDBDiscoverResult], int]:
+        """Popular content in a specific country/region."""
+        if media_type == "movie":
+            d = await self._get("/discover/movie", {
+                "region": region,
+                "sort_by": "popularity.desc",
+                "page": page,
+                "vote_count.gte": 10,
+            })
+        else:
+            d = await self._get("/discover/tv", {
+                "watch_region": region,
+                "sort_by": "popularity.desc",
+                "page": page,
+                "vote_count.gte": 10,
+            })
+        results = [self._parse_result(r, media_type) for r in d.get("results", [])]
+        return results, d.get("total_pages", 1)
+
+    # ── Discover by Streaming Provider ───────────────────────────
+
+    async def discover_by_provider(self, provider_id: int, region: str = "CH",
+                                    media_type: str = "movie",
+                                    page: int = 1) -> tuple[list[TMDBDiscoverResult], int]:
+        """Popular content on a specific streaming provider in a region."""
+        endpoint = "/discover/movie" if media_type == "movie" else "/discover/tv"
+        d = await self._get(endpoint, {
+            "watch_region": region,
+            "with_watch_providers": str(provider_id),
+            "sort_by": "popularity.desc",
+            "page": page,
+        })
+        results = [self._parse_result(r, media_type) for r in d.get("results", [])]
+        return results, d.get("total_pages", 1)
+
+    async def get_providers(self, region: str = "CH",
+                            media_type: str = "movie") -> list[StreamingProvider]:
+        """Get available streaming providers for a region."""
+        endpoint = f"/watch/providers/{'movie' if media_type == 'movie' else 'tv'}"
+        d = await self._get(endpoint, {"watch_region": region})
+        providers = []
+        for p in d.get("results", []):
+            providers.append(StreamingProvider(
+                provider_id=p["provider_id"],
+                provider_name=p["provider_name"],
+                logo_path=p.get("logo_path"),
+                display_priority=p.get("display_priority", 999),
+            ))
+        # Sort: featured first (by display_priority), then non-featured
+        featured = [p for p in providers if p.provider_id in FEATURED_PROVIDERS]
+        featured.sort(key=lambda p: p.display_priority)
+        return featured
+
+    # ── New Releases ─────────────────────────────────────────────
+
+    async def discover_new_releases(self, days: int = 90, media_type: str = "movie",
+                                     page: int = 1) -> tuple[list[TMDBDiscoverResult], int]:
+        """Recently released content sorted by popularity."""
+        now = datetime.utcnow()
+        date_from = (now - timedelta(days=days)).strftime("%Y-%m-%d")
+        date_to = now.strftime("%Y-%m-%d")
+
+        if media_type == "movie":
+            d = await self._get("/discover/movie", {
+                "sort_by": "popularity.desc",
+                "primary_release_date.gte": date_from,
+                "primary_release_date.lte": date_to,
+                "page": page,
+                "vote_count.gte": 5,
+            })
+        else:
+            d = await self._get("/discover/tv", {
+                "sort_by": "popularity.desc",
+                "first_air_date.gte": date_from,
+                "first_air_date.lte": date_to,
+                "page": page,
+                "vote_count.gte": 5,
+            })
+        results = [self._parse_result(r, media_type) for r in d.get("results", [])]
+        return results, d.get("total_pages", 1)
+
+    # ── Parser ───────────────────────────────────────────────────
+
+    def _parse_result(self, r: dict, default_type: str = "movie") -> TMDBDiscoverResult:
+        """Parse a TMDB result dict into our DTO."""
+        media_type = r.get("media_type", default_type)
+        year = None
+        date_str = r.get("release_date") or r.get("first_air_date") or ""
+        if date_str and len(date_str) >= 4:
+            try:
+                year = int(date_str[:4])
+            except ValueError:
+                pass
+        return TMDBDiscoverResult(
+            tmdb_id=r.get("id", 0),
+            media_type=media_type,
+            title=r.get("title") or r.get("name") or "",
+            year=year,
+            overview=r.get("overview"),
+            poster_path=r.get("poster_path"),
+            backdrop_path=r.get("backdrop_path"),
+            vote_average=r.get("vote_average", 0.0),
+            genre_ids=r.get("genre_ids", []),
+            popularity=r.get("popularity", 0.0),
+            original_language=r.get("original_language"),
+            release_date=date_str,
+        )
+
+    @staticmethod
+    def get_country_options() -> list[dict]:
+        """Return the list of available country options."""
+        return COUNTRY_OPTIONS
