@@ -17,6 +17,8 @@ from app.services.recommender import RecommendationRequest, Recommendation
 from app.services.mood_mapper import parse_mood, mood_to_explanation, MOOD_PRESETS
 from app.clients.tmdb import TMDBClient, COUNTRY_OPTIONS
 
+from app.services.collections import CollectionService
+
 router = APIRouter()
 
 
@@ -628,3 +630,61 @@ async def invalidate_cache(username: Optional[str] = None):
     else:
         cache.invalidate_all()
         return {"status": "ok", "invalidated": "all"}
+
+
+
+@router.get("/recommend/{username}/collections")
+async def get_collections(
+    username: str,
+    user: TokenPayload = Depends(get_current_user),
+):
+    """Get partially completed movie collections for a user.
+    
+    Scans library movies for franchise collections (TMDB),
+    cross-references with user's watch history, returns
+    collections sorted by completion percentage (most complete first).
+    """
+    if user.username != username and not user.is_admin:
+        raise HTTPException(403, "Cannot view other users' collections")
+
+    stack = get_stack()
+    if not stack.tmdb:
+        raise HTTPException(503, "TMDB client not configured — set TMDB_API_KEY")
+
+    # Lazy-init collection service (reuse across requests)
+    if not hasattr(stack, "_collection_svc") or stack._collection_svc is None:
+        stack._collection_svc = CollectionService(stack.tmdb, stack.radarr, stack.tautulli)
+
+    collections = await stack._collection_svc.get_user_collections(username)
+
+    def _fmt_part(p):
+        return {
+            "tmdb_id": p.tmdb_id,
+            "title": p.title,
+            "year": p.year,
+            "poster_url": p.poster_url,
+            "vote_average": p.vote_average,
+            "in_library": p.in_library,
+            "watched": p.watched,
+            "release_date": p.release_date,
+        }
+
+    return {
+        "username": username,
+        "collections": [
+            {
+                "collection_id": c.collection_id,
+                "name": c.name,
+                "poster_url": c.poster_url,
+                "backdrop_url": c.backdrop_url,
+                "total_parts": c.total_parts,
+                "watched_count": c.watched_count,
+                "in_library_count": c.in_library_count,
+                "completion_pct": c.completion_pct,
+                "parts": [_fmt_part(p) for p in c.parts],
+                "missing": [_fmt_part(p) for p in c.missing_parts],
+            }
+            for c in collections
+        ],
+        "total": len(collections),
+    }

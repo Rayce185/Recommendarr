@@ -209,3 +209,46 @@ class TMDBClient:
     def get_country_options() -> list[dict]:
         """Return the list of available country options."""
         return COUNTRY_OPTIONS
+
+    # ── Collections ──────────────────────────────────────────────
+
+    async def get_movie_collection_id(self, tmdb_id: int) -> dict | None:
+        """Get collection info for a movie (if it belongs to one).
+        Returns {"id": int, "name": str} or None."""
+        try:
+            d = await self._get(f"/movie/{tmdb_id}", {})
+            coll = d.get("belongs_to_collection")
+            if coll:
+                return {"id": coll["id"], "name": coll["name"], "poster_path": coll.get("poster_path")}
+            return None
+        except Exception:
+            return None
+
+    async def get_collection(self, collection_id: int) -> dict | None:
+        """Get full collection details with all parts."""
+        try:
+            d = await self._get(f"/collection/{collection_id}", {})
+            parts = []
+            for p in d.get("parts", []):
+                date_str = p.get("release_date") or ""
+                year = int(date_str[:4]) if len(date_str) >= 4 else None
+                parts.append({
+                    "tmdb_id": p["id"],
+                    "title": p.get("title", ""),
+                    "year": year,
+                    "poster_path": p.get("poster_path"),
+                    "vote_average": p.get("vote_average", 0),
+                    "overview": p.get("overview", ""),
+                    "release_date": date_str,
+                })
+            parts.sort(key=lambda x: x.get("release_date") or "9999")
+            return {
+                "collection_id": collection_id,
+                "name": d.get("name", ""),
+                "overview": d.get("overview", ""),
+                "poster_path": d.get("poster_path"),
+                "backdrop_path": d.get("backdrop_path"),
+                "parts": parts,
+            }
+        except Exception:
+            return None

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Film, Tv, Zap, Heart, BarChart3, Settings, Play, Download, Star, Clock, TrendingUp, Sparkles, ChevronRight, X, ExternalLink, Loader2, AlertCircle, RefreshCw, Users, Monitor, Database, Activity, CheckCircle2, XCircle, ThumbsUp, ThumbsDown, Minus, Eye, Palette, Menu, SlidersHorizontal, Save, Trash2, Bookmark, EyeOff, LogIn, LogOut, Globe, ChevronDown, RotateCcw, MapPin } from "lucide-react";
+import { Search, Film, Tv, Zap, Heart, BarChart3, Settings, Play, Download, Star, Clock, TrendingUp, Sparkles, ChevronRight, X, ExternalLink, Loader2, AlertCircle, RefreshCw, Users, Monitor, Database, Activity, CheckCircle2, XCircle, ThumbsUp, ThumbsDown, Minus, Eye, Palette, Menu, SlidersHorizontal, Save, Trash2, Bookmark, EyeOff, LogIn, LogOut, Globe, ChevronDown, Layers, RotateCcw, MapPin } from "lucide-react";
 
 // ─── API Configuration ──────────────────────────────────────────
 const API_BASE = "/api/v1";
@@ -59,6 +59,7 @@ const api = {
   systemSettings: () => authFetch(`${API_BASE}/system/settings`).then(r => r.json()),
   testConnection: (service) => authFetch(`${API_BASE}/system/settings/test-connection?service=${service}`, { method: "POST" }).then(r => r.json()),
   cacheDetailed: () => authFetch(`${API_BASE}/system/settings/cache`).then(r => r.json()),
+  collections: (u) => authFetch(`${API_BASE}/recommend/${u}/collections`).then(r => r.json()),
   cacheClear: (scope = "all") => authFetch(`${API_BASE}/system/settings/cache/clear?scope=${scope}`, { method: "POST" }).then(r => r.json()),
   refreshStart: () => authFetch(`${API_BASE}/cache/refresh`, { method: "POST" }).then(r => r.json()),
   refreshStatus: () => authFetch(`${API_BASE}/cache/refresh/status`).then(r => r.json()),
@@ -1030,6 +1031,50 @@ const cssText = `
   .csel-opt.active { background: var(--accent); color: #fff; }
   .csel-menu::-webkit-scrollbar { width: 6px; }
   .csel-menu::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  /* Collections */
+  .coll-list { display: flex; flex-direction: column; gap: 12px; }
+  .coll-card {
+    background: var(--surface); border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--border); transition: border-color 0.2s;
+  }
+  .coll-card:hover { border-color: var(--accent); }
+  .coll-header {
+    display: flex; align-items: center; gap: 14px; padding: 14px; cursor: pointer;
+  }
+  .coll-poster {
+    width: 50px; height: 75px; object-fit: cover; border-radius: 6px; flex-shrink: 0;
+  }
+  .coll-info { flex: 1; min-width: 0; }
+  .coll-info h3 { margin: 0 0 6px; font-size: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .coll-meta { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+  .coll-pct { color: var(--accent); font-weight: 600; }
+  .coll-bar {
+    height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 6px;
+  }
+  .coll-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.5s; }
+  .coll-missing-summary { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .coll-chev { transition: transform 0.2s; color: var(--text-muted); flex-shrink: 0; }
+  .coll-chev.open { transform: rotate(180deg); }
+  .coll-parts {
+    padding: 0 14px 14px; display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px;
+  }
+  .coll-part {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border-radius: 8px; background: var(--bg-elevated); cursor: pointer;
+    transition: background 0.2s;
+  }
+  .coll-part:hover:not(.watched) { background: rgba(255,255,255,0.06); }
+  .coll-part.watched { opacity: 0.5; cursor: default; }
+  .coll-part-poster { width: 32px; height: 48px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+  .coll-part-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .coll-part-title { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .coll-part-status { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+  .coll-part-score { font-size: 12px; font-weight: 600; color: var(--accent); flex-shrink: 0; }
+  @media (max-width: 768px) {
+    .coll-parts { grid-template-columns: 1fr; }
+    .coll-poster { width: 40px; height: 60px; }
+  }
   /* Settings tabs */
   .settings-tabs {
     display: flex; gap: 4px; margin-bottom: 16px; padding: 4px;
@@ -2602,6 +2647,89 @@ function TasteProfilePage({ user }) {
 }
 
 
+// ─── Page: Collections ───────────────────────────────────────────
+function CollectionsPage({ user, onCardClick }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+
+  const load = useCallback(() => {
+    if (!user?.username) return;
+    setLoading(true);
+    setError(null);
+    api.collections(user.username)
+      .then(d => setData(d))
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [user?.username]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <><div className="page-header"><h2>Complete The Collection</h2></div><div className="page-body"><LoadingState message="Scanning your watch history for franchise gaps..." /></div></>;
+  if (error) return <><div className="page-header"><h2>Complete The Collection</h2></div><div className="page-body"><ErrorState message={error} onRetry={load} /></div></>;
+
+  const collections = data?.collections || [];
+
+  return (
+    <>
+      <div className="page-header">
+        <h2>Complete The Collection</h2>
+        <p>{collections.length} franchise{collections.length !== 1 ? "s" : ""} with missing entries</p>
+      </div>
+      <div className="page-body">
+        {collections.length === 0 ? (
+          <EmptyState icon={Layers} title="All caught up!" message="You've completed every franchise in your watch history." />
+        ) : (
+          <div className="coll-list">
+            {collections.map(c => (
+              <div key={c.collection_id} className="coll-card">
+                <div className="coll-header" onClick={() => setExpanded(expanded === c.collection_id ? null : c.collection_id)}>
+                  {c.poster_url && <img src={c.poster_url} alt="" className="coll-poster" />}
+                  <div className="coll-info">
+                    <h3>{c.name}</h3>
+                    <div className="coll-meta">
+                      <span className="coll-progress">{c.watched_count}/{c.total_parts} watched</span>
+                      <span className="coll-pct">{c.completion_pct}%</span>
+                    </div>
+                    <div className="coll-bar">
+                      <div className="coll-bar-fill" style={{ width: `${c.completion_pct}%` }} />
+                    </div>
+                    <div className="coll-missing-summary">
+                      {c.missing.length} missing: {c.missing.slice(0, 3).map(m => m.title).join(", ")}
+                      {c.missing.length > 3 && ` +${c.missing.length - 3} more`}
+                    </div>
+                  </div>
+                  <ChevronDown size={18} className={expanded === c.collection_id ? "coll-chev open" : "coll-chev"} />
+                </div>
+                {expanded === c.collection_id && (
+                  <div className="coll-parts">
+                    {c.parts.map(p => (
+                      <div key={p.tmdb_id} className={`coll-part ${p.watched ? "watched" : ""}`}
+                           onClick={() => !p.watched && onCardClick && onCardClick({ tmdb_id: p.tmdb_id, media_type: "movie", title: p.title, year: p.year, poster_url: p.poster_url })}>
+                        {p.poster_url && <img src={p.poster_url} alt="" className="coll-part-poster" />}
+                        <div className="coll-part-info">
+                          <span className="coll-part-title">{p.title} {p.year ? `(${p.year})` : ""}</span>
+                          <span className="coll-part-status">
+                            {p.watched ? <><CheckCircle2 size={12} style={{ color: "var(--green)" }} /> Watched</> :
+                             p.in_library ? <><Film size={12} style={{ color: "var(--accent)" }} /> In Library</> :
+                             <><XCircle size={12} style={{ color: "var(--text-muted)" }} /> Not in Library</>}
+                          </span>
+                        </div>
+                        {p.vote_average > 0 && <span className="coll-part-score">{p.vote_average.toFixed(1)}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ─── Page: System Settings ───────────────────────────────────────
 function AdminPage() {
   const [settingsTab, setSettingsTab] = useState("services");
@@ -3075,6 +3203,7 @@ export default function Recommendarr() {
     { id: "rediscover", label: "Rediscover", icon: RefreshCw, section: "Recommendations" },
     { id: "mood", label: "Mood Match", icon: Sparkles, section: "Discovery" },
     { id: "trending", label: "Trending", icon: TrendingUp, section: "Discovery" },
+    { id: "collections", label: "Collections", icon: Layers, section: "Discovery" },
     { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
     { id: "admin", label: "System Settings", icon: Settings, section: "Admin" },
   ];
@@ -3091,6 +3220,8 @@ export default function Recommendarr() {
         return <MoodPage user={selectedUser} onCardClick={openDetail} />;
       case "trending":
         return <TrendingPage onCardClick={openDetail} />;
+      case "collections":
+        return <CollectionsPage user={selectedUser} onCardClick={openDetail} />;
       case "profile":
         return <TasteProfilePage user={selectedUser} />;
       case "admin":
