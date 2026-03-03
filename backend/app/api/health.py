@@ -54,7 +54,7 @@ async def health_check():
 
     return {
         "status": "ok" if all_ok else "degraded",
-        "version": "0.4.0",
+        "version": "0.5.0",
         "architecture": "api-first",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "services": checks,
