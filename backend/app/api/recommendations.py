@@ -15,6 +15,7 @@ from app.config import settings
 from app.services.cache import get_cache
 from app.services.recommender import RecommendationRequest, Recommendation
 from app.services.mood_mapper import parse_mood, mood_to_explanation, MOOD_PRESETS
+from app.services.ai_mood import parse_mood_ai
 from app.clients.tmdb import TMDBClient, COUNTRY_OPTIONS
 
 from app.services.collections import CollectionService
@@ -118,7 +119,7 @@ async def get_recommendations(
     # Parse mood if provided
     mood_vector = None
     if mood:
-        mood_vector = parse_mood(mood)
+        mood_vector = await parse_mood_ai(mood)
 
     # Parse filter params
     excl_genres = {g.strip() for g in exclude_genres.split(",") if g.strip()} if exclude_genres else set()
@@ -262,7 +263,7 @@ async def parse_mood_text(text: str = Query(..., min_length=2, max_length=200)):
     Useful for UI preview — show users how their mood text is interpreted
     before running the full recommendation.
     """
-    vector = parse_mood(text)
+    vector = await parse_mood_ai(text)
     return {
         "input": text,
         "explanation": mood_to_explanation(vector),

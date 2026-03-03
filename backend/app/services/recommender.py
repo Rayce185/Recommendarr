@@ -27,6 +27,7 @@ from app.clients.seerr import SeerrClient, SeerrMediaDetail, SeerrDiscoverResult
 from app.clients.servarr import RadarrClient, SonarrClient, ServarrMovie, ServarrSeries
 from app.services.taste_profiler import TasteProfiler, TasteProfile
 from app.services.mood_mapper import MoodVector, parse_mood, mood_to_explanation
+from app.services.ai_mood import parse_mood_ai
 from app.services.profile_overrides import get_override_store, ProfileOverrides
 from app.services.feedback import get_feedback_store
 
@@ -127,7 +128,7 @@ class RecommendationEngine:
         request._uid = resolve_user_id(request.username)
         # Parse mood text if provided
         if request.mood_text and not request.mood_vector:
-            request.mood_vector = parse_mood(request.mood_text)
+            request.mood_vector = await parse_mood_ai(request.mood_text)
 
         # Load user profile overrides
         override_store = get_override_store()
