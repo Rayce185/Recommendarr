@@ -68,6 +68,7 @@ const api = {
   testConnection: (service) => authFetch(`${API_BASE}/system/settings/test-connection?service=${service}`, { method: "POST" }).then(r => r.json()),
   cacheDetailed: () => authFetch(`${API_BASE}/system/settings/cache`).then(r => r.json()),
   collections: (u) => authFetch(`${API_BASE}/recommend/${u}/collections`).then(r => r.json()),
+  collectionFor: (tmdbId) => authFetch(`${API_BASE}/collection/for/${tmdbId}`).then(r => { if (r.status === 204) return null; return r.json(); }),
   cacheClear: (scope = "all") => authFetch(`${API_BASE}/system/settings/cache/clear?scope=${scope}`, { method: "POST" }).then(r => r.json()),
   refreshStart: () => authFetch(`${API_BASE}/cache/refresh`, { method: "POST" }).then(r => r.json()),
   refreshStatus: () => authFetch(`${API_BASE}/cache/refresh/status`).then(r => r.json()),
@@ -77,10 +78,8 @@ const api = {
   }).then(r => r.json()),
   similar: (id) => authFetch(`${API_BASE}/discover/similar/${id}?limit=6`).then(r => r.json()),
   genres: () => authFetch(`${API_BASE}/genres`).then(r => r.json()),
-  request: (id, type) => authFetch(`${API_BASE}/request/${id}`, {
+  request: (id, type) => authFetch(`${API_BASE}/request/${id}?media_type=${type || "movie"}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ media_type: type || "movie" })
   }).then(r => r.json()),
   userPeers: (u) => authFetch(`${API_BASE}/users/${u}/peers`).then(r => r.json()),
   submitFeedback: (u, data) => authFetch(`${API_BASE}/users/${u}/feedback`, {
@@ -1280,6 +1279,35 @@ const cssText = `
     gap: 10px;
   }
   .modal-explanation svg { flex-shrink: 0; margin-top: 1px; }
+
+  .modal-collection-badge {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 8px;
+    font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .modal-collection-badge svg { color: var(--accent); flex-shrink: 0; }
+  .coll-name { color: var(--text-primary); font-weight: 600; }
+  .coll-progress { color: var(--text-muted); font-size: 12px; }
+  .coll-bar { flex: 1; min-width: 60px; height: 4px; background: var(--bg-elevated); border-radius: 2px; }
+  .coll-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
+
+  .modal-collection-missing { margin-top: 16px; }
+  .modal-collection-missing h4 {
+    display: flex; align-items: center; gap: 6px; font-size: 14px;
+    color: var(--text-secondary); margin: 0 0 10px 0; font-weight: 600;
+  }
+  .modal-collection-missing h4 svg { color: var(--accent); }
+  .coll-missing-grid { display: flex; flex-direction: column; gap: 8px; }
+  .coll-missing-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px;
+    background: var(--bg-elevated); border-radius: 8px;
+  }
+  .coll-missing-item img { width: 40px; height: 60px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+  .coll-missing-noposter { width: 40px; height: 60px; background: var(--surface); border-radius: 4px; flex-shrink: 0; }
+  .coll-missing-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .coll-missing-title { font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .coll-missing-year { font-size: 11px; color: var(--text-muted); }
+  .btn-sm { padding: 4px 10px; font-size: 11px; gap: 4px; }
   .modal-score-row {
     display: flex;
     gap: 8px;
@@ -1759,12 +1787,40 @@ function DetailModal({ item, detail, onClose, onRequest, requesting, requestResu
   const poster = posterUrl(d.poster_url || item.poster_url, "w500");
   const backdrop = d.backdrop_url ? fixPosterUrl(d.backdrop_url) : null;
   const hasTrailer = d.trailer_url;
+  const [collectionData, setCollectionData] = useState(null);
+  const [collLoading, setCollLoading] = useState(false);
+  const [collRequestingId, setCollRequestingId] = useState(null);
 
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  // Fetch collection info for movies
+  useEffect(() => {
+    const tmdbId = d.tmdb_id || item.tmdb_id;
+    const mediaType = item.media_type || d.media_type;
+    if (mediaType !== "movie" || !tmdbId) return;
+    setCollLoading(true);
+    api.collectionFor(tmdbId)
+      .then(data => setCollectionData(data))
+      .catch(() => setCollectionData(null))
+      .finally(() => setCollLoading(false));
+  }, [d.tmdb_id, item.tmdb_id]);
+
+  const handleCollectionRequest = async (partTmdbId) => {
+    setCollRequestingId(partTmdbId);
+    try {
+      await api.request(partTmdbId, "movie");
+      setCollectionData(prev => prev ? {
+        ...prev,
+        parts: prev.parts.map(p => p.tmdb_id === partTmdbId ? { ...p, requested: true } : p),
+        missing: prev.missing.map(p => p.tmdb_id === partTmdbId ? { ...p, requested: true } : p),
+      } : null);
+    } catch (e) { console.error("Collection request failed:", e); }
+    setCollRequestingId(null);
+  };
 
   const breakdownLabels = { genre: "Genre", keyword: "Keyword", rating: "Rating", personnel: "Cast/Crew", popularity: "Popular", mood: "Mood" };
 
@@ -1794,6 +1850,15 @@ function DetailModal({ item, detail, onClose, onRequest, requesting, requestResu
               </div>
             </div>
           </div>
+
+          {collectionData && (
+            <div className="modal-collection-badge">
+              <Layers size={15} />
+              <span className="coll-name">{collectionData.name}</span>
+              <span className="coll-progress">{collectionData.watched_count}/{collectionData.total_parts} watched</span>
+              <div className="coll-bar"><div className="coll-bar-fill" style={{ width: `${collectionData.completion_pct}%` }} /></div>
+            </div>
+          )}
 
           {item.explanation && (
             <div className="modal-explanation">
@@ -1877,6 +1942,33 @@ function DetailModal({ item, detail, onClose, onRequest, requesting, requestResu
               <ExternalLink size={15} /> TMDB
             </button>
           </div>
+
+          {collectionData && collectionData.missing.length > 0 && (
+            <div className="modal-collection-missing">
+              <h4><Layers size={14} /> Missing from {collectionData.name}</h4>
+              <div className="coll-missing-grid">
+                {collectionData.missing.map(p => (
+                  <div className="coll-missing-item" key={p.tmdb_id}>
+                    {p.poster_url ? <img src={p.poster_url} alt={p.title} /> : <div className="coll-missing-noposter" />}
+                    <div className="coll-missing-info">
+                      <span className="coll-missing-title">{p.title}</span>
+                      <span className="coll-missing-year">{p.year || "TBA"}{p.vote_average ? ` · ★ ${p.vote_average.toFixed(1)}` : ""}</span>
+                    </div>
+                    <button
+                      className={`btn btn-sm ${p.requested ? "btn-success" : "btn-primary"}`}
+                      onClick={() => handleCollectionRequest(p.tmdb_id)}
+                      disabled={collRequestingId === p.tmdb_id || p.requested || p.in_library}
+                    >
+                      {p.in_library ? <><CheckCircle2 size={12} /> In Library</> :
+                       p.requested ? <><CheckCircle2 size={12} /> Requested</> :
+                       collRequestingId === p.tmdb_id ? <Loader2 size={12} className="spinner" /> :
+                       <><Download size={12} /> Request</>}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -28,6 +28,7 @@ from app.clients.servarr import RadarrClient, SonarrClient, ServarrMovie, Servar
 from app.services.taste_profiler import TasteProfiler, TasteProfile
 from app.services.mood_mapper import MoodVector, parse_mood, mood_to_explanation
 from app.services.ai_mood import parse_mood_ai
+from app.services.ai_explanations import generate_explanations, build_profile_summary
 from app.services.profile_overrides import get_override_store, ProfileOverrides
 from app.services.feedback import get_feedback_store
 
@@ -156,6 +157,21 @@ class RecommendationEngine:
         else:
             logger.warning(f"Unknown mode: {request.mode}")
             return []
+
+        # Generate AI explanations (if enabled + we have results)
+        if results:
+            try:
+                profile = await self._get_profile(request.username, request.domain)
+                profile_summary = build_profile_summary(profile)
+                explanations = await generate_explanations(
+                    results,
+                    profile_summary,
+                    mood_text=request.mood_text,
+                )
+                for rec, expl in zip(results, explanations):
+                    rec.explanation = expl
+            except Exception as e:
+                logger.warning(f"AI explanations skipped: {e}")
 
         # Filter out dismissed items
         dismissed = getattr(request, '_dismissed_ids', set())

@@ -689,3 +689,85 @@ async def get_collections(
         ],
         "total": len(collections),
     }
+
+
+@router.get("/collection/for/{tmdb_id}")
+async def get_collection_for_movie(
+    tmdb_id: int,
+    user: TokenPayload = Depends(get_current_user),
+):
+    """Check if a movie belongs to a collection and return completion status.
+
+    Returns collection info with per-part watched/library status for the
+    authenticated user. Used by the detail modal to show collection badges.
+    Returns 204 (no content) if the movie is not part of a collection.
+    """
+    stack = get_stack()
+    if not stack.tmdb:
+        raise HTTPException(503, "TMDB not configured")
+
+    # 1. Check collection membership
+    coll_info = await stack.tmdb.get_movie_collection_id(tmdb_id)
+    if not coll_info:
+        from fastapi.responses import Response
+        return Response(status_code=204)
+
+    # 2. Fetch full collection
+    coll = await stack.tmdb.get_collection(coll_info["id"])
+    if not coll:
+        from fastapi.responses import Response
+        return Response(status_code=204)
+
+    # 3. Cross-reference with library + watch status
+    movies = await stack.radarr.get_all_movies()
+    library_tmdb = {m.tmdb_id for m in movies if m.tmdb_id}
+
+    # Get user watch history
+    from app.services.factory import resolve_user_id
+    uid = resolve_user_id(user.username)
+    history = await stack.tautulli.get_history(user_id=None, limit=10000)
+    user_watched = {e.tmdb_id for e in history if e.user_id == uid and e.media_type == "movie" and e.tmdb_id}
+
+    parts = []
+    watched_count = 0
+    in_lib_count = 0
+    missing = []
+
+    for p in coll["parts"]:
+        in_lib = p["tmdb_id"] in library_tmdb
+        watched = p["tmdb_id"] in user_watched
+
+        poster = f"https://image.tmdb.org/t/p/w342{p['poster_path']}" if p.get("poster_path") else None
+        part = {
+            "tmdb_id": p["tmdb_id"],
+            "title": p["title"],
+            "year": p.get("year"),
+            "poster_url": poster,
+            "vote_average": p.get("vote_average", 0),
+            "in_library": in_lib,
+            "watched": watched,
+            "release_date": p.get("release_date"),
+        }
+        parts.append(part)
+        if watched:
+            watched_count += 1
+        if in_lib:
+            in_lib_count += 1
+        if not in_lib:
+            missing.append(part)
+
+    total = len(parts)
+    poster_url = f"https://image.tmdb.org/t/p/w342{coll['poster_path']}" if coll.get("poster_path") else None
+
+    return {
+        "collection_id": coll["collection_id"],
+        "name": coll["name"],
+        "poster_url": poster_url,
+        "total_parts": total,
+        "watched_count": watched_count,
+        "in_library_count": in_lib_count,
+        "completion_pct": round((watched_count / total) * 100, 1) if total else 0,
+        "current_tmdb_id": tmdb_id,
+        "parts": parts,
+        "missing": missing,
+    }
