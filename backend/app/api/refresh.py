@@ -103,17 +103,17 @@ async def _run_refresh(job_id: str, username: str):
                     await stack.profiler.build_profile(username=username, domain="all", enrich_keywords=True, max_enrich=100)
 
                 elif step_key == "tonight":
-                    from app.services.recommender_v2 import RecommendationRequest
+                    from app.services.recommender import RecommendationRequest
                     req = RecommendationRequest(username=username, mode="tonight", domain="all", limit=20)
                     await stack.engine.recommend(req)
 
                 elif step_key == "grab":
-                    from app.services.recommender_v2 import RecommendationRequest
+                    from app.services.recommender import RecommendationRequest
                     req = RecommendationRequest(username=username, mode="grab", domain="all", limit=20)
                     await stack.engine.recommend(req)
 
                 elif step_key == "rediscover":
-                    from app.services.recommender_v2 import RecommendationRequest
+                    from app.services.recommender import RecommendationRequest
                     req = RecommendationRequest(username=username, mode="rediscover", domain="all", limit=20)
                     await stack.engine.recommend(req)
 

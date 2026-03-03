@@ -13,8 +13,8 @@ from app.clients.seerr import SeerrClient
 from app.clients.servarr import RadarrClient, SonarrClient
 from app.clients.plex import PlexClient
 from app.clients.tmdb import TMDBClient
-from app.services.taste_profiler_v2 import TasteProfilerV2
-from app.services.recommender_v2 import RecommendationEngineV2
+from app.services.taste_profiler import TasteProfiler
+from app.services.recommender import RecommendationEngine
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +27,8 @@ class ServiceStack:
     radarr: RadarrClient
     sonarr_tv: SonarrClient
     sonarr_anime: SonarrClient
-    profiler: TasteProfilerV2
-    engine: RecommendationEngineV2
+    profiler: TasteProfiler
+    engine: RecommendationEngine
     plex: PlexClient | None = None
     tmdb: 'TMDBClient | None' = None
 
@@ -86,12 +86,12 @@ def build_stack() -> ServiceStack:
         tmdb = TMDBClient(api_key=settings.tmdb_api_key)
         logger.info("TMDB client configured")
 
-    profiler = TasteProfilerV2(
+    profiler = TasteProfiler(
         tautulli=tautulli,
         seerr=seerr,
     )
 
-    engine = RecommendationEngineV2(
+    engine = RecommendationEngine(
         tautulli=tautulli,
         seerr=seerr,
         radarr=radarr,

@@ -1,7 +1,7 @@
 """Recommendation API v2 — API-first, no DB dependency for core flow.
 
 All endpoints use the service stack (Tautulli + Seerr + Radarr/Sonarr)
-through the RecommendationEngineV2 orchestrator.
+through the RecommendationEngine orchestrator.
 """
 
 from fastapi import APIRouter, Query, HTTPException, Depends
@@ -13,7 +13,7 @@ from app.services.feedback import get_feedback_store
 from app.auth.jwt_handler import TokenPayload, get_current_user
 from app.config import settings
 from app.services.cache import get_cache
-from app.services.recommender_v2 import RecommendationRequest, Recommendation
+from app.services.recommender import RecommendationRequest, Recommendation
 from app.services.mood_mapper import parse_mood, mood_to_explanation, MOOD_PRESETS
 from app.clients.tmdb import TMDBClient, COUNTRY_OPTIONS
 

@@ -25,7 +25,7 @@ from typing import Optional
 from app.clients.tautulli import TautulliClient
 from app.clients.seerr import SeerrClient, SeerrMediaDetail, SeerrDiscoverResult
 from app.clients.servarr import RadarrClient, SonarrClient, ServarrMovie, ServarrSeries
-from app.services.taste_profiler_v2 import TasteProfilerV2, TasteProfile
+from app.services.taste_profiler import TasteProfiler, TasteProfile
 from app.services.mood_mapper import MoodVector, parse_mood, mood_to_explanation
 from app.services.profile_overrides import get_override_store, ProfileOverrides
 from app.services.feedback import get_feedback_store
@@ -98,7 +98,7 @@ class RecommendationRequest:
     group_users: list[str] = field(default_factory=list)  # For group mode
 
 
-class RecommendationEngineV2:
+class RecommendationEngine:
     """Generates recommendations via API orchestration + structured scoring."""
 
     def __init__(
@@ -108,7 +108,7 @@ class RecommendationEngineV2:
         radarr: RadarrClient,
         sonarr_tv: SonarrClient,
         sonarr_anime: SonarrClient,
-        profiler: TasteProfilerV2,
+        profiler: TasteProfiler,
     ):
         self.tautulli = tautulli
         self.seerr = seerr

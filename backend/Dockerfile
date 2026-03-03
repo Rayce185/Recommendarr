@@ -25,4 +25,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 
 EXPOSE 30800
 
-CMD ["uvicorn", "app.main_v2:app", "--host", "0.0.0.0", "--port", "30800", "--log-level", "info"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "30800", "--log-level", "info"]

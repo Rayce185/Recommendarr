@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.api import health_v2, users_v2, recommendations_v2, auth, refresh, feedback
+from app.api import health, users, recommendations, auth, refresh, feedback
 from app.api import settings as settings_api
 from app.services.factory import build_stack, init_user_map
 
@@ -119,9 +119,9 @@ app.add_middleware(
 
 # ── Mount v2 routers ─────────────────────────────────────────────
 
-app.include_router(health_v2.router,            prefix="/api/v1", tags=["system"])
-app.include_router(users_v2.router,             prefix="/api/v1", tags=["users"])
-app.include_router(recommendations_v2.router,   prefix="/api/v1", tags=["recommendations"])
+app.include_router(health.router,            prefix="/api/v1", tags=["system"])
+app.include_router(users.router,             prefix="/api/v1", tags=["users"])
+app.include_router(recommendations.router,   prefix="/api/v1", tags=["recommendations"])
 app.include_router(auth.router,                 prefix="/api/v1", tags=["auth"])
 app.include_router(refresh.router,              prefix="/api/v1", tags=["cache"])
 app.include_router(feedback.router,             prefix="/api/v1", tags=["feedback"])

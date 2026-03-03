@@ -1,387 +1,472 @@
-"""Taste profiler — builds user preference vectors from watch history.
+"""Taste Profiler v2 — API-first, Tautulli as source of truth.
 
-Creates sub-profiles per media domain (Movies, TV, Anime) with:
-- Genre affinity weights (from completion rates, not just watch count)
-- Personnel affinity (directors, actors who predict completion)
-- Anti-profile (genres/themes the user abandons)
-- Temporal decay (recent watches count more)
-- Cross-pollination controls
+Computes user taste profiles entirely from Tautulli watch history API.
+Profiles are cached in PostgreSQL for performance but are always rebuildable
+from Tautulli — the DB is a cache, not a source of truth.
+
+Architecture:
+  1. Pull full watch history from Tautulli API (paginated)
+  2. Enrich with Seerr metadata (genres, keywords, cast/crew)
+  3. Score each watch event (completion, recency, frequency)
+  4. Aggregate into genre/keyword/personnel vectors per domain
+  5. Cache in DB, refresh on schedule or demand
+
+No embeddings. No local model. Pure arithmetic on structured metadata.
 """
 
 import math
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
+from dataclasses import dataclass, field
 from typing import Optional
 
-from sqlalchemy import select, and_, func
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.tables import (
-    User, WatchHistory, TmdbCache, UserLibraryAccess,
-    Feedback, InfluenceOverride,
-)
+from app.clients.tautulli import TautulliClient
+from app.clients.seerr import SeerrClient
+from app.clients.servarr import RadarrClient, SonarrClient
 
 logger = logging.getLogger(__name__)
 
 
-# ── Signal weight constants (from spec §3.1) ────────────────────
+# ── Signal weights (from spec §3.1) ─────────────────────────────
 
 SIGNAL_WEIGHTS = {
-    "completion_full": 5.0,       # Watched ≥85%
-    "completion_partial": 2.0,    # Watched 40-84%
-    "completion_abandoned": -3.0, # Abandoned <20%
-    "rewatch": 4.0,               # Watched more than once
-    "user_rating_high": 3.0,      # Rating ≥8
-    "user_rating_low": -2.0,      # Rating ≤4
-    "feedback_up": 3.0,           # Thumbs up
-    "feedback_down": -4.0,        # Thumbs down
-    "feedback_dismiss": -1.0,     # Dismissed
-    "recency_boost": 1.5,         # Multiplier for recent watches
+    "completion_full": 5.0,       # ≥85% watched
+    "completion_good": 2.0,       # 40-84% watched
+    "completion_abandoned": -3.0, # <20% watched
+    "rewatch": 4.0,               # Each additional watch
+    "recency_halflife_days": 180, # Exponential decay half-life
 }
 
-# Media domain definitions (from spec §3.3)
-MEDIA_DOMAINS = {
-    "movies": {"library_types": ["movie"], "section_keys": ["14", "20"]},
-    "tv": {"library_types": ["show"], "section_keys": ["2", "7"]},
-    "anime": {"library_types": ["show"], "section_keys": ["10", "15", "17"]},
+
+# ── Data structures ──────────────────────────────────────────────
+
+@dataclass
+class GenreAffinity:
+    """Weighted genre preference for a user."""
+    genre: str
+    score: float = 0.0        # Normalized 0.0-1.0
+    raw_score: float = 0.0    # Pre-normalization
+    watch_count: int = 0      # How many titles with this genre
+    avg_completion: float = 0.0
+    total_hours: float = 0.0
+
+
+@dataclass
+class KeywordAffinity:
+    """Weighted TMDB keyword preference."""
+    keyword: str
+    score: float = 0.0
+    occurrence_count: int = 0
+
+
+@dataclass
+class PersonnelAffinity:
+    """Director/actor preference from watch patterns."""
+    name: str
+    role: str                  # "director" | "actor"
+    score: float = 0.0
+    title_count: int = 0
+    avg_completion: float = 0.0
+
+
+@dataclass
+class TasteProfile:
+    """Complete taste profile for a user across one or all domains."""
+    user_id: str
+    username: str
+    domain: str                # "movies" | "tv" | "anime" | "all"
+    built_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    total_watched: int = 0
+    total_hours: float = 0.0
+    avg_completion: float = 0.0
+    rewatch_count: int = 0
+    # Vectors
+    genres: list[GenreAffinity] = field(default_factory=list)
+    keywords: list[KeywordAffinity] = field(default_factory=list)
+    personnel: list[PersonnelAffinity] = field(default_factory=list)
+    # Negative signals
+    avoided_genres: list[GenreAffinity] = field(default_factory=list)
+    avoided_keywords: list[KeywordAffinity] = field(default_factory=list)
+
+    def top_genres(self, n: int = 8) -> list[GenreAffinity]:
+        return sorted(self.genres, key=lambda g: g.score, reverse=True)[:n]
+
+    def top_keywords(self, n: int = 15) -> list[KeywordAffinity]:
+        return sorted(self.keywords, key=lambda k: k.score, reverse=True)[:n]
+
+    def top_personnel(self, n: int = 10) -> list[PersonnelAffinity]:
+        return sorted(self.personnel, key=lambda p: p.score, reverse=True)[:n]
+
+    def genre_score(self, genre: str) -> float:
+        """Look up score for a specific genre."""
+        for g in self.genres:
+            if g.genre == genre:
+                return g.score
+        return 0.0
+
+    def keyword_score(self, keyword: str) -> float:
+        """Look up score for a specific keyword."""
+        for k in self.keywords:
+            if k.keyword == keyword:
+                return k.score
+        return 0.0
+
+
+# ── Plex library → domain mapping ────────────────────────────────
+# Maps Tautulli library section IDs to recommendation domains.
+# These come from the verified Plex libraries on Ray's server.
+
+DEFAULT_LIBRARY_DOMAINS = {
+    # Movies
+    "14": "movies",    # Movies
+    "20": "movies",    # Kinderfilme
+    # TV
+    "2": "tv",         # TV Series
+    "7": "tv",         # Kinderserien
+    # Anime
+    "10": "anime",     # Anime
+    "15": "anime",     # Anime-Ecchi
+    "17": "anime",     # Anime-Hentai
 }
 
 
 class TasteProfiler:
-    """Builds and manages user taste profiles from watch signals."""
+    """Builds taste profiles from Tautulli API + Seerr metadata.
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    API-first architecture — Tautulli is the source of truth for watch
+    history, Seerr provides TMDB metadata enrichment. PostgreSQL stores
+    only the computed profile as a refreshable cache.
+    """
+
+    def __init__(
+        self,
+        tautulli: TautulliClient,
+        seerr: SeerrClient,
+        library_domains: dict[str, str] | None = None,
+    ):
+        self.tautulli = tautulli
+        self.seerr = seerr
+        self.library_domains = library_domains or DEFAULT_LIBRARY_DOMAINS
 
     async def build_profile(
         self,
-        user_id: int,
-        depth_months: int = 12,
-        domain: Optional[str] = None,
-    ) -> dict:
-        """Build complete taste profile for a user.
+        username: str,
+        domain: str = "all",
+        depth_months: int = 24,
+        enrich_keywords: bool = True,
+        max_enrich: int = 200,
+    ) -> TasteProfile:
+        """Build a complete taste profile from Tautulli history.
 
         Args:
-            user_id: Database user ID
-            depth_months: How far back to look (0 = all time)
-            domain: "movies" | "tv" | "anime" | None (all domains)
-
-        Returns:
-            {
-                "genre_affinities": {"Action": 0.85, "Horror": -0.3, ...},
-                "personnel_affinities": {"Nolan": 0.9, "Spielberg": 0.7, ...},
-                "keyword_affinities": {"time-travel": 0.8, ...},
-                "anti_profile": {"genres": [...], "keywords": [...]},
-                "stats": {"total_watches": N, "avg_completion": 0.78, ...},
-                "embedding": [float, ...],  # aggregated taste vector
-            }
+            username: Tautulli username (matches Plex username)
+            domain: "movies", "tv", "anime", or "all"
+            depth_months: How far back to look in watch history
+            enrich_keywords: Whether to fetch TMDB keywords via Seerr (slower but richer)
+            max_enrich: Max titles to enrich with keywords (rate limit control)
         """
-        # Get watch history with TMDB metadata
-        since = None
-        if depth_months > 0:
-            since = datetime.now(timezone.utc) - timedelta(days=depth_months * 30)
+        logger.info(f"Building taste profile for {username} (domain={domain}, depth={depth_months}mo)")
 
-        watches = await self._get_enriched_history(user_id, since, domain)
+        # 1. Pull watch history from Tautulli
+        since = datetime.now(timezone.utc) - timedelta(days=depth_months * 30)
+        history = await self.tautulli.get_history(user_id=None, since=since, limit=10000)
 
-        if not watches:
-            return self._empty_profile()
+        # Resolve username → numeric user_id via Tautulli
+        user_id_match = username  # Default: try direct match
+        try:
+            users = await self.tautulli.get_users()
+            for u in users:
+                uname = u.get("username", "") or u.get("friendly_name", "")
+                if uname == username:
+                    user_id_match = str(u.get("user_id", ""))
+                    logger.info(f"Resolved username '{username}' → user_id '{user_id_match}'")
+                    break
+        except Exception as e:
+            logger.warning(f"Could not resolve username: {e}")
 
-        # Get user feedback
-        feedback = await self._get_feedback(user_id)
+        # Filter to this user (match both numeric ID and username)
+        user_events = [
+            e for e in history
+            if str(e.user_id) == user_id_match
+            or str(e.user_id) == username
+            or e.user_id == username
+        ]
+        if not user_events:
+            logger.warning(f"No events found for user_id={user_id_match} (username={username})")
 
-        # Get influence overrides
-        overrides = await self._get_overrides(user_id)
+        logger.info(f"Found {len(user_events)} watch events for {username}")
 
-        # Build affinity scores
-        genre_scores = defaultdict(float)
-        genre_counts = defaultdict(int)
-        personnel_scores = defaultdict(float)
-        keyword_scores = defaultdict(float)
-        anti_genres = defaultdict(float)
-        anti_keywords = defaultdict(float)
+        # 2. Group by item (rating_key) to compute per-title stats
+        by_item: dict[str, list] = defaultdict(list)
+        for event in user_events:
+            by_item[event.item_key].append(event)
 
-        total_signal = 0.0
-        total_watches = len(watches)
-        total_completion = 0.0
+        # 3. Resolve TMDB IDs for items that need it
+        items_needing_tmdb = [
+            (key, events[0].media_type)
+            for key, events in by_item.items()
+            if events[0].tmdb_id is None
+        ]
+        if items_needing_tmdb:
+            tmdb_map = await self.tautulli.resolve_tmdb_ids_batch(items_needing_tmdb[:500])
+            for key, events in by_item.items():
+                if events[0].tmdb_id is None and key in tmdb_map:
+                    for e in events:
+                        e.tmdb_id = tmdb_map[key]
 
-        for watch in watches:
-            tmdb = watch["tmdb"]
-            history = watch["history"]
+        # 4. Score each title and collect metadata
+        now = datetime.now(timezone.utc)
+        genre_scores: dict[str, dict] = defaultdict(lambda: {"score": 0.0, "count": 0, "completions": [], "hours": 0.0})
+        keyword_scores: dict[str, dict] = defaultdict(lambda: {"score": 0.0, "count": 0})
+        personnel_scores: dict[str, dict] = defaultdict(lambda: {"score": 0.0, "count": 0, "completions": [], "role": ""})
+        total_watched = 0
+        total_hours = 0.0
+        completions = []
+        rewatch_count = 0
+        enriched = 0
 
-            # Calculate signal strength for this watch
-            signal = self._compute_signal(history, feedback.get(tmdb.tmdb_id, {}))
-            decay = self._temporal_decay(history.started_at or history.created_at)
-            weighted_signal = signal * decay
+        for item_key, events in by_item.items():
+            primary = events[0]
 
-            total_signal += abs(weighted_signal)
-            total_completion += float(history.completion_pct or 0)
+            # Domain filtering
+            # For now, use media_type as proxy — episode=tv/anime, movie=movies
+            # Full domain resolution needs library_section_id from Tautulli metadata
+            item_domain = "movies" if primary.media_type == "movie" else "tv"
+            if domain != "all" and item_domain != domain:
+                continue
 
-            # Distribute signal across genres
-            if tmdb.genres:
-                genres = list(tmdb.genres.values()) if isinstance(tmdb.genres, dict) else tmdb.genres
-                for genre in genres:
-                    if weighted_signal > 0:
-                        genre_scores[genre] += weighted_signal
+            # Compute per-title signals
+            watch_count = len(events)
+            best_completion = max(e.completion_pct for e in events)
+            total_duration = sum(e.duration_seconds for e in events)
+            most_recent = max((e.started_at for e in events if e.started_at), default=now)
+            # Ensure timezone-aware for comparison
+            if most_recent.tzinfo is None:
+                most_recent = most_recent.replace(tzinfo=timezone.utc)
+
+            # Completion signal
+            if best_completion >= 85:
+                completion_signal = SIGNAL_WEIGHTS["completion_full"]
+            elif best_completion >= 40:
+                completion_signal = SIGNAL_WEIGHTS["completion_good"]
+            elif best_completion < 20 and watch_count == 1:
+                completion_signal = SIGNAL_WEIGHTS["completion_abandoned"]
+            else:
+                completion_signal = 0.0
+
+            # Rewatch signal
+            rewatch_signal = 0.0
+            if watch_count > 1:
+                rewatch_signal = SIGNAL_WEIGHTS["rewatch"] * min(watch_count - 1, 5)
+                rewatch_count += watch_count - 1
+
+            # Recency decay
+            days_ago = (now - most_recent).days if most_recent.tzinfo else (now.replace(tzinfo=None) - most_recent).days
+            decay = math.exp(-0.693 * days_ago / SIGNAL_WEIGHTS["recency_halflife_days"])
+
+            # Total item score
+            item_score = (completion_signal + rewatch_signal) * decay
+
+            total_watched += 1
+            total_hours += total_duration / 3600
+            completions.append(best_completion)
+
+            # 5. Get metadata from Seerr (if we have TMDB ID)
+            tmdb_id = primary.tmdb_id
+            genres = []
+            keywords = []
+            cast_names = []
+            director_names = []
+
+            if tmdb_id:
+                try:
+                    media_type = "movie" if primary.media_type == "movie" else "tv"
+                    if enrich_keywords and enriched < max_enrich:
+                        detail = await self.seerr.get_detail(tmdb_id, media_type)
+                        genres = detail.genres
+                        keywords = detail.keywords
+                        cast_names = [c["name"] for c in detail.cast[:5]]
+                        director_names = detail.directors
+                        enriched += 1
                     else:
-                        anti_genres[genre] += abs(weighted_signal)
-                    genre_counts[genre] += 1
+                        # Lightweight — genres only (from cached data or skip)
+                        # We could use Radarr/Sonarr cache here too
+                        pass
+                except Exception as e:
+                    logger.debug(f"Failed to enrich tmdb_id={tmdb_id}: {e}")
 
-            # Distribute signal across keywords
-            if tmdb.keywords:
-                kw_list = tmdb.keywords if isinstance(tmdb.keywords, list) else list(tmdb.keywords)
-                for kw in kw_list[:10]:
-                    kw_str = str(kw)
-                    if weighted_signal > 0:
-                        keyword_scores[kw_str] += weighted_signal * 0.5
-                    else:
-                        anti_keywords[kw_str] += abs(weighted_signal) * 0.5
+            # 6. Accumulate into vectors
+            for genre in genres:
+                g = genre_scores[genre]
+                g["score"] += item_score
+                g["count"] += 1
+                g["completions"].append(best_completion)
+                g["hours"] += total_duration / 3600
 
-            # Distribute signal across personnel
-            if tmdb.cast_crew:
-                cc = tmdb.cast_crew if isinstance(tmdb.cast_crew, dict) else {}
-                # Directors get full signal
-                for crew in cc.get("crew", []):
-                    if isinstance(crew, dict) and crew.get("job") == "Director":
-                        personnel_scores[crew["name"]] += weighted_signal
-                # Top-billed cast get partial signal
-                for actor in cc.get("cast", [])[:3]:
-                    if isinstance(actor, dict):
-                        personnel_scores[actor["name"]] += weighted_signal * 0.3
+            for kw in keywords:
+                k = keyword_scores[kw]
+                k["score"] += item_score
+                k["count"] += 1
 
-        # Normalize scores to [-1, 1] range
-        max_genre = max(genre_scores.values()) if genre_scores else 1.0
-        max_genre = max(max_genre, max(anti_genres.values()) if anti_genres else 1.0, 1.0)
+            for name in director_names:
+                p = personnel_scores[f"director:{name}"]
+                p["score"] += item_score * 1.5  # Directors weighted higher
+                p["count"] += 1
+                p["completions"].append(best_completion)
+                p["role"] = "director"
 
-        genre_affinities = {}
-        all_genres = set(genre_scores.keys()) | set(anti_genres.keys())
-        for genre in all_genres:
-            pos = genre_scores.get(genre, 0)
-            neg = anti_genres.get(genre, 0)
-            genre_affinities[genre] = round((pos - neg) / max_genre, 3)
+            for name in cast_names:
+                p = personnel_scores[f"actor:{name}"]
+                p["score"] += item_score
+                p["count"] += 1
+                p["completions"].append(best_completion)
+                p["role"] = "actor"
 
-        # Apply overrides
-        for override in overrides:
-            if override.influence_type == "genre" and override.influence_key in genre_affinities:
-                if override.action == "boost":
-                    genre_affinities[override.influence_key] = min(
-                        1.0, genre_affinities[override.influence_key] + float(override.weight_modifier or 0.3)
-                    )
-                elif override.action == "suppress":
-                    genre_affinities[override.influence_key] = max(
-                        -1.0, genre_affinities[override.influence_key] - float(override.weight_modifier or 0.3)
-                    )
-                elif override.action == "block":
-                    genre_affinities[override.influence_key] = -1.0
+        # 7. Normalize scores to 0.0–1.0
+        max_genre_score = max((g["score"] for g in genre_scores.values()), default=1.0)
+        max_kw_score = max((k["score"] for k in keyword_scores.values()), default=1.0)
+        max_personnel_score = max((p["score"] for p in personnel_scores.values()), default=1.0)
 
-        # Normalize personnel
-        max_pers = max(abs(v) for v in personnel_scores.values()) if personnel_scores else 1.0
-        personnel_affinities = {
-            k: round(v / max_pers, 3)
-            for k, v in sorted(personnel_scores.items(), key=lambda x: abs(x[1]), reverse=True)[:50]
-        }
+        if max_genre_score == 0:
+            max_genre_score = 1.0
+        if max_kw_score == 0:
+            max_kw_score = 1.0
+        if max_personnel_score == 0:
+            max_personnel_score = 1.0
 
-        # Normalize keywords
-        max_kw = max(abs(v) for v in keyword_scores.values()) if keyword_scores else 1.0
-        keyword_affinities = {
-            k: round(v / max_kw, 3)
-            for k, v in sorted(keyword_scores.items(), key=lambda x: abs(x[1]), reverse=True)[:30]
-        }
+        genres_list = []
+        avoided_genres = []
+        for genre, data in genre_scores.items():
+            normalized = data["score"] / max_genre_score
+            avg_comp = sum(data["completions"]) / len(data["completions"]) if data["completions"] else 0
+            ga = GenreAffinity(
+                genre=genre,
+                score=round(max(0.0, min(1.0, normalized)), 3),
+                raw_score=round(data["score"], 2),
+                watch_count=data["count"],
+                avg_completion=round(avg_comp, 1),
+                total_hours=round(data["hours"], 1),
+            )
+            if data["score"] < 0:
+                avoided_genres.append(ga)
+            else:
+                genres_list.append(ga)
 
-        # Anti-profile: genres and keywords consistently abandoned
-        anti_profile = {
-            "genres": [g for g, s in genre_affinities.items() if s < -0.3],
-            "keywords": [
-                k for k, v in sorted(anti_keywords.items(), key=lambda x: x[1], reverse=True)[:15]
-                if v > 0
-            ],
-        }
+        keywords_list = []
+        avoided_keywords = []
+        for kw, data in keyword_scores.items():
+            normalized = data["score"] / max_kw_score
+            ka = KeywordAffinity(
+                keyword=kw,
+                score=round(max(0.0, min(1.0, normalized)), 3),
+                occurrence_count=data["count"],
+            )
+            if data["score"] < 0:
+                avoided_keywords.append(ka)
+            else:
+                keywords_list.append(ka)
 
-        avg_completion = total_completion / total_watches if total_watches > 0 else 0
+        personnel_list = []
+        for key, data in personnel_scores.items():
+            role, name = key.split(":", 1)
+            normalized = data["score"] / max_personnel_score
+            avg_comp = sum(data["completions"]) / len(data["completions"]) if data["completions"] else 0
+            personnel_list.append(PersonnelAffinity(
+                name=name,
+                role=role,
+                score=round(max(0.0, min(1.0, normalized)), 3),
+                title_count=data["count"],
+                avg_completion=round(avg_comp, 1),
+            ))
 
-        return {
-            "genre_affinities": dict(sorted(genre_affinities.items(), key=lambda x: x[1], reverse=True)),
-            "personnel_affinities": personnel_affinities,
-            "keyword_affinities": keyword_affinities,
-            "anti_profile": anti_profile,
-            "stats": {
-                "total_watches": total_watches,
-                "avg_completion": round(avg_completion, 1),
-                "total_signal_strength": round(total_signal, 1),
-                "domain": domain,
-                "depth_months": depth_months,
-            },
-        }
+        avg_completion = sum(completions) / len(completions) if completions else 0.0
 
-    async def build_taste_embedding(
+        profile = TasteProfile(
+            user_id=username,
+            username=username,
+            domain=domain,
+            total_watched=total_watched,
+            total_hours=round(total_hours, 1),
+            avg_completion=round(avg_completion, 1),
+            rewatch_count=rewatch_count,
+            genres=genres_list,
+            keywords=keywords_list,
+            personnel=personnel_list,
+            avoided_genres=avoided_genres,
+            avoided_keywords=avoided_keywords,
+        )
+
+        logger.info(
+            f"Profile built for {username}: {total_watched} titles, "
+            f"{len(genres_list)} genres, {len(keywords_list)} keywords, "
+            f"{len(personnel_list)} personnel, {enriched} enriched via Seerr"
+        )
+
+        return profile
+
+    async def get_collaborative_peers(
         self,
-        user_id: int,
-        domain: Optional[str] = None,
-        depth_months: int = 12,
-    ) -> list[float]:
-        """Build a taste embedding by averaging embeddings of highly-rated watches.
+        username: str,
+        limit: int = 5,
+    ) -> list[tuple[str, float]]:
+        """Find users with similar taste based on watch overlap.
 
-        This creates a single vector representing the user's taste in embedding space,
-        which can be directly compared against content embeddings via cosine similarity.
+        Returns list of (username, similarity_score) pairs.
+        Used for collaborative filtering: "users who watched X also watched Y."
         """
-        since = None
-        if depth_months > 0:
-            since = datetime.now(timezone.utc) - timedelta(days=depth_months * 30)
+        # Get this user's history
+        user_history = await self.tautulli.get_history(user_id=None, limit=10000)
+        user_items = {e.item_key for e in user_history if e.user_id == username}
 
-        watches = await self._get_enriched_history(user_id, since, domain)
-        if not watches:
+        if not user_items:
             return []
 
-        feedback = await self._get_feedback(user_id)
+        # Group all history by user
+        by_user: dict[str, set] = defaultdict(set)
+        for event in user_history:
+            if event.user_id != username:
+                by_user[event.user_id].add(event.item_key)
 
-        # Collect embeddings weighted by signal strength
-        weighted_embeddings: list[tuple[list[float], float]] = []
+        # Jaccard similarity
+        peers = []
+        for other_user, other_items in by_user.items():
+            intersection = len(user_items & other_items)
+            union = len(user_items | other_items)
+            if union > 0 and intersection >= 3:  # Minimum 3 shared items
+                similarity = intersection / union
+                peers.append((other_user, round(similarity, 3)))
 
-        for watch in watches:
-            tmdb = watch["tmdb"]
-            history = watch["history"]
+        peers.sort(key=lambda x: x[1], reverse=True)
+        return peers[:limit]
 
-            if not tmdb.embedding_id:
-                continue
-
-            signal = self._compute_signal(history, feedback.get(tmdb.tmdb_id, {}))
-            decay = self._temporal_decay(history.started_at or history.created_at)
-            weight = signal * decay
-
-            # Only include positive signals in taste vector
-            if weight <= 0:
-                continue
-
-            # Get the embedding from ChromaDB
-            # Note: actual embedding retrieval done by caller with EmbeddingService
-            weighted_embeddings.append((tmdb.embedding_id, weight))
-
-        return weighted_embeddings  # Caller resolves embedding_ids to vectors
-
-    # ── Internal methods ─────────────────────────────────────────
-
-    async def _get_enriched_history(
+    async def get_collaborative_suggestions(
         self,
-        user_id: int,
-        since: Optional[datetime],
-        domain: Optional[str],
-    ) -> list[dict]:
-        """Get watch history joined with TMDB metadata."""
-        query = (
-            select(WatchHistory, TmdbCache)
-            .join(TmdbCache, and_(
-                WatchHistory.tmdb_id == TmdbCache.tmdb_id,
-                TmdbCache.media_type.in_(["movie", "show"]),
-            ))
-            .where(WatchHistory.user_id == user_id)
-        )
+        username: str,
+        known_item_keys: set[str],
+        limit: int = 20,
+    ) -> list[tuple[str, float, str]]:
+        """Get items watched by similar users but not by this user.
 
-        if since:
-            query = query.where(WatchHistory.created_at >= since)
-
-        if domain and domain in MEDIA_DOMAINS:
-            # Filter by library access — domain maps to section keys
-            section_keys = MEDIA_DOMAINS[domain]["section_keys"]
-            accessible = await self.db.execute(
-                select(UserLibraryAccess.plex_section_key).where(
-                    and_(
-                        UserLibraryAccess.user_id == user_id,
-                        UserLibraryAccess.is_accessible == True,
-                        UserLibraryAccess.plex_section_key.in_([int(k) for k in section_keys]),
-                    )
-                )
-            )
-            # We'll filter by TMDB media_type as a proxy for domain
-            media_types = MEDIA_DOMAINS[domain]["library_types"]
-            query = query.where(TmdbCache.media_type.in_(media_types))
-
-        result = await self.db.execute(query)
-        rows = result.all()
-
-        return [{"history": row[0], "tmdb": row[1]} for row in rows]
-
-    async def _get_feedback(self, user_id: int) -> dict[int, dict]:
-        """Get all feedback keyed by tmdb_id."""
-        result = await self.db.execute(
-            select(Feedback).where(Feedback.user_id == user_id)
-        )
-        feedback = {}
-        for fb in result.scalars():
-            feedback[fb.tmdb_id] = {"type": fb.feedback}
-        return feedback
-
-    async def _get_overrides(self, user_id: int) -> list:
-        """Get user's influence overrides."""
-        result = await self.db.execute(
-            select(InfluenceOverride).where(InfluenceOverride.user_id == user_id)
-        )
-        return list(result.scalars())
-
-    def _compute_signal(self, history: WatchHistory, feedback: dict) -> float:
-        """Compute signal strength for a single watch event."""
-        signal = 0.0
-        completion = float(history.completion_pct or 0)
-
-        # Completion-based signal
-        if completion >= 85:
-            signal += SIGNAL_WEIGHTS["completion_full"]
-        elif completion >= 40:
-            signal += SIGNAL_WEIGHTS["completion_partial"]
-        elif completion < 20 and completion > 0:
-            signal += SIGNAL_WEIGHTS["completion_abandoned"]
-
-        # Rewatch bonus
-        if history.watch_count and history.watch_count > 1:
-            signal += SIGNAL_WEIGHTS["rewatch"]
-
-        # User rating
-        if history.user_rating:
-            rating = float(history.user_rating)
-            if rating >= 8:
-                signal += SIGNAL_WEIGHTS["user_rating_high"]
-            elif rating <= 4:
-                signal += SIGNAL_WEIGHTS["user_rating_low"]
-
-        # Feedback
-        fb_type = feedback.get("type")
-        if fb_type == "up":
-            signal += SIGNAL_WEIGHTS["feedback_up"]
-        elif fb_type == "down":
-            signal += SIGNAL_WEIGHTS["feedback_down"]
-        elif fb_type == "dismiss":
-            signal += SIGNAL_WEIGHTS["feedback_dismiss"]
-
-        return signal
-
-    def _temporal_decay(self, watched_at: Optional[datetime]) -> float:
-        """Apply temporal decay — recent watches count more.
-
-        Uses exponential decay with a half-life of 90 days.
-        A watch from today has weight 1.0, 90 days ago = 0.5, 180 days = 0.25.
+        Returns list of (item_key, peer_score, peer_username) tuples.
         """
-        if not watched_at:
-            return 0.5  # Unknown date gets half weight
+        peers = await self.get_collaborative_peers(username, limit=10)
+        if not peers:
+            return []
 
-        now = datetime.now(timezone.utc)
-        if watched_at.tzinfo is None:
-            watched_at = watched_at.replace(tzinfo=timezone.utc)
+        suggestions: dict[str, tuple[float, str]] = {}
+        user_history = await self.tautulli.get_history(user_id=None, limit=10000)
 
-        days_ago = (now - watched_at).days
-        half_life = 90  # days
-        return math.exp(-0.693 * days_ago / half_life)  # ln(2) ≈ 0.693
+        for peer_name, similarity in peers:
+            peer_events = [e for e in user_history if e.user_id == peer_name]
+            for event in peer_events:
+                if event.item_key not in known_item_keys and event.completion_pct >= 70:
+                    key = event.item_key
+                    existing_score = suggestions.get(key, (0.0, ""))[0]
+                    new_score = existing_score + similarity * (event.completion_pct / 100)
+                    if new_score > existing_score:
+                        suggestions[key] = (new_score, peer_name)
 
-    def _empty_profile(self) -> dict:
-        """Return empty profile for users with no history."""
-        return {
-            "genre_affinities": {},
-            "personnel_affinities": {},
-            "keyword_affinities": {},
-            "anti_profile": {"genres": [], "keywords": []},
-            "stats": {
-                "total_watches": 0,
-                "avg_completion": 0,
-                "total_signal_strength": 0,
-                "domain": None,
-                "depth_months": 0,
-            },
-        }
+        results = [(key, score, peer) for key, (score, peer) in suggestions.items()]
+        results.sort(key=lambda x: x[1], reverse=True)
+        return results[:limit]
