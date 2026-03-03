@@ -1,7 +1,8 @@
+# Recommendarr v2 — unRAID deployment
+# Backend API + Frontend UI
 version: "3.8"
 
 services:
-  # ── Recommendarr API ──────────────────────────────────────────
   recommendarr:
     build:
       context: ./backend
@@ -9,60 +10,36 @@ services:
     container_name: recommendarr
     restart: unless-stopped
     ports:
-      - "${EXTERNAL_PORT:-30800}:8000"
-    env_file: .env
-    depends_on:
-      recommendarr-db:
-        condition: service_healthy
-      recommendarr-chromadb:
-        condition: service_started
-    volumes:
-      - recommendarr-data:/app/data
-      - ./plugins:/app/plugins:ro
-    networks:
-      - recommendarr
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ── PostgreSQL ────────────────────────────────────────────────
-  recommendarr-db:
-    image: postgres:16-alpine
-    container_name: recommendarr-db
-    restart: unless-stopped
+      - "30800:30800"
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: recommendarr
-      POSTGRES_PASSWORD: recommendarr
-      POSTGRES_DB: recommendarr
+      - TZ=Europe/Zurich
     volumes:
-      - recommendarr-pgdata:/var/lib/postgresql/data
-    networks:
-      - recommendarr
+      - /mnt/user/system/appdata/recommendarr:/app/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U recommendarr"]
-      interval: 10s
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:30800/api/v1/health')"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 15s
+    labels:
+      - "net.unraid.docker.managed=dockerman"
+      - "net.unraid.docker.webui=http://[IP]:[PORT:30800]/api/docs"
 
-  # ── ChromaDB ──────────────────────────────────────────────────
-  recommendarr-chromadb:
-    image: chromadb/chroma:latest
-    container_name: recommendarr-chromadb
+  recommendarr-ui:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: recommendarr-ui
     restart: unless-stopped
-    volumes:
-      - recommendarr-chromadata:/chroma/chroma
-    networks:
-      - recommendarr
+    ports:
+      - "30801:80"
+    depends_on:
+      recommendarr:
+        condition: service_healthy
     environment:
-      - IS_PERSISTENT=TRUE
-
-volumes:
-  recommendarr-data:
-  recommendarr-pgdata:
-  recommendarr-chromadata:
-
-networks:
-  recommendarr:
-    driver: bridge
+      - TZ=Europe/Zurich
+    labels:
+      - "net.unraid.docker.managed=dockerman"
+      - "net.unraid.docker.webui=http://[IP]:[PORT:30801]/"

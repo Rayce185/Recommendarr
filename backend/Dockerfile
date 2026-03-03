@@ -1,22 +1,28 @@
+# Recommendarr v2 — lightweight API orchestration container
+# No AI/GPU dependencies. Pure Python + FastAPI + httpx.
 FROM python:3.12-slim
+
+LABEL maintainer="Ray DiRenzo <ray@mydirenzo.ch>"
+LABEL description="Recommendarr — personal media recommendation engine (API-first)"
+LABEL version="0.2.0"
 
 WORKDIR /app
 
-# System deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install dependencies first (layer caching)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Python deps
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[prod]"
+# Copy application
+COPY app/ app/
 
-# App code
-COPY . .
+# Non-root user
+RUN useradd -m -u 1000 recommendarr
+USER recommendarr
 
-EXPOSE 8000
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD python -c "import httpx; r=httpx.get('http://localhost:30800/api/v1/health'); exit(0 if r.status_code==200 else 1)"
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
+EXPOSE 30800
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "app.main_v2:app", "--host", "0.0.0.0", "--port", "30800", "--log-level", "info"]
