@@ -5,6 +5,10 @@ that Seerr's proxy doesn't support with full parameterization.
 """
 
 import httpx
+import json as _json
+import logging
+
+_logger = logging.getLogger(__name__)
 import logging
 from dataclasses import dataclass, field
 from typing import Optional
@@ -80,6 +84,100 @@ class TMDBClient:
         resp = await self._client.get(f"{self.base_url}{path}", params=p)
         resp.raise_for_status()
         return resp.json()
+
+    def _read_cache(self, tmdb_id: int, media_type: str) -> dict | None:
+        """Read from SQLite tmdb_cache table."""
+        try:
+            from app.database import get_db
+            from app.models.tables import TmdbCache
+            from sqlalchemy import select, and_
+            with get_db() as db:
+                row = db.execute(
+                    select(TmdbCache).where(
+                        and_(TmdbCache.tmdb_id == tmdb_id, TmdbCache.media_type == media_type)
+                    )
+                ).scalar_one_or_none()
+                if row and row.genres:
+                    genres = row.genres if isinstance(row.genres, list) else _json.loads(row.genres) if row.genres else []
+                    keywords = row.keywords if isinstance(row.keywords, list) else _json.loads(row.keywords) if row.keywords else []
+                    cast_crew = row.cast_crew if isinstance(row.cast_crew, dict) else _json.loads(row.cast_crew) if row.cast_crew else {}
+                    return {
+                        "tmdb_id": tmdb_id,
+                        "media_type": media_type,
+                        "title": row.title or "",
+                        "original_title": row.original_title or "",
+                        "year": row.year,
+                        "overview": row.overview or "",
+                        "poster_path": row.poster_path,
+                        "backdrop_path": row.backdrop_path,
+                        "vote_average": float(row.vote_average) if row.vote_average else 0,
+                        "popularity": float(row.popularity) if row.popularity else 0,
+                        "genres": genres,
+                        "keywords": keywords,
+                        "cast": cast_crew.get("cast", []),
+                        "crew": cast_crew.get("crew", []),
+                        "directors": cast_crew.get("directors", []),
+                        "runtime": row.runtime_minutes,
+                        "original_language": row.original_language,
+                        "imdb_id": cast_crew.get("imdb_id"),
+                    }
+        except Exception:
+            pass
+        return None
+
+    def _write_cache(self, tmdb_id: int, media_type: str, data: dict):
+        """Write to SQLite tmdb_cache table (fire-and-forget)."""
+        try:
+            from app.database import get_db
+            from app.models.tables import TmdbCache
+            from sqlalchemy import select, and_
+
+            cast_crew = {
+                "cast": [c["name"] if isinstance(c, dict) else c for c in data.get("cast", [])[:10]],
+                "crew": [{"name": c["name"], "job": c["job"]} for c in data.get("crew", []) if isinstance(c, dict)],
+                "directors": data.get("directors", []) if isinstance(data.get("directors"), list) else [],
+                "imdb_id": data.get("imdb_id"),
+            }
+
+            with get_db() as db:
+                existing = db.execute(
+                    select(TmdbCache).where(
+                        and_(TmdbCache.tmdb_id == tmdb_id, TmdbCache.media_type == media_type)
+                    )
+                ).scalar_one_or_none()
+                if existing:
+                    existing.title = data.get("title", "")
+                    existing.year = data.get("year")
+                    existing.genres = _json.dumps(data.get("genres", []))
+                    existing.keywords = _json.dumps(data.get("keywords", []))
+                    existing.cast_crew = _json.dumps(cast_crew)
+                    existing.overview = data.get("overview", "")
+                    existing.vote_average = data.get("vote_average", 0)
+                    existing.popularity = data.get("popularity", 0)
+                    existing.poster_path = data.get("poster_path")
+                    existing.backdrop_path = data.get("backdrop_path")
+                    existing.runtime_minutes = data.get("runtime")
+                    existing.original_language = data.get("original_language")
+                else:
+                    db.add(TmdbCache(
+                        tmdb_id=tmdb_id, media_type=media_type,
+                        title=data.get("title", ""),
+                        original_title=data.get("original_title", ""),
+                        year=data.get("year"),
+                        genres=_json.dumps(data.get("genres", [])),
+                        keywords=_json.dumps(data.get("keywords", [])),
+                        cast_crew=_json.dumps(cast_crew),
+                        overview=data.get("overview", ""),
+                        vote_average=data.get("vote_average", 0),
+                        popularity=data.get("popularity", 0),
+                        poster_path=data.get("poster_path"),
+                        backdrop_path=data.get("backdrop_path"),
+                        runtime_minutes=data.get("runtime"),
+                        original_language=data.get("original_language"),
+                    ))
+                db.commit()
+        except Exception as e:
+            _logger.debug(f"TMDB cache write failed for {tmdb_id}: {e}")
 
     async def close(self):
         """Close the persistent HTTP client."""
@@ -217,7 +315,12 @@ class TMDBClient:
     # ── Detail ───────────────────────────────────────────────────
 
     async def get_detail(self, tmdb_id: int, media_type: str = "movie") -> dict:
-        """Full detail for a movie or TV show (genres, keywords, credits, etc)."""
+        """Full detail for a movie or TV show — SQLite-cached, TMDB API on miss."""
+        # Check SQLite cache first
+        cached = self._read_cache(tmdb_id, media_type)
+        if cached is not None:
+            return cached
+
         endpoint = f"/movie/{tmdb_id}" if media_type == "movie" else f"/tv/{tmdb_id}"
         d = await self._get(endpoint, {"append_to_response": "keywords,credits,external_ids"})
         genres = [g["name"] for g in d.get("genres", [])]
@@ -242,7 +345,7 @@ class TMDBClient:
 
         external = d.get("external_ids", {})
 
-        return {
+        result = {
             "tmdb_id": tmdb_id,
             "media_type": media_type,
             "title": d.get("title") or d.get("name") or "",
@@ -270,6 +373,8 @@ class TMDBClient:
             "number_of_seasons": d.get("number_of_seasons"),
             "number_of_episodes": d.get("number_of_episodes"),
         }
+        self._write_cache(tmdb_id, media_type, result)
+        return result
 
     # ── Keywords ─────────────────────────────────────────────────
 
