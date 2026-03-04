@@ -112,6 +112,81 @@ async def lifespan(app: FastAPI):
     await init_user_map(stack)
 
     logger.info("=== Recommendarr ready ===")
+
+    # Background: pre-warm taste profiles so first page load is instant
+    import asyncio
+    async def _warm_profiles():
+        try:
+            await asyncio.sleep(2)
+            from app.services.factory import get_stack
+            from app.services.cache import get_cache
+            import time as _t
+            s = get_stack()
+            if not s.profiler or not s.user_map:
+                return
+            cache = get_cache()
+            # Warm top 3 users (covers admin + most active)
+            active = list(s.user_map.values())[:3]
+            warmed = 0
+            for username in active:
+                if cache.get_profile(username, "all") is not None:
+                    continue
+                try:
+                    _start = _t.monotonic()
+                    profile = await s.profiler.build_profile(
+                        username=username, domain="all",
+                        depth_months=24, enrich_keywords=True, max_enrich=100,
+                    )
+                    cache.set_profile(username, "all", profile)
+                    warmed += 1
+                    logger.info(f"Profile warmed: {username} ({profile.total_watched} titles, {_t.monotonic()-_start:.1f}s)")
+                except Exception as e:
+                    logger.warning(f"Profile warming failed for {username}: {e}")
+            # Also warm library candidates (Radarr/Sonarr fetch)
+            try:
+                _start = _t.monotonic()
+                await s.engine._get_library_candidates("all")
+                logger.info(f"Library cache warmed ({_t.monotonic()-_start:.1f}s)")
+            except Exception as e:
+                logger.debug(f"Library warming skipped: {e}")
+
+            # Pre-warm recommendation results (includes AI explanations)
+            if warmed > 0:
+                from app.services.recommender import RecommendationRequest
+                for username in active:
+                    if not cache.get_profile(username, "all"):
+                        continue  # Skip users with no profile
+                    for mode in ["tonight", "grab"]:
+                        try:
+                            _start = _t.monotonic()
+                            req = RecommendationRequest(
+                                username=username, mode=mode, domain="all",
+                                limit=30,
+                            )
+                            results = await s.engine.recommend(req)
+                            if results:
+                                from dataclasses import asdict
+                                recs_data = []
+                                for r in results:
+                                    try:
+                                        recs_data.append(asdict(r))
+                                    except Exception:
+                                        recs_data.append(r.__dict__ if hasattr(r, "__dict__") else {})
+                                cache.set_recs(username, mode, "all", {
+                                    "recommendations": recs_data,
+                                    "meta": {"username": username, "mode": mode, "count": len(results)},
+                                })
+                                logger.info(f"Recs warmed: {username}/{mode} ({len(results)} items, {_t.monotonic()-_start:.1f}s)")
+                        except Exception as e:
+                            logger.warning(f"Rec warming failed for {username}/{mode}: {e}")
+
+            if warmed:
+                logger.info(f"Startup warming done: {warmed} profiles + library + recs cached")
+        except Exception as e:
+            logger.warning(f"Profile warming error: {e}")
+
+    asyncio.create_task(_warm_profiles())
+
     yield
     # Cleanup ChromaDB sync
     from app.services.chroma_sync import get_chroma_sync
