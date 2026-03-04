@@ -157,7 +157,7 @@ class TasteProfiler:
         domain: str = "all",
         depth_months: int = 24,
         enrich_keywords: bool = True,
-        max_enrich: int = 50,
+        max_enrich: int = 100,
     ) -> TasteProfile:
         """Build a complete taste profile from Tautulli history.
 
@@ -198,6 +198,8 @@ class TasteProfiler:
             logger.warning(f"No events found for user_id={user_id_match} (username={username})")
 
         logger.info(f"Found {len(user_events)} watch events for {username}")
+        import time as _time
+        _t0 = _time.monotonic()
 
         # 2. Group by item (rating_key) to compute per-title stats
         by_item: dict[str, list] = defaultdict(list)
@@ -205,6 +207,8 @@ class TasteProfiler:
             by_item[event.item_key].append(event)
 
         # 3. Resolve TMDB IDs for items that need it
+        import time as _timer
+        _step3_start = _timer.monotonic()
         items_needing_tmdb = [
             (key, events[0].media_type)
             for key, events in by_item.items()
@@ -216,6 +220,12 @@ class TasteProfiler:
                 if events[0].tmdb_id is None and key in tmdb_map:
                     for e in events:
                         e.tmdb_id = tmdb_map[key]
+
+        _t1 = _time.monotonic()
+        logger.info(f"TMDB ID resolution: {_t1-_t0:.1f}s ({len(items_needing_tmdb)} items needed resolution)")
+
+        _step3_end = _timer.monotonic()
+        logger.info(f"TMDB ID resolution: {_step3_end - _step3_start:.1f}s ({len(items_needing_tmdb)} items)")
 
         # 4. Score each title and collect metadata
         now = datetime.now(timezone.utc)
@@ -229,11 +239,16 @@ class TasteProfiler:
         enriched = 0
         items_to_enrich = []  # (item_key, tmdb_id, media_type)
 
-        # Pre-enrich: batch fetch TMDB metadata in parallel (replaces sequential Seerr)
+        # Pre-enrich: SQLite cache first, TMDB API for misses only
         _enrich_cache = {}
         if enrich_keywords:
             import asyncio
-            # Sort by watch count (most-watched first = most important for taste)
+            import json as _json
+            from app.database import get_db
+            from app.models.tables import TmdbCache
+            from sqlalchemy import select, and_
+
+            # Sort by watch count (most-watched first)
             _candidates = []
             for _ik, _evts in by_item.items():
                 _p = _evts[0]
@@ -244,36 +259,101 @@ class TasteProfiler:
             _candidates.sort(key=lambda x: x[3], reverse=True)
             _enrich_items = [(_ik, _tid, _mt) for _ik, _tid, _mt, _ in _candidates[:max_enrich]]
 
-            async def _fetch_one(ik, tid, mt):
-                try:
-                    if self.tmdb:
-                        d = await self.tmdb.get_detail(tid, mt)
-                        # get_detail returns processed dict: genres/keywords are string lists
-                        return ik, {
-                            "genres": d.get("genres", []),
-                            "keywords": d.get("keywords", []),
-                            "cast": [c["name"] for c in d.get("cast", [])[:5]],
-                            "directors": [c["name"] for c in d.get("crew", []) if c.get("job") == "Director"],
-                        }
-                    else:
-                        d = await self.seerr.get_detail(tid, mt)
-                        return ik, {"genres": d.genres, "keywords": d.keywords, "cast": [c["name"] for c in d.cast[:5]], "directors": d.directors}
-                except Exception:
-                    return ik, {}
+            # Phase 1: Check SQLite cache
+            _cache_hits = 0
+            _cache_misses = []  # (item_key, tmdb_id, media_type)
+            try:
+                with get_db() as db:
+                    for _ik, _tid, _mt in _enrich_items:
+                        row = db.execute(
+                            select(TmdbCache).where(
+                                and_(TmdbCache.tmdb_id == _tid, TmdbCache.media_type == _mt)
+                            )
+                        ).scalar_one_or_none()
+                        if row and row.genres:
+                            genres = row.genres if isinstance(row.genres, list) else _json.loads(row.genres) if row.genres else []
+                            keywords = row.keywords if isinstance(row.keywords, list) else _json.loads(row.keywords) if row.keywords else []
+                            cast_crew = row.cast_crew if isinstance(row.cast_crew, dict) else _json.loads(row.cast_crew) if row.cast_crew else {}
+                            _enrich_cache[_ik] = {
+                                "genres": genres,
+                                "keywords": keywords,
+                                "cast": cast_crew.get("cast", [])[:5],
+                                "directors": cast_crew.get("directors", []),
+                            }
+                            _cache_hits += 1
+                        else:
+                            _cache_misses.append((_ik, _tid, _mt))
+            except Exception as e:
+                logger.debug(f"SQLite cache read failed: {e}")
+                _cache_misses = _enrich_items
 
-            # Parallel fetch with concurrency limit
-            _sem = asyncio.Semaphore(20)
-            async def _limited(ik, tid, mt):
-                async with _sem:
-                    return await _fetch_one(ik, tid, mt)
+            # Phase 2: Fetch misses from TMDB API (parallel)
+            _api_fetched = 0
+            if _cache_misses:
+                async def _fetch_and_store(ik, tid, mt):
+                    try:
+                        if self.tmdb:
+                            d = await self.tmdb.get_detail(tid, mt)
+                            result = {
+                                "genres": d.get("genres", []),
+                                "keywords": d.get("keywords", []),
+                                "cast": [c["name"] for c in d.get("cast", [])[:5]],
+                                "directors": [c["name"] for c in d.get("crew", []) if c.get("job") == "Director"],
+                            }
+                            # Persist to SQLite
+                            try:
+                                with get_db() as db:
+                                    existing = db.execute(
+                                        select(TmdbCache).where(
+                                            and_(TmdbCache.tmdb_id == tid, TmdbCache.media_type == mt)
+                                        )
+                                    ).scalar_one_or_none()
+                                    if existing:
+                                        existing.genres = _json.dumps(d.get("genres", []))
+                                        existing.keywords = _json.dumps(d.get("keywords", []))
+                                        existing.cast_crew = _json.dumps({"cast": result["cast"], "directors": result["directors"]})
+                                        existing.title = d.get("title", "")
+                                        existing.year = d.get("year")
+                                        existing.overview = d.get("overview", "")
+                                        existing.vote_average = d.get("vote_average", 0)
+                                    else:
+                                        db.add(TmdbCache(
+                                            tmdb_id=tid, media_type=mt,
+                                            title=d.get("title", ""),
+                                            year=d.get("year"),
+                                            genres=_json.dumps(d.get("genres", [])),
+                                            keywords=_json.dumps(d.get("keywords", [])),
+                                            cast_crew=_json.dumps({"cast": result["cast"], "directors": result["directors"]}),
+                                            overview=d.get("overview", ""),
+                                            vote_average=d.get("vote_average", 0),
+                                            poster_path=d.get("poster_path"),
+                                            backdrop_path=d.get("backdrop_path"),
+                                            original_language=d.get("original_language"),
+                                        ))
+                                    db.commit()
+                            except Exception:
+                                pass  # Cache write failure is non-fatal
+                            return ik, result
+                        else:
+                            d = await self.seerr.get_detail(tid, mt)
+                            return ik, {"genres": d.genres, "keywords": d.keywords, "cast": [c["name"] for c in d.cast[:5]], "directors": d.directors}
+                    except Exception:
+                        return ik, {}
 
-            _tasks = [_limited(ik, tid, mt) for ik, tid, mt in _enrich_items]
-            _results = await asyncio.gather(*_tasks, return_exceptions=True)
-            for r in _results:
-                if isinstance(r, tuple):
-                    _enrich_cache[r[0]] = r[1]
+                _sem = asyncio.Semaphore(20)
+                async def _limited(ik, tid, mt):
+                    async with _sem:
+                        return await _fetch_and_store(ik, tid, mt)
+
+                _tasks = [_limited(ik, tid, mt) for ik, tid, mt in _cache_misses]
+                _results = await asyncio.gather(*_tasks, return_exceptions=True)
+                for r in _results:
+                    if isinstance(r, tuple):
+                        _enrich_cache[r[0]] = r[1]
+                        _api_fetched += 1
+
             enriched = len(_enrich_cache)
-            logger.info(f"Batch enriched {enriched} titles via {'TMDB' if self.tmdb else 'Seerr'}")
+            logger.info(f"Enriched {enriched} titles ({_cache_hits} cached, {_api_fetched} from TMDB API)")
 
         for item_key, events in by_item.items():
             primary = events[0]

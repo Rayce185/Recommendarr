@@ -216,7 +216,7 @@ class TautulliClient(IWatchHistoryProvider):
     async def resolve_tmdb_ids_batch(
         self, rating_keys: list[tuple[str, str]]
     ) -> dict[str, int | None]:
-        """Batch resolve rating_keys to TMDB IDs.
+        """Batch resolve rating_keys to TMDB IDs (parallel with concurrency limit).
 
         Args:
             rating_keys: list of (rating_key, media_type) tuples
@@ -224,9 +224,19 @@ class TautulliClient(IWatchHistoryProvider):
         Returns:
             {rating_key: tmdb_id} mapping
         """
+        import asyncio
         results = {}
-        for key, mtype in rating_keys:
-            results[key] = await self.resolve_tmdb_id(key, mtype)
+        sem = asyncio.Semaphore(10)
+
+        async def _resolve(key, mtype):
+            async with sem:
+                return key, await self.resolve_tmdb_id(key, mtype)
+
+        tasks = [_resolve(k, m) for k, m in rating_keys]
+        done = await asyncio.gather(*tasks, return_exceptions=True)
+        for r in done:
+            if isinstance(r, tuple):
+                results[r[0]] = r[1]
         return results
 
     # ── Internal helpers ─────────────────────────────────────────

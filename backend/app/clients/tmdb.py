@@ -66,16 +66,24 @@ class TMDBClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://api.themoviedb.org/3"
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(15.0),
+            limits=httpx.Limits(max_connections=30, max_keepalive_connections=20),
+            http2=False,
+        )
 
     async def _get(self, path: str, params: dict | None = None) -> dict:
-        """GET request to TMDB API."""
+        """GET request to TMDB API (persistent connection pool)."""
         p = {"api_key": self.api_key}
         if params:
             p.update(params)
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(f"{self.base_url}{path}", params=p)
-            resp.raise_for_status()
-            return resp.json()
+        resp = await self._client.get(f"{self.base_url}{path}", params=p)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def close(self):
+        """Close the persistent HTTP client."""
+        await self._client.aclose()
 
     async def test_connection(self) -> bool:
         """Test TMDB API reachability."""
