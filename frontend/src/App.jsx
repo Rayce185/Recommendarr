@@ -113,6 +113,7 @@ const api = {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   }).then(r => r.json()),
+  removeFeedback: (u, tmdbId) => authFetch(`${API_BASE}/users/${u}/feedback/${tmdbId}`, { method: "DELETE" }).then(r => r.json()),
   getFeedback: (u) => authFetch(`${API_BASE}/users/${u}/feedback`).then(r => r.json()),
 };
 
@@ -1866,7 +1867,7 @@ function MediaCard({ item, onClick, onFeedback }) {
   );
 }
 
-function DetailModal({ item, detail, onClose, onRequest, requesting, requestResult }) {
+function DetailModal({ item, detail, onClose, onRequest, requesting, requestResult, onFeedback, user }) {
   const d = detail || item;
   const poster = posterUrl(d.poster_url || item.poster_url, "w500");
   const backdrop = d.backdrop_url ? fixPosterUrl(d.backdrop_url) : null;
@@ -1983,14 +1984,37 @@ function DetailModal({ item, detail, onClose, onRequest, requesting, requestResu
             </div>
           )}
 
+          {/* Watched / In Library badge */}
+          {(item.in_library === true || d.in_library === true) && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, background: "rgba(46,204,113,0.12)", border: "1px solid rgba(46,204,113,0.3)", color: "#2ecc71", fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+              <CheckCircle2 size={14} /> In Your Library
+            </div>
+          )}
+
+          {/* Feedback buttons */}
+          {onFeedback && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <button className={`btn btn-sm ${item.user_feedback === "up" ? "btn-success" : "btn-secondary"}`}
+                onClick={() => onFeedback(item, item.user_feedback === "up" ? null : "up")}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 14px", fontSize: 13 }}>
+                <ThumbsUp size={14} /> {item.user_feedback === "up" ? "Liked" : "Like"}
+              </button>
+              <button className={`btn btn-sm ${item.user_feedback === "down" ? "btn-danger" : "btn-secondary"}`}
+                onClick={() => onFeedback(item, item.user_feedback === "down" ? null : "down")}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 14px", fontSize: 13, ...(item.user_feedback === "down" ? { background: "rgba(231,76,60,0.15)", borderColor: "rgba(231,76,60,0.3)", color: "#e74c3c" } : {}) }}>
+                <ThumbsDown size={14} /> {item.user_feedback === "down" ? "Disliked" : "Dislike"}
+              </button>
+            </div>
+          )}
+
           <div className="modal-actions">
-            {item.in_library === true && item.plex_url && (
-              <button className="btn btn-primary" onClick={() => window.open(item.plex_url, "_blank")}>
+            {(item.in_library === true || d.in_library === true) && (item.plex_url || d.plex_url) && (
+              <button className="btn btn-primary" onClick={() => window.open(item.plex_url || d.plex_url, "_blank")}>
                 <Play size={15} /> Play on Plex
               </button>
             )}
-            {/* Library status shown via badge */}
-            {item.in_library === false && (
+            {/* Add to Library — show unless explicitly in library */}
+            {item.in_library !== true && d.in_library !== true && (
               <button
                 className={`btn ${requestResult?.success ? "btn-success" : "btn-primary"}`}
                 onClick={() => onRequest(d.tmdb_id || item.tmdb_id, item.media_type)}
@@ -3629,18 +3653,20 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange }) {
               <div style={{ display: "flex", gap: 8 }}>
                 <select
                   className="device-select"
-                  value={userPrefs?.default_device_id?.value || ""}
+                  value={typeof userPrefs?.default_device_id === "object" ? userPrefs?.default_device_id?.value : userPrefs?.default_device_id || ""}
                   onChange={async (e) => {
                     const dev = devicesList.find(d => d.client_id === e.target.value);
-                    await api.updatePreferences({
-                      default_device_id: e.target.value,
-                      default_device_name: dev?.name || "",
-                    });
-                    setUserPrefs(prev => ({
-                      ...prev,
-                      default_device_id: { value: e.target.value, source: "user" },
-                      default_device_name: { value: dev?.name || "", source: "user" },
-                    }));
+                    try {
+                      await api.updatePreferences({
+                        default_device_id: e.target.value,
+                        default_device_name: dev?.name || "",
+                      });
+                      setUserPrefs(prev => ({
+                        ...prev,
+                        default_device_id: e.target.value,
+                        default_device_name: dev?.name || "",
+                      }));
+                    } catch (err) { console.error("Failed to save device preference:", err); }
                   }}
                 >
                   <option value="">— No device selected —</option>
@@ -4061,6 +4087,30 @@ export default function Recommendarr() {
       .finally(() => setRequesting(false));
   }, [addToast]);
 
+  // Feedback from detail modal
+  const handleModalFeedback = useCallback((item, action) => {
+    if (!selectedUser || !item?.tmdb_id) return;
+    const username = selectedUser;
+    if (action === null) {
+      // Remove feedback
+      api.removeFeedback(username, item.tmdb_id).then(() => {
+        setModalItem(prev => prev ? { ...prev, user_feedback: null } : prev);
+        addToast("Feedback removed", "info");
+      }).catch(() => {});
+    } else {
+      api.submitFeedback(username, {
+        tmdb_id: item.tmdb_id,
+        media_type: item.media_type || "movie",
+        action,
+        title: item.title || "",
+        genres: (item.genres || []).map(g => typeof g === "string" ? g : g.name),
+      }).then(() => {
+        setModalItem(prev => prev ? { ...prev, user_feedback: action } : prev);
+        addToast(action === "up" ? "Liked!" : "Disliked", action === "up" ? "success" : "info");
+      }).catch(() => {});
+    }
+  }, [selectedUser, addToast]);
+
   const navItems = [
     { id: "tonight", label: "Watch Tonight", icon: Play, section: "Recommendations" },
     { id: "grab", label: "Worth Grabbing", icon: Download, section: "Recommendations" },
@@ -4236,6 +4286,8 @@ export default function Recommendarr() {
           onRequest={handleRequest}
           requesting={requesting}
           requestResult={requestResult}
+          onFeedback={handleModalFeedback}
+          user={selectedUser}
         />
       )}
 

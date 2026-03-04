@@ -37,7 +37,7 @@ class RecommendationCache:
     RECS_TTL = 900          # 15 min for recommendation results
     LIBRARY_TTL = 1800      # 30 min for Radarr/Sonarr library data
     TMDB_TTL = 86400         # 24 hours for rating_key → tmdb_id mappings
-    PROFILE_TTL = 1800       # 30 min for user taste profiles
+    PROFILE_TTL = 7200       # 2 hours for user taste profiles
 
     def __init__(self):
         self._recs: dict[str, CacheEntry] = {}
