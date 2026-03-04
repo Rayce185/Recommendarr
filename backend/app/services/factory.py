@@ -89,6 +89,7 @@ def build_stack() -> ServiceStack:
     profiler = TasteProfiler(
         tautulli=tautulli,
         seerr=seerr,
+        tmdb=tmdb,
     )
 
     engine = RecommendationEngine(

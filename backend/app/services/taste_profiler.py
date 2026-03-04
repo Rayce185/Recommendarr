@@ -143,10 +143,12 @@ class TasteProfiler:
         self,
         tautulli: TautulliClient,
         seerr: SeerrClient,
+        tmdb=None,
         library_domains: dict[str, str] | None = None,
     ):
         self.tautulli = tautulli
         self.seerr = seerr
+        self.tmdb = tmdb
         self.library_domains = library_domains or DEFAULT_LIBRARY_DOMAINS
 
     async def build_profile(
@@ -155,7 +157,7 @@ class TasteProfiler:
         domain: str = "all",
         depth_months: int = 24,
         enrich_keywords: bool = True,
-        max_enrich: int = 200,
+        max_enrich: int = 50,
     ) -> TasteProfile:
         """Build a complete taste profile from Tautulli history.
 
@@ -168,12 +170,8 @@ class TasteProfiler:
         """
         logger.info(f"Building taste profile for {username} (domain={domain}, depth={depth_months}mo)")
 
-        # 1. Pull watch history from Tautulli
-        since = datetime.now(timezone.utc) - timedelta(days=depth_months * 30)
-        history = await self.tautulli.get_history(user_id=None, since=since, limit=10000)
-
-        # Resolve username → numeric user_id via Tautulli
-        user_id_match = username  # Default: try direct match
+        # 1. Resolve username → numeric user_id (BEFORE fetching history)
+        user_id_match = username
         try:
             users = await self.tautulli.get_users()
             for u in users:
@@ -185,7 +183,11 @@ class TasteProfiler:
         except Exception as e:
             logger.warning(f"Could not resolve username: {e}")
 
-        # Filter to this user (match both numeric ID and username)
+        # 2. Pull watch history from Tautulli (filtered by user_id = fewer events)
+        since = datetime.now(timezone.utc) - timedelta(days=depth_months * 30)
+        history = await self.tautulli.get_history(user_id=user_id_match, since=since, limit=10000)
+
+        # Filter to this user (safety check — API filter should handle it)
         user_events = [
             e for e in history
             if str(e.user_id) == user_id_match
@@ -225,6 +227,53 @@ class TasteProfiler:
         completions = []
         rewatch_count = 0
         enriched = 0
+        items_to_enrich = []  # (item_key, tmdb_id, media_type)
+
+        # Pre-enrich: batch fetch TMDB metadata in parallel (replaces sequential Seerr)
+        _enrich_cache = {}
+        if enrich_keywords:
+            import asyncio
+            # Sort by watch count (most-watched first = most important for taste)
+            _candidates = []
+            for _ik, _evts in by_item.items():
+                _p = _evts[0]
+                _tid = _p.tmdb_id
+                if _tid:
+                    _mt = "movie" if _p.media_type == "movie" else "tv"
+                    _candidates.append((_ik, _tid, _mt, len(_evts)))
+            _candidates.sort(key=lambda x: x[3], reverse=True)
+            _enrich_items = [(_ik, _tid, _mt) for _ik, _tid, _mt, _ in _candidates[:max_enrich]]
+
+            async def _fetch_one(ik, tid, mt):
+                try:
+                    if self.tmdb:
+                        d = await self.tmdb.get_detail(tid, mt)
+                        # get_detail returns processed dict: genres/keywords are string lists
+                        return ik, {
+                            "genres": d.get("genres", []),
+                            "keywords": d.get("keywords", []),
+                            "cast": [c["name"] for c in d.get("cast", [])[:5]],
+                            "directors": [c["name"] for c in d.get("crew", []) if c.get("job") == "Director"],
+                        }
+                    else:
+                        d = await self.seerr.get_detail(tid, mt)
+                        return ik, {"genres": d.genres, "keywords": d.keywords, "cast": [c["name"] for c in d.cast[:5]], "directors": d.directors}
+                except Exception:
+                    return ik, {}
+
+            # Parallel fetch with concurrency limit
+            _sem = asyncio.Semaphore(20)
+            async def _limited(ik, tid, mt):
+                async with _sem:
+                    return await _fetch_one(ik, tid, mt)
+
+            _tasks = [_limited(ik, tid, mt) for ik, tid, mt in _enrich_items]
+            _results = await asyncio.gather(*_tasks, return_exceptions=True)
+            for r in _results:
+                if isinstance(r, tuple):
+                    _enrich_cache[r[0]] = r[1]
+            enriched = len(_enrich_cache)
+            logger.info(f"Batch enriched {enriched} titles via {'TMDB' if self.tmdb else 'Seerr'}")
 
         for item_key, events in by_item.items():
             primary = events[0]
@@ -279,22 +328,12 @@ class TasteProfiler:
             cast_names = []
             director_names = []
 
-            if tmdb_id:
-                try:
-                    media_type = "movie" if primary.media_type == "movie" else "tv"
-                    if enrich_keywords and enriched < max_enrich:
-                        detail = await self.seerr.get_detail(tmdb_id, media_type)
-                        genres = detail.genres
-                        keywords = detail.keywords
-                        cast_names = [c["name"] for c in detail.cast[:5]]
-                        director_names = detail.directors
-                        enriched += 1
-                    else:
-                        # Lightweight — genres only (from cached data or skip)
-                        # We could use Radarr/Sonarr cache here too
-                        pass
-                except Exception as e:
-                    logger.debug(f"Failed to enrich tmdb_id={tmdb_id}: {e}")
+            if tmdb_id and item_key in _enrich_cache:
+                meta = _enrich_cache[item_key]
+                genres = meta.get("genres", [])
+                keywords = meta.get("keywords", [])
+                cast_names = meta.get("cast", [])
+                director_names = meta.get("directors", [])
 
             # 6. Accumulate into vectors
             for genre in genres:
@@ -400,7 +439,7 @@ class TasteProfiler:
         logger.info(
             f"Profile built for {username}: {total_watched} titles, "
             f"{len(genres_list)} genres, {len(keywords_list)} keywords, "
-            f"{len(personnel_list)} personnel, {enriched} enriched via Seerr"
+            f"{len(personnel_list)} personnel, {enriched} enriched via TMDB"
         )
 
         return profile

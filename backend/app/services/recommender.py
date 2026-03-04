@@ -995,7 +995,7 @@ class RecommendationEngine:
                     username=username,
                     domain=domain,
                     enrich_keywords=True,
-                    max_enrich=100,
+                    max_enrich=50,
                 )
                 self._profile_cache[cache_key] = profile
                 shared.set_profile(username, domain, profile)
