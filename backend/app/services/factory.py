@@ -98,6 +98,7 @@ def build_stack() -> ServiceStack:
         sonarr_tv=sonarr_tv,
         sonarr_anime=sonarr_anime,
         profiler=profiler,
+        tmdb=tmdb,
     )
 
     _stack = ServiceStack(

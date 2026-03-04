@@ -14,6 +14,8 @@ from app.config import settings
 from app.api import health, users, recommendations, auth, refresh, feedback
 from app.api import settings as settings_api
 from app.api import ai_settings
+from app.api import watchlist
+from app.api import library
 from app.services.factory import build_stack, init_user_map
 
 # ── Logging ──────────────────────────────────────────────────────
@@ -128,6 +130,8 @@ app.include_router(refresh.router,              prefix="/api/v1", tags=["cache"]
 app.include_router(feedback.router,             prefix="/api/v1", tags=["feedback"])
 app.include_router(settings_api.router,        prefix="/api/v1/system", tags=["settings"])
 app.include_router(ai_settings.router,          prefix="/api/v1/system", tags=["AI"])
+app.include_router(watchlist.router,             prefix="/api/v1", tags=["watchlist"])
+app.include_router(library.router,               prefix="/api/v1", tags=["library"])
 
 
 @app.get("/")

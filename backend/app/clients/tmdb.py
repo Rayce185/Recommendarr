@@ -205,6 +205,128 @@ class TMDBClient:
             release_date=date_str,
         )
 
+
+    # ── Detail ───────────────────────────────────────────────────
+
+    async def get_detail(self, tmdb_id: int, media_type: str = "movie") -> dict:
+        """Full detail for a movie or TV show (genres, keywords, credits, etc)."""
+        endpoint = f"/movie/{tmdb_id}" if media_type == "movie" else f"/tv/{tmdb_id}"
+        d = await self._get(endpoint, {"append_to_response": "keywords,credits,external_ids"})
+        genres = [g["name"] for g in d.get("genres", [])]
+
+        # Keywords
+        kw_data = d.get("keywords", {})
+        if media_type == "movie":
+            keywords = [k["name"] for k in kw_data.get("keywords", [])]
+        else:
+            keywords = [k["name"] for k in kw_data.get("results", [])]
+
+        # Cast/crew (top 10 cast, key crew)
+        credits = d.get("credits", {})
+        cast = [{"name": c["name"], "character": c.get("character", ""), "order": c.get("order", 99)}
+                for c in credits.get("cast", [])[:10]]
+        crew = [{"name": c["name"], "job": c["job"]}
+                for c in credits.get("crew", [])
+                if c.get("job") in ("Director", "Creator", "Writer", "Executive Producer")]
+
+        date_str = d.get("release_date") or d.get("first_air_date") or ""
+        year = int(date_str[:4]) if len(date_str) >= 4 else None
+
+        external = d.get("external_ids", {})
+
+        return {
+            "tmdb_id": tmdb_id,
+            "media_type": media_type,
+            "title": d.get("title") or d.get("name") or "",
+            "original_title": d.get("original_title") or d.get("original_name") or "",
+            "year": year,
+            "overview": d.get("overview", ""),
+            "poster_path": d.get("poster_path"),
+            "backdrop_path": d.get("backdrop_path"),
+            "vote_average": d.get("vote_average", 0),
+            "vote_count": d.get("vote_count", 0),
+            "popularity": d.get("popularity", 0),
+            "genres": genres,
+            "keywords": keywords,
+            "cast": cast,
+            "crew": crew,
+            "runtime": d.get("runtime"),
+            "status": d.get("status"),
+            "tagline": d.get("tagline", ""),
+            "original_language": d.get("original_language"),
+            "production_companies": [c["name"] for c in d.get("production_companies", [])],
+            "content_rating": d.get("content_rating", ""),
+            "imdb_id": external.get("imdb_id"),
+            "tvdb_id": external.get("tvdb_id"),
+            "release_date": date_str,
+            "number_of_seasons": d.get("number_of_seasons"),
+            "number_of_episodes": d.get("number_of_episodes"),
+        }
+
+    # ── Keywords ─────────────────────────────────────────────────
+
+    async def get_keywords(self, tmdb_id: int, media_type: str = "movie") -> list[str]:
+        """Get keyword list for a movie or TV show."""
+        if media_type == "movie":
+            d = await self._get(f"/movie/{tmdb_id}/keywords")
+            return [k["name"] for k in d.get("keywords", [])]
+        else:
+            d = await self._get(f"/tv/{tmdb_id}/keywords")
+            return [k["name"] for k in d.get("results", [])]
+
+    # ── Similar / Recommendations ────────────────────────────────
+
+    async def get_similar(self, tmdb_id: int, media_type: str = "movie",
+                          page: int = 1) -> list[TMDBDiscoverResult]:
+        """Get similar titles from TMDB."""
+        endpoint = f"/{'movie' if media_type == 'movie' else 'tv'}/{tmdb_id}/similar"
+        d = await self._get(endpoint, {"page": page})
+        return [self._parse_result(r, media_type) for r in d.get("results", [])]
+
+    async def get_recommendations_for(self, tmdb_id: int, media_type: str = "movie",
+                                       page: int = 1) -> list[TMDBDiscoverResult]:
+        """Get TMDB recommendations for a title."""
+        endpoint = f"/{'movie' if media_type == 'movie' else 'tv'}/{tmdb_id}/recommendations"
+        d = await self._get(endpoint, {"page": page})
+        return [self._parse_result(r, media_type) for r in d.get("results", [])]
+
+    # ── Search ───────────────────────────────────────────────────
+
+    async def search(self, query: str, page: int = 1) -> list[TMDBDiscoverResult]:
+        """Multi-search across movies, TV, people."""
+        d = await self._get("/search/multi", {"query": query, "page": page})
+        results = []
+        for r in d.get("results", []):
+            if r.get("media_type") in ("movie", "tv"):
+                results.append(self._parse_result(r))
+        return results
+
+    # ── Genre Lists ──────────────────────────────────────────────
+
+    async def get_movie_genres(self) -> list[dict]:
+        """Return [{id, name}, ...] for movie genres."""
+        d = await self._get("/genre/movie/list")
+        return d.get("genres", [])
+
+    async def get_tv_genres(self) -> list[dict]:
+        """Return [{id, name}, ...] for TV genres."""
+        d = await self._get("/genre/tv/list")
+        return d.get("genres", [])
+
+    # ── Discover by Genre ────────────────────────────────────────
+
+    async def discover_by_genre(self, genre_id: int, media_type: str = "movie",
+                                 page: int = 1) -> list[TMDBDiscoverResult]:
+        """Discover popular titles by genre."""
+        endpoint = "/discover/movie" if media_type == "movie" else "/discover/tv"
+        d = await self._get(endpoint, {
+            "with_genres": str(genre_id),
+            "sort_by": "popularity.desc",
+            "page": page,
+            "vote_count.gte": 10,
+        })
+        return [self._parse_result(r, media_type) for r in d.get("results", [])]
+
     @staticmethod
     def get_country_options() -> list[dict]:
         """Return the list of available country options."""

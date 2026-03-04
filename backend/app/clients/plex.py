@@ -262,6 +262,210 @@ class PlexClient:
             logger.warning(f"Plex watchlist remove failed: {e}")
             return False
 
+    # ── Watchlist Listing ────────────────────────────────────────────
+
+    async def get_watchlist(self, token_override: str = None, sort: str = "addedAt:desc") -> list[dict]:
+        """Fetch a user's Plex watchlist with TMDB IDs.
+
+        Args:
+            token_override: User's Plex token (defaults to admin token)
+            sort: Sort field:direction (addedAt:desc, titleSort:asc, year:desc, rating:desc)
+
+        Returns list of dicts with tmdb_id, title, year, type, poster, addedAt, etc.
+        """
+        token = token_override or self.token
+        items = []
+        try:
+            # Plex discover API hard-limits at 20 per page — paginate
+            all_metadata = []
+            offset = 0
+            page_size = 20
+            async with httpx.AsyncClient(timeout=30) as c:
+                while True:
+                    r = await c.get(
+                        "https://discover.provider.plex.tv/library/sections/watchlist/all",
+                        params={
+                            "X-Plex-Token": token,
+                            "includeGuids": "1",
+                            "sort": sort,
+                        },
+                        headers={
+                            "Accept": "application/json",
+                            "X-Plex-Client-Identifier": "recommendarr",
+                            "X-Plex-Container-Start": str(offset),
+                            "X-Plex-Container-Size": str(page_size),
+                        },
+                    )
+                    r.raise_for_status()
+                    data = r.json()
+                    mc = data.get("MediaContainer", {})
+                    page_items = mc.get("Metadata", [])
+                    all_metadata.extend(page_items)
+                    total = mc.get("totalSize", len(page_items))
+                    offset += len(page_items)
+                    if offset >= total or not page_items:
+                        break
+            for item in all_metadata:
+                    # Extract TMDB ID from Guid array
+                    tmdb_id = None
+                    for g in item.get("Guid", []):
+                        gid = g.get("id", "")
+                        if gid.startswith("tmdb://"):
+                            tmdb_id = int(gid.replace("tmdb://", ""))
+                            break
+                    media_type = "movie" if item.get("type") == "movie" else "tv"
+                    poster = item.get("thumb") or None
+                    # Check in-library status
+                    in_library = bool(self._tmdb_map.get(f"{'movie' if media_type == 'movie' else 'show'}:{tmdb_id}")) if tmdb_id else False
+                    is_watched_val = self.is_watched(tmdb_id, media_type) if tmdb_id else False
+
+                    items.append({
+                        "tmdb_id": tmdb_id,
+                        "plex_rating_key": item.get("ratingKey"),
+                        "title": item.get("title", ""),
+                        "year": item.get("year"),
+                        "media_type": media_type,
+                        "poster_url": poster,
+                        "added_at": item.get("addedAt"),
+                        "vote_average": (item.get("rating") or 0),
+                        "genres": [g.get("tag", "") for g in item.get("Genre", [])],
+                        "overview": item.get("summary", ""),
+                        "in_library": in_library,
+                        "is_watched": is_watched_val,
+                    })
+        except Exception as e:
+            logger.error(f"Watchlist fetch failed: {e}")
+        return items
+
+    # ── Device / Resource Enumeration ──────────────────────────────
+
+    async def get_player_devices(self, token_override: str = None) -> list[dict]:
+        """Get available Plex player devices (clients that can play media).
+
+        Returns list of player devices with name, product, clientId, connections.
+        """
+        token = token_override or self.token
+        devices = []
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                r = await c.get(
+                    "https://plex.tv/api/v2/resources",
+                    params={
+                        "X-Plex-Token": token,
+                        "includeHttps": 1,
+                        "includeRelay": 1,
+                    },
+                    headers={
+                        "Accept": "application/json",
+                        "X-Plex-Client-Identifier": "recommendarr",
+                    },
+                )
+                r.raise_for_status()
+                data = r.json()
+                for res in data:
+                    provides = res.get("provides", "")
+                    if "player" not in provides:
+                        continue
+                    # Find best connection (prefer local)
+                    conns = res.get("connections", [])
+                    local_conn = next((c for c in conns if c.get("local")), None)
+                    best_conn = local_conn or (conns[0] if conns else None)
+                    devices.append({
+                        "client_id": res.get("clientIdentifier", ""),
+                        "name": res.get("name", "Unknown"),
+                        "product": res.get("product", ""),
+                        "platform": res.get("platform", ""),
+                        "provides": provides,
+                        "connection_uri": best_conn.get("uri") if best_conn else None,
+                        "owned": res.get("owned", False),
+                        "last_seen": res.get("lastSeenAt"),
+                    })
+        except Exception as e:
+            logger.error(f"Plex resources fetch failed: {e}")
+        return devices
+
+    # ── Playback Control ─────────────────────────────────────────
+
+    async def play_on_device(
+        self,
+        rating_key: int,
+        client_id: str,
+        token_override: str = None,
+    ) -> dict:
+        """Initiate playback of a media item on a specific Plex player.
+
+        Uses Plex playQueues + commandManager to start playback on the target device.
+        The server acts as controller, sending the play command to the client.
+
+        Args:
+            rating_key: Plex library ratingKey of the item
+            client_id: Target player's clientIdentifier
+            token_override: User's Plex token for auth
+
+        Returns: {"success": bool, "message": str}
+        """
+        token = token_override or self.token
+        headers = {
+            "X-Plex-Token": token,
+            "X-Plex-Client-Identifier": "recommendarr",
+            "X-Plex-Target-Client-Identifier": client_id,
+        }
+
+        try:
+            # Step 1: Create a play queue on the server
+            async with httpx.AsyncClient(timeout=15) as c:
+                r = await c.post(
+                    f"{self.url}/playQueues",
+                    params={
+                        "type": "video",
+                        "uri": f"server://{self.machine_id}/com.plexapp.plugins.library/library/metadata/{rating_key}",
+                        "shuffle": 0,
+                        "repeat": 0,
+                        "continuous": 0,
+                        "own": 1,
+                        "X-Plex-Token": token,
+                        "X-Plex-Client-Identifier": "recommendarr",
+                    },
+                    headers={"Accept": "application/json"},
+                )
+                if r.status_code not in (200, 201):
+                    return {"success": False, "message": f"Failed to create play queue: HTTP {r.status_code}"}
+                pq = r.json()
+                pq_id = pq.get("MediaContainer", {}).get("playQueueID")
+                if not pq_id:
+                    return {"success": False, "message": "No playQueueID returned"}
+
+            # Step 2: Send playMedia command to the target device via server
+            async with httpx.AsyncClient(timeout=15) as c:
+                r = await c.get(
+                    f"{self.url}/player/playback/playMedia",
+                    params={
+                        "key": f"/library/metadata/{rating_key}",
+                        "machineIdentifier": self.machine_id,
+                        "address": self.url.split("://")[1].split(":")[0],
+                        "port": self.url.split(":")[-1],
+                        "protocol": "http",
+                        "containerKey": f"/playQueues/{pq_id}?own=1&window=200",
+                        "commandID": 1,
+                        "type": "video",
+                        "X-Plex-Token": token,
+                        "X-Plex-Target-Client-Identifier": client_id,
+                    },
+                    headers={
+                        "X-Plex-Client-Identifier": "recommendarr",
+                        "X-Plex-Target-Client-Identifier": client_id,
+                    },
+                )
+                if r.status_code == 200:
+                    return {"success": True, "message": f"Playback started (queue {pq_id})"}
+                else:
+                    return {"success": False, "message": f"Player command failed: HTTP {r.status_code} - {r.text[:200]}"}
+
+        except httpx.ConnectError:
+            return {"success": False, "message": "Cannot reach device — it may be offline"}
+        except Exception as e:
+            return {"success": False, "message": str(e)[:200]}
+
     @property
     def sections(self) -> list[dict]:
         """Return list of library sections."""

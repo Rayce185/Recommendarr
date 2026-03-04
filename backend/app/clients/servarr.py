@@ -151,6 +151,75 @@ class RadarrClient:
             return {t["id"]: t["label"] for t in resp.json()}
 
 
+    async def get_quality_profiles(self) -> list[dict]:
+        """Get quality profiles [{id, name}, ...]."""
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{self.url}/api/v3/qualityprofile", headers=self.headers)
+            resp.raise_for_status()
+            return [{"id": p["id"], "name": p["name"]} for p in resp.json()]
+
+    async def get_root_folders(self) -> list[dict]:
+        """Get root folders [{id, path, freeSpace}, ...]."""
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{self.url}/api/v3/rootfolder", headers=self.headers)
+            resp.raise_for_status()
+            return [{"id": f["id"], "path": f["path"], "freeSpace": f.get("freeSpace", 0)} for f in resp.json()]
+
+    async def lookup_movie(self, tmdb_id: int) -> dict | None:
+        """Lookup a movie by TMDB ID to get Radarr-ready payload."""
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{self.url}/api/v3/movie/lookup/tmdb",
+                params={"tmdbId": tmdb_id},
+                headers=self.headers,
+            )
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.json()
+
+    async def add_movie(self, tmdb_id: int, quality_profile_id: int,
+                        root_folder: str, tags: list[int] | None = None,
+                        monitored: bool = True, search_now: bool = True) -> dict:
+        """Add a movie to Radarr by TMDB ID.
+        Returns the added movie data or raises on error."""
+        # Lookup to get full metadata payload
+        movie_data = await self.lookup_movie(tmdb_id)
+        if not movie_data:
+            raise ValueError(f"TMDB ID {tmdb_id} not found in Radarr lookup")
+
+        movie_data["qualityProfileId"] = quality_profile_id
+        movie_data["rootFolderPath"] = root_folder
+        movie_data["monitored"] = monitored
+        movie_data["tags"] = tags or []
+        movie_data["addOptions"] = {"searchForMovie": search_now}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{self.url}/api/v3/movie",
+                json=movie_data,
+                headers=self.headers,
+            )
+            if resp.status_code == 400:
+                err = resp.json()
+                # Radarr returns 400 with details if already exists
+                raise ValueError(err.get("message", str(err)))
+            resp.raise_for_status()
+            return resp.json()
+
+    async def movie_exists(self, tmdb_id: int) -> bool:
+        """Check if a movie already exists in Radarr."""
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{self.url}/api/v3/movie",
+                params={"tmdbId": tmdb_id},
+                headers=self.headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return len(data) > 0 if isinstance(data, list) else bool(data)
+
+
 class SonarrClient:
     """Sonarr v3 API client."""
 
@@ -168,6 +237,15 @@ class SonarrClient:
                 return resp.status_code == 200
         except Exception:
             return False
+
+    async def get_tag_map(self) -> dict[int, str]:
+        """Get tag ID to name mapping."""
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{self.url}/api/v3/tag", headers=self.headers
+            )
+            resp.raise_for_status()
+            return {t["id"]: t["label"] for t in resp.json()}
 
     async def get_all_series(self) -> list[ServarrSeries]:
         """Fetch ALL series from Sonarr in one call."""
@@ -222,3 +300,95 @@ class SonarrClient:
             ))
 
         return series
+
+    async def get_quality_profiles(self) -> list[dict]:
+        """Get quality profiles [{id, name}, ...]."""
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{self.url}/api/v3/qualityprofile", headers=self.headers)
+            resp.raise_for_status()
+            return [{"id": p["id"], "name": p["name"]} for p in resp.json()]
+
+    async def get_root_folders(self) -> list[dict]:
+        """Get root folders [{id, path, freeSpace}, ...]."""
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{self.url}/api/v3/rootfolder", headers=self.headers)
+            resp.raise_for_status()
+            return [{"id": f["id"], "path": f["path"], "freeSpace": f.get("freeSpace", 0)} for f in resp.json()]
+
+    async def lookup_series(self, tvdb_id: int | None = None, tmdb_id: int | None = None,
+                            term: str | None = None) -> dict | None:
+        """Lookup a series by TVDB ID, TMDB ID, or search term."""
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            if tvdb_id:
+                resp = await client.get(
+                    f"{self.url}/api/v3/series/lookup",
+                    params={"term": f"tvdb:{tvdb_id}"},
+                    headers=self.headers,
+                )
+            elif tmdb_id:
+                resp = await client.get(
+                    f"{self.url}/api/v3/series/lookup",
+                    params={"term": f"tmdb:{tmdb_id}"},
+                    headers=self.headers,
+                )
+            elif term:
+                resp = await client.get(
+                    f"{self.url}/api/v3/series/lookup",
+                    params={"term": term},
+                    headers=self.headers,
+                )
+            else:
+                return None
+
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            data = resp.json()
+            if isinstance(data, list):
+                return data[0] if data else None
+            return data
+
+    async def add_series(self, tvdb_id: int | None = None, tmdb_id: int | None = None,
+                         quality_profile_id: int = 1, root_folder: str = "/media/Series",
+                         tags: list[int] | None = None, monitored: bool = True,
+                         search_now: bool = True, series_type: str = "standard",
+                         season_folder: bool = True) -> dict:
+        """Add a series to Sonarr. series_type: standard|anime|daily."""
+        series_data = await self.lookup_series(tvdb_id=tvdb_id, tmdb_id=tmdb_id)
+        if not series_data:
+            raise ValueError(f"Series not found (tvdb={tvdb_id}, tmdb={tmdb_id})")
+
+        series_data["qualityProfileId"] = quality_profile_id
+        series_data["rootFolderPath"] = root_folder
+        series_data["monitored"] = monitored
+        series_data["tags"] = tags or []
+        series_data["seriesType"] = series_type
+        series_data["seasonFolder"] = season_folder
+        series_data["addOptions"] = {
+            "searchForMissingEpisodes": search_now,
+            "searchForCutoffUnmetEpisodes": False,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{self.url}/api/v3/series",
+                json=series_data,
+                headers=self.headers,
+            )
+            if resp.status_code == 400:
+                err = resp.json()
+                raise ValueError(err[0].get("errorMessage", str(err)) if isinstance(err, list) else err.get("message", str(err)))
+            resp.raise_for_status()
+            return resp.json()
+
+    async def series_exists(self, tvdb_id: int | None = None, tmdb_id: int | None = None) -> bool:
+        """Check if a series already exists in this Sonarr instance."""
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{self.url}/api/v3/series", headers=self.headers)
+            resp.raise_for_status()
+            for s in resp.json():
+                if tvdb_id and s.get("tvdbId") == tvdb_id:
+                    return True
+                if tmdb_id and s.get("tmdbId") == tmdb_id:
+                    return True
+            return False

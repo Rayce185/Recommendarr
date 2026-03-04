@@ -69,6 +69,32 @@ const api = {
   cacheDetailed: () => authFetch(`${API_BASE}/system/settings/cache`).then(r => r.json()),
   collections: (u) => authFetch(`${API_BASE}/recommend/${u}/collections`).then(r => r.json()),
   collectionFor: (tmdbId) => authFetch(`${API_BASE}/collection/for/${tmdbId}`).then(r => { if (r.status === 204) return null; return r.json(); }),
+  // Watchlist
+  watchlist: (sort = "addedAt:desc", type = null) => {
+    const params = new URLSearchParams({ sort });
+    if (type) params.set("type", type);
+    return authFetch(`${API_BASE}/watchlist?${params}`).then(r => r.json());
+  },
+  watchlistDelete: (tmdbId, mediaType = "movie") => authFetch(`${API_BASE}/watchlist/${tmdbId}?media_type=${mediaType}`, { method: "DELETE" }).then(r => r.json()),
+  addToLibrary: (tmdbId, mediaType, opts = {}) => authFetch(`${API_BASE}/library/add`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tmdb_id: tmdbId, media_type: mediaType, ...opts }),
+  }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Add failed"); return d; })),
+  routePreview: (tmdbId, mediaType) => authFetch(`${API_BASE}/library/route-preview?tmdb_id=${tmdbId}&media_type=${mediaType}`, { method: "POST" }).then(r => r.json()),
+  // Devices & Playback
+  devices: () => authFetch(`${API_BASE}/devices`).then(r => r.json()),
+  playOnDevice: (tmdbId, mediaType = "movie", deviceId = null) => {
+    const params = new URLSearchParams({ media_type: mediaType });
+    if (deviceId) params.set("device_id", deviceId);
+    return authFetch(`${API_BASE}/play/${tmdbId}?${params}`, { method: "POST" }).then(r => r.json());
+  },
+  // User Preferences
+  preferences: () => authFetch(`${API_BASE}/preferences`).then(r => r.json()),
+  updatePreferences: (data) => authFetch(`${API_BASE}/preferences`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  resetPreference: (key) => authFetch(`${API_BASE}/preferences/${key}`, { method: "DELETE" }).then(r => r.json()),
+  globalPreferences: () => authFetch(`${API_BASE}/preferences/global`).then(r => r.json()),
+  updateGlobalPreferences: (data) => authFetch(`${API_BASE}/preferences/global`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
   cacheClear: (scope = "all") => authFetch(`${API_BASE}/system/settings/cache/clear?scope=${scope}`, { method: "POST" }).then(r => r.json()),
   refreshStart: () => authFetch(`${API_BASE}/cache/refresh`, { method: "POST" }).then(r => r.json()),
   refreshStatus: () => authFetch(`${API_BASE}/cache/refresh/status`).then(r => r.json()),
@@ -1308,6 +1334,49 @@ const cssText = `
   .coll-missing-title { font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .coll-missing-year { font-size: 11px; color: var(--text-muted); }
   .btn-sm { padding: 4px 10px; font-size: 11px; gap: 4px; }
+
+  .watchlist-subtabs {
+    display: flex; gap: 4px; padding: 0 24px; margin-bottom: 16px;
+  }
+  .wl-subtab {
+    padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
+    background: var(--bg-elevated); color: var(--text-secondary); border: none; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; transition: all 0.15s;
+  }
+  .wl-subtab:hover { background: var(--surface); color: var(--text-primary); }
+  .wl-subtab.active { background: var(--accent); color: #000; }
+  .wl-count { font-size: 11px; opacity: 0.7; }
+
+  .library-badge {
+    position: absolute; top: 6px; left: 6px; font-size: 9px; font-weight: 700;
+    padding: 2px 6px; border-radius: 4px; background: var(--green); color: #000;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .watched-badge {
+    position: absolute; top: 6px; right: 6px; font-size: 9px; font-weight: 600;
+    padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.7); color: var(--text-muted);
+    display: flex; align-items: center; gap: 3px;
+  }
+  .dismiss-btn { background: rgba(239, 68, 68, 0.3) !important; }
+  .dismiss-btn:hover { background: rgba(239, 68, 68, 0.5) !important; }
+
+  .settings-device-section { margin-top: 16px; padding: 12px; background: var(--bg-elevated); border-radius: 8px; }
+  .settings-device-section h4 { font-size: 14px; margin: 0 0 8px 0; display: flex; align-items: center; gap: 6px; }
+  .settings-device-section h4 svg { color: var(--accent); }
+  .device-select { width: 100%; padding: 8px 10px; border-radius: 6px; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); font-size: 13px; }
+
+  .global-prefs-section { margin-top: 20px; }
+  .global-prefs-section h4 { font-size: 14px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 6px; }
+  .pref-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .pref-row:last-child { border-bottom: none; }
+  .pref-label { font-size: 13px; color: var(--text-primary); }
+  .pref-source { font-size: 10px; padding: 1px 6px; border-radius: 10px; margin-left: 6px; }
+  .pref-source.user { background: var(--accent); color: #000; }
+  .pref-source.global { background: var(--blue); color: #fff; }
+  .pref-source.default { background: var(--bg-elevated); color: var(--text-muted); }
+  .pref-control { display: flex; align-items: center; gap: 8px; }
+  .pref-control input[type="range"] { width: 80px; }
+  .pref-control select { padding: 4px 8px; font-size: 12px; }
   .modal-score-row {
     display: flex;
     gap: 8px;
@@ -1722,8 +1791,23 @@ function MediaCard({ item, onClick, onFeedback }) {
                 <Play size={14} fill="currentColor" />
               </button>
             )}
-            {item.seerr_url && !item.in_library && (
-              <button className="card-action-btn seerr-btn" title="Request in Seerr" onClick={(e) => { e.stopPropagation(); window.open(item.seerr_url, "_blank"); }}>
+            {!item.in_library && item.tmdb_id && (
+              <button className="card-action-btn seerr-btn" title="Add to Library" onClick={async (e) => {
+                e.stopPropagation();
+                const btn = e.target.closest(".card-action-btn");
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border:2px solid transparent;border-top-color:currentColor;border-radius:50%;animation:spin .6s linear infinite;display:inline-block"></span>';
+                try {
+                  const res = await api.addToLibrary(item.tmdb_id, item.media_type || "movie");
+                  btn.style.background = "var(--green)";
+                  btn.innerHTML = res.already_exists ? "✓" : "✓";
+                  btn.title = res.message;
+                } catch (err) {
+                  btn.style.background = "var(--red)";
+                  btn.innerHTML = "✗";
+                  btn.title = err.message;
+                }
+              }}>
                 <Download size={14} />
               </button>
             )}
@@ -1812,7 +1896,7 @@ function DetailModal({ item, detail, onClose, onRequest, requesting, requestResu
   const handleCollectionRequest = async (partTmdbId) => {
     setCollRequestingId(partTmdbId);
     try {
-      await api.request(partTmdbId, "movie");
+      await api.addToLibrary(partTmdbId, "movie");
       setCollectionData(prev => prev ? {
         ...prev,
         parts: prev.parts.map(p => p.tmdb_id === partTmdbId ? { ...p, requested: true } : p),
@@ -1905,30 +1989,17 @@ function DetailModal({ item, detail, onClose, onRequest, requesting, requestResu
                 <Play size={15} /> Play on Plex
               </button>
             )}
-            {item.in_library === true && item.seerr_url && (
-              <button className="btn btn-secondary" onClick={() => window.open(item.seerr_url, "_blank")}>
-                <ExternalLink size={15} /> View in Seerr
-              </button>
-            )}
+            {/* Library status shown via badge */}
             {item.in_library === false && (
-              <>
-                {item.seerr_url && (
-                  <button className="btn btn-primary" onClick={() => window.open(item.seerr_url, "_blank")}>
-                    <Download size={15} /> Request in Seerr
-                  </button>
-                )}
-                {!item.seerr_url && (
-                  <button
-                    className={`btn ${requestResult?.success ? "btn-success" : "btn-primary"}`}
-                    onClick={() => onRequest(d.tmdb_id || item.tmdb_id, item.media_type)}
-                    disabled={requesting || requestResult?.success}
-                  >
-                    {requesting ? <><Loader2 size={15} className="spinner" /> Requesting...</> :
-                     requestResult?.success ? <><CheckCircle2 size={15} /> Requested!</> :
-                     <><Download size={15} /> Request via Seerr</>}
-                  </button>
-                )}
-              </>
+              <button
+                className={`btn ${requestResult?.success ? "btn-success" : "btn-primary"}`}
+                onClick={() => onRequest(d.tmdb_id || item.tmdb_id, item.media_type)}
+                disabled={requesting || requestResult?.success}
+              >
+                {requesting ? <><Loader2 size={15} className="spinner" /> Adding...</> :
+                 requestResult?.success ? <><CheckCircle2 size={15} /> {requestResult.already_exists ? "Already in Library" : "Added!"}</> :
+                 <><Download size={15} /> Add to Library</>}
+              </button>
             )}
             <button className="btn btn-secondary watchlist-modal-btn" onClick={() => {
               api.watchlistAdd(d.tmdb_id || item.tmdb_id, item.media_type || "movie").then(() => {
@@ -3059,9 +3130,189 @@ function AISettingsPanel() {
   );
 }
 
+
+// ─── Page: Watchlist ────────────────────────────────────────────
+
+const WATCHLIST_SORTS = [
+  { value: "addedAt:desc", label: "Recently Added" },
+  { value: "addedAt:asc", label: "Oldest Added" },
+  { value: "titleSort:asc", label: "Title A–Z" },
+  { value: "titleSort:desc", label: "Title Z–A" },
+  { value: "year:desc", label: "Newest Release" },
+  { value: "year:asc", label: "Oldest Release" },
+  { value: "rating:desc", label: "Highest Rated" },
+];
+
+function WatchlistPage({ user, onCardClick }) {
+  const [items, setItems] = useState([]);
+  const [libraries, setLibraries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [sort, setSort] = useState("addedAt:desc");
+  const [filterLib, setFilterLib] = useState("all"); // "all" | library title
+  const [removing, setRemoving] = useState(null);
+  const [playingId, setPlayingId] = useState(null);
+  const [playResult, setPlayResult] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true); setError(null);
+    api.watchlist(sort, null)
+      .then(data => {
+        setItems(data.items || []);
+        if (data.libraries) setLibraries(data.libraries);
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [sort]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleRemove = async (item) => {
+    setRemoving(item.tmdb_id);
+    try {
+      await api.watchlistDelete(item.tmdb_id, item.media_type);
+      setItems(prev => prev.filter(i => i.tmdb_id !== item.tmdb_id));
+    } catch (e) { console.error("Remove failed:", e); }
+    setRemoving(null);
+  };
+
+  const handlePlay = async (item) => {
+    if (!item.in_library) return;
+    setPlayingId(item.tmdb_id); setPlayResult(null);
+    try {
+      const result = await api.playOnDevice(item.tmdb_id, item.media_type);
+      setPlayResult({ id: item.tmdb_id, ...result });
+    } catch (e) {
+      setPlayResult({ id: item.tmdb_id, success: false, message: e.message });
+    }
+    setTimeout(() => { setPlayingId(null); setPlayResult(null); }, 3000);
+  };
+
+  // Build subtabs from Plex libraries with item counts
+  const libCounts = {};
+  items.forEach(item => {
+    const lib = item.library_name || "Uncategorized";
+    libCounts[lib] = (libCounts[lib] || 0) + 1;
+  });
+  // Order: libraries in Plex order, then Uncategorized if any
+  const libTabs = libraries
+    .filter(l => libCounts[l.title])
+    .map(l => ({ id: l.title, label: l.title, count: libCounts[l.title] }));
+  if (libCounts["Uncategorized"]) {
+    libTabs.push({ id: "Uncategorized", label: "Uncategorized", count: libCounts["Uncategorized"] });
+  }
+
+  return (
+    <>
+      <div className="page-header">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+          <h2><Bookmark size={20} style={{ verticalAlign: -3, marginRight: 6 }} />Watchlist</h2>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select value={sort} onChange={e => setSort(e.target.value)} style={{ fontSize: 12, padding: "4px 8px" }}>
+              {WATCHLIST_SORTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={load}>
+              <RefreshCw size={13} />
+            </button>
+          </div>
+        </div>
+        <p>Your Plex watchlist — titles you want to watch later</p>
+      </div>
+
+      <div className="watchlist-subtabs">
+        <button
+          className={`wl-subtab ${filterLib === "all" ? "active" : ""}`}
+          onClick={() => setFilterLib("all")}
+        >
+          All <span className="wl-count">{items.length}</span>
+        </button>
+        {libTabs.map(tab => (
+          <button
+            key={tab.id}
+            className={`wl-subtab ${filterLib === tab.id ? "active" : ""}`}
+            onClick={() => setFilterLib(tab.id)}
+          >
+            {tab.label} <span className="wl-count">{tab.count}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="page-body">
+        {loading ? <LoadingState message="Loading watchlist..." /> :
+         error ? <ErrorState message={error} onRetry={load} /> :
+         items.length === 0 ? <EmptyState icon={Bookmark} title="Watchlist empty" message="Add titles to your Plex watchlist to see them here." /> :
+         <div className="card-grid">
+           {items
+             .filter(item => filterLib === "all" || (item.library_name || "Uncategorized") === filterLib)
+             .map((item, i) => (
+             <div className="media-card watchlist-card" key={`${item.tmdb_id}-${i}`} onClick={() => onCardClick(item)}>
+               <div className="card-poster">
+                 {item.poster_url ? (
+                   <img src={item.poster_url} alt={item.title} loading="lazy" />
+                 ) : (
+                   <div className="no-poster"><Film size={32} /></div>
+                 )}
+                 <div className="card-overlay">
+                   <div className="card-actions-row">
+                     {item.in_library && item.plex_url && (
+                       <button className="card-action-btn plex-btn" title="Play in Plex" onClick={(e) => { e.stopPropagation(); window.open(item.plex_url, "_blank"); }}>
+                         <Play size={14} fill="currentColor" />
+                       </button>
+                     )}
+                     {item.in_library && (
+                       <button
+                         className={`card-action-btn ${playResult?.id === item.tmdb_id ? (playResult.success ? "plex-btn" : "dismiss-btn") : "info-btn"}`}
+                         title="Watch Now on device"
+                         disabled={playingId === item.tmdb_id}
+                         onClick={(e) => { e.stopPropagation(); handlePlay(item); }}
+                       >
+                         {playingId === item.tmdb_id ? <Loader2 size={14} className="spinner" /> :
+                          playResult?.id === item.tmdb_id && playResult.success ? <CheckCircle2 size={14} /> :
+                          <Monitor size={14} />}
+                       </button>
+                     )}
+                     <button
+                       className="card-action-btn dismiss-btn"
+                       title="Remove from Watchlist"
+                       disabled={removing === item.tmdb_id}
+                       onClick={(e) => { e.stopPropagation(); handleRemove(item); }}
+                     >
+                       {removing === item.tmdb_id ? <Loader2 size={14} className="spinner" /> : <XCircle size={14} />}
+                     </button>
+                   </div>
+                 </div>
+                 {item.in_library && <div className="card-badge library-badge">In Library</div>}
+                 {item.is_watched && <div className="card-badge watched-badge"><Eye size={10} /> Watched</div>}
+               </div>
+               <div className="card-info">
+                 <div className="card-title">{item.title}</div>
+                 <div className="card-meta">
+                   {item.year && <span>{item.year}</span>}
+                   {item.vote_average > 0 && <><span className="sep">·</span><span>★ {item.vote_average.toFixed(1)}</span></>}
+                   <span className="sep">·</span>
+                   <span style={{ color: item.media_type === "movie" ? "var(--blue)" : "var(--purple)", fontSize: 10, textTransform: "uppercase", fontWeight: 600 }}>
+                     {item.media_type === "movie" ? "Movie" : "TV"}
+                   </span>
+                 </div>
+                 {item.genres?.length > 0 && (
+                   <div className="card-genres">{item.genres.slice(0, 3).join(" · ")}</div>
+                 )}
+               </div>
+             </div>
+           ))}
+         </div>}
+      </div>
+    </>
+  );
+}
+
 // ─── Page: System Settings ───────────────────────────────────────
 function AdminPage({ subtab: initialSubtab, onSubtabChange }) {
   const [settingsTab, setSettingsTabRaw] = useState(initialSubtab || "services");
+  const [devicesList, setDevicesList] = useState([]);
+  const [globalPrefs, setGlobalPrefs] = useState(null);
+  const [userPrefs, setUserPrefs] = useState(null);
+  const [prefsSaving, setPrefsSaving] = useState(false);
   const setSettingsTab = (t) => { setSettingsTabRaw(t); onSubtabChange?.(t); };
   const [health, setHealth] = useState(null);
   const [stats, setStats] = useState(null);
@@ -3087,6 +3338,11 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange }) {
       api.cacheDetailed().catch(() => null),
     ])
       .then(([h, s, cfg, cache]) => { setHealth(h); setStats(s); setSysSettings(cfg); setCacheInfo(cache); })
+      .then(() => {
+        api.devices().then(r => setDevicesList(r.devices || [])).catch(() => {});
+        api.preferences().then(r => setUserPrefs(r.preferences || {})).catch(() => {});
+        api.globalPreferences().then(r => setGlobalPrefs(r.global_defaults || null)).catch(() => {});
+      })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
@@ -3170,6 +3426,7 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange }) {
     { id: "library", label: "Library", icon: Database },
     { id: "cache", label: "Cache", icon: BarChart3 },
     { id: "config", label: "Configuration", icon: Settings },
+    { id: "prefs", label: "Preferences", icon: SlidersHorizontal },
   ];
 
   return (
@@ -3356,6 +3613,120 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange }) {
               <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "8px 0" }}>
                 <span style={{ color: "var(--accent)", marginRight: 4 }}>●</span> = overridden from settings.json (env var value replaced).
                 Changes are live immediately. Service clients may need a connection test to verify new URLs/keys.
+              </div>
+            )}
+          </div>
+        )}
+
+        {settingsTab === "prefs" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Device Selector */}
+            <div className="settings-device-section">
+              <h4><Monitor size={15} /> Default Playback Device</h4>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 8px 0" }}>
+                Select where "Watch Now" plays media. Refresh to detect online devices.
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <select
+                  className="device-select"
+                  value={userPrefs?.default_device_id?.value || ""}
+                  onChange={async (e) => {
+                    const dev = devicesList.find(d => d.client_id === e.target.value);
+                    await api.updatePreferences({
+                      default_device_id: e.target.value,
+                      default_device_name: dev?.name || "",
+                    });
+                    setUserPrefs(prev => ({
+                      ...prev,
+                      default_device_id: { value: e.target.value, source: "user" },
+                      default_device_name: { value: dev?.name || "", source: "user" },
+                    }));
+                  }}
+                >
+                  <option value="">— No device selected —</option>
+                  {devicesList.map(d => (
+                    <option key={d.client_id} value={d.client_id}>
+                      {d.name} ({d.product})
+                    </option>
+                  ))}
+                </select>
+                <button className="btn btn-secondary" style={{ padding: "6px 10px", fontSize: 12, whiteSpace: "nowrap" }}
+                  onClick={async () => {
+                    try { const r = await api.devices(); setDevicesList(r.devices || []); } catch (e) {}
+                  }}
+                >
+                  <RefreshCw size={13} /> Refresh
+                </button>
+              </div>
+              {devicesList.length > 0 && (
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                  {devicesList.length} device{devicesList.length !== 1 ? "s" : ""} online
+                </div>
+              )}
+            </div>
+
+            {/* Global Defaults (Admin only) */}
+            {globalPrefs && (
+              <div className="global-prefs-section">
+                <h4><Globe size={15} /> Global Defaults (all users)</h4>
+                <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "-4px 0 12px 0" }}>
+                  These apply to all Plex users unless they've overridden a specific setting.
+                </p>
+                <div style={{ background: "var(--bg-elevated)", borderRadius: 8, padding: 12 }}>
+                  {Object.entries(globalPrefs).map(([key, info]) => (
+                    <div className="pref-row" key={key}>
+                      <div>
+                        <span className="pref-label">{key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
+                        <span className={`pref-source ${info.source}`}>{info.source}</span>
+                      </div>
+                      <div className="pref-control">
+                        {typeof info.value === "boolean" ? (
+                          <label className="toggle-switch" style={{ position: "relative", width: 36, height: 20, display: "inline-block" }}>
+                            <input type="checkbox" checked={info.value} onChange={async (e) => {
+                              setPrefsSaving(true);
+                              await api.updateGlobalPreferences({ [key]: e.target.checked });
+                              const r = await api.globalPreferences();
+                              setGlobalPrefs(r.global_defaults);
+                              setPrefsSaving(false);
+                            }} style={{ display: "none" }} />
+                            <span style={{
+                              position: "absolute", cursor: "pointer", inset: 0, borderRadius: 20,
+                              background: info.value ? "var(--green)" : "var(--surface)", transition: "0.2s",
+                            }}>
+                              <span style={{
+                                position: "absolute", height: 14, width: 14, left: info.value ? 18 : 4, bottom: 3,
+                                background: "#fff", borderRadius: "50%", transition: "0.2s",
+                              }} />
+                            </span>
+                          </label>
+                        ) : typeof info.value === "number" ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <input type="range" min={0} max={1} step={0.1} value={info.value}
+                              onChange={async (e) => {
+                                const val = parseFloat(e.target.value);
+                                await api.updateGlobalPreferences({ [key]: val });
+                                const r = await api.globalPreferences();
+                                setGlobalPrefs(r.global_defaults);
+                              }}
+                            />
+                            <span style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 28 }}>{info.value}</span>
+                          </div>
+                        ) : (
+                          <select value={info.value} onChange={async (e) => {
+                            await api.updateGlobalPreferences({ [key]: e.target.value });
+                            const r = await api.globalPreferences();
+                            setGlobalPrefs(r.global_defaults);
+                          }} style={{ padding: "4px 8px", fontSize: 12 }}>
+                            {key === "language" && [["en","English"],["de","Deutsch"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                            {key === "watchlist_sort" && WATCHLIST_SORTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            {key === "watchlist_filter" && ["all","movie","tv"].map(v => <option key={v} value={v}>{v}</option>)}
+                            {!["language","watchlist_sort","watchlist_filter"].includes(key) && <option value={info.value}>{String(info.value)}</option>}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -3677,14 +4048,15 @@ export default function Recommendarr() {
   // Seerr request
   const handleRequest = useCallback((tmdbId, mediaType) => {
     setRequesting(true);
-    api.request(tmdbId, mediaType)
+    api.addToLibrary(tmdbId, mediaType)
       .then(data => {
-        setRequestResult({ success: true });
-        addToast(`Requested successfully!`, "success");
+        setRequestResult({ success: true, already_exists: data.already_exists });
+        const msg = data.already_exists ? `"${data.title}" already in library` : `Added "${data.title}" to ${data.instance}`;
+        addToast(msg, data.already_exists ? "info" : "success");
       })
       .catch(err => {
         setRequestResult({ success: false, error: err.message });
-        addToast(`Request failed: ${err.message}`, "error");
+        addToast(`Add failed: ${err.message}`, "error");
       })
       .finally(() => setRequesting(false));
   }, [addToast]);
@@ -3696,6 +4068,7 @@ export default function Recommendarr() {
     { id: "mood", label: "Mood Match", icon: Sparkles, section: "Discovery" },
     { id: "trending", label: "Trending", icon: TrendingUp, section: "Discovery" },
     { id: "collections", label: "Collections", icon: Layers, section: "Discovery" },
+    { id: "watchlist", label: "Watchlist", icon: Bookmark, section: "Discovery" },
     { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
     { id: "admin", label: "System Settings", icon: Settings, section: "Admin" },
   ];
@@ -3714,6 +4087,8 @@ export default function Recommendarr() {
         return <TrendingPage onCardClick={openDetail} subtab={hashSubtab} onSubtabChange={setSubtab} />;
       case "collections":
         return <CollectionsPage user={selectedUser} onCardClick={openDetail} />;
+      case "watchlist":
+        return <WatchlistPage user={selectedUser} onCardClick={openDetail} />;
       case "profile":
         return <TasteProfilePage user={selectedUser} />;
       case "admin":

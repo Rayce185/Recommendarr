@@ -140,15 +140,41 @@ async def test_llm_connection(llm: LLMConfig) -> dict:
                     "models": models[:50],
                 }
         elif llm.provider == "anthropic":
-            # Anthropic has no /models list — just do a lightweight call
-            result = await _anthropic_complete(
-                LLMConfig(provider="anthropic", endpoint="", api_key=llm.api_key, model=llm.model, max_tokens=10, temperature=0),
-                "Reply with OK.", ""
-            )
+            # Anthropic /v1/models API for model listing
+            models = []
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+                    resp = await client.get(
+                        "https://api.anthropic.com/v1/models",
+                        headers={
+                            "x-api-key": llm.api_key,
+                            "anthropic-version": "2023-06-01",
+                        },
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        models = sorted(
+                            [m["id"] for m in data.get("data", [])],
+                            reverse=True,
+                        )
+            except Exception as e:
+                logger.warning(f"Anthropic model list failed: {e}")
+
+            if not models:
+                # Fallback: hardcoded known models if API fails
+                models = [
+                    "claude-sonnet-4-5-20250929",
+                    "claude-haiku-4-5-20251001",
+                    "claude-3-5-sonnet-20241022",
+                    "claude-3-5-haiku-20241022",
+                    "claude-3-opus-20240229",
+                ]
+
+            found = llm.model in models if llm.model else False
             return {
-                "status": "ok" if result else "error",
-                "message": f"Connected to {llm.model}." if result else "No response.",
-                "models": [],
+                "status": "ok" if found else "warning",
+                "message": f"Connected. {len(models)} models." + ("" if found else (" Select a model." if not llm.model else f" Model '{llm.model}' not in list.")),
+                "models": models,
             }
         return {"status": "error", "message": f"Unknown provider: {llm.provider}"}
     except httpx.ConnectError:

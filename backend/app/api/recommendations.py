@@ -22,6 +22,26 @@ from app.services.collections import CollectionService
 
 router = APIRouter()
 
+# Module-level TMDB genre cache (populated on first use)
+_tmdb_genre_cache: dict[int, str] = {}
+
+async def _ensure_genre_cache():
+    global _tmdb_genre_cache
+    if _tmdb_genre_cache:
+        return
+    stack = get_stack()
+    if stack.tmdb:
+        try:
+            for g in await stack.tmdb.get_movie_genres():
+                _tmdb_genre_cache[g["id"]] = g["name"]
+            for g in await stack.tmdb.get_tv_genres():
+                _tmdb_genre_cache[g["id"]] = g["name"]
+        except Exception:
+            pass
+
+def _resolve_genres(genre_ids: list[int]) -> list[str]:
+    return [_tmdb_genre_cache[gid] for gid in genre_ids if gid in _tmdb_genre_cache]
+
 
 def _img_url(path: str | None, size: str = "w342") -> str | None:
     """Build TMDB image URL, handling both relative paths and absolute URLs."""
@@ -317,11 +337,16 @@ async def get_trending(
     """
     stack = get_stack()
 
+    await _ensure_genre_cache()
+
     def _fmt(t) -> dict:
         """Format a TMDB result for API response."""
         poster = None
         if t.poster_path:
             poster = f"https://image.tmdb.org/t/p/w342{t.poster_path}" if not t.poster_path.startswith("http") else t.poster_path
+        genres = []
+        if hasattr(t, "genre_ids") and t.genre_ids:
+            genres = [_tmdb_genre_cache.get(gid, f"Genre:{gid}") for gid in t.genre_ids if gid in _tmdb_genre_cache]
         return {
             "tmdb_id": t.tmdb_id,
             "media_type": t.media_type,
@@ -329,7 +354,7 @@ async def get_trending(
             "year": t.year,
             "poster_url": poster,
             "vote_average": t.vote_average,
-            "genres": stack.seerr.resolve_genre_ids(t.genre_ids, t.media_type) if hasattr(t, "genre_ids") else [],
+            "genres": genres,
             "popularity": getattr(t, "popularity", 0),
             "original_language": getattr(t, "original_language", None),
             "release_date": getattr(t, "release_date", None),
@@ -445,7 +470,11 @@ async def get_similar(
 ):
     """Get similar titles to a specific movie/show via TMDB."""
     stack = get_stack()
-    similar = await stack.seerr.get_similar(tmdb_id, media_type, page)
+    await _ensure_genre_cache()
+    if stack.tmdb:
+        similar = await stack.tmdb.get_similar(tmdb_id, media_type, page)
+    else:
+        similar = await stack.seerr.get_similar(tmdb_id, media_type, page)
     return {
         "results": [
             {
@@ -455,7 +484,7 @@ async def get_similar(
                 "year": s.year,
                 "poster_url": f"https://image.tmdb.org/t/p/w342{s.poster_path}" if s.poster_path else None,
                 "vote_average": s.vote_average,
-                "genres": stack.seerr.resolve_genre_ids(s.genre_ids, s.media_type),
+                "genres": [_tmdb_genre_cache.get(gid) for gid in (s.genre_ids if hasattr(s, "genre_ids") else []) if gid in _tmdb_genre_cache] if hasattr(s, "genre_ids") else [],
             }
             for s in similar
         ],
@@ -472,34 +501,63 @@ async def get_detail(
     """Full metadata for a title — keywords, cast, crew, trailers, ratings."""
     stack = get_stack()
     try:
-        detail = await stack.seerr.get_detail(tmdb_id, media_type)
+        if stack.tmdb:
+            d = await stack.tmdb.get_detail(tmdb_id, media_type)
+            # Check library status from Plex map
+            label = "movie" if media_type == "movie" else "show"
+            in_library = bool(stack.plex._tmdb_map.get(f"{label}:{tmdb_id}")) if stack.plex else False
+            return {
+                "tmdb_id": d["tmdb_id"],
+                "media_type": d["media_type"],
+                "title": d["title"],
+                "original_title": d.get("original_title", ""),
+                "year": d.get("year"),
+                "overview": d.get("overview", ""),
+                "poster_url": f"https://image.tmdb.org/t/p/w500{d['poster_path']}" if d.get("poster_path") else None,
+                "backdrop_url": f"https://image.tmdb.org/t/p/w1280{d['backdrop_path']}" if d.get("backdrop_path") else None,
+                "genres": d.get("genres", []),
+                "keywords": d.get("keywords", []),
+                "vote_average": d.get("vote_average", 0),
+                "vote_count": d.get("vote_count", 0),
+                "runtime": d.get("runtime"),
+                "status": d.get("status"),
+                "original_language": d.get("original_language"),
+                "imdb_id": d.get("imdb_id"),
+                "cast": d.get("cast", [])[:10],
+                "directors": [c["name"] for c in d.get("crew", []) if c.get("job") == "Director"],
+                "writers": [c["name"] for c in d.get("crew", []) if c.get("job") in ("Writer", "Screenplay")],
+                "trailers": [],
+                "in_library": in_library,
+                "media_status": None,
+            }
+        else:
+            detail = await stack.seerr.get_detail(tmdb_id, media_type)
+            return {
+                "tmdb_id": detail.tmdb_id,
+                "media_type": detail.media_type,
+                "title": detail.title,
+                "original_title": detail.original_title,
+                "year": detail.year,
+                "overview": detail.overview,
+                "poster_url": f"https://image.tmdb.org/t/p/w500{detail.poster_path}" if detail.poster_path else None,
+                "backdrop_url": f"https://image.tmdb.org/t/p/w1280{detail.backdrop_path}" if detail.backdrop_path else None,
+                "genres": detail.genres,
+                "keywords": detail.keywords,
+                "vote_average": detail.vote_average,
+                "vote_count": detail.vote_count,
+                "runtime": detail.runtime,
+                "status": detail.status,
+                "original_language": detail.original_language,
+                "imdb_id": detail.imdb_id,
+                "cast": detail.cast[:10],
+                "directors": detail.directors,
+                "writers": detail.writers,
+                "trailers": detail.trailers,
+                "in_library": detail.in_library,
+                "media_status": detail.media_status,
+            }
     except Exception as e:
         raise HTTPException(404, f"Title not found: {e}")
-
-    return {
-        "tmdb_id": detail.tmdb_id,
-        "media_type": detail.media_type,
-        "title": detail.title,
-        "original_title": detail.original_title,
-        "year": detail.year,
-        "overview": detail.overview,
-        "poster_url": f"https://image.tmdb.org/t/p/w500{detail.poster_path}" if detail.poster_path else None,
-        "backdrop_url": f"https://image.tmdb.org/t/p/w1280{detail.backdrop_path}" if detail.backdrop_path else None,
-        "genres": detail.genres,
-        "keywords": detail.keywords,
-        "vote_average": detail.vote_average,
-        "vote_count": detail.vote_count,
-        "runtime": detail.runtime,
-        "status": detail.status,
-        "original_language": detail.original_language,
-        "imdb_id": detail.imdb_id,
-        "cast": detail.cast[:10],
-        "directors": detail.directors,
-        "writers": detail.writers,
-        "trailers": detail.trailers,
-        "in_library": detail.in_library,
-        "media_status": detail.media_status,
-    }
 
 
 # ── Request (Seerr → Radarr/Sonarr) ─────────────────────────────
@@ -583,15 +641,13 @@ async def get_filter_options():
     """Available filter options: genres + Plex library sections."""
     stack = get_stack()
 
-    # Genres from Seerr/TMDB
+    # Genres from TMDB (preferred) or Seerr
     all_genres = set()
     try:
-        for g in await stack.seerr.get_movie_genres():
+        src = stack.tmdb or stack.seerr
+        for g in await src.get_movie_genres():
             all_genres.add(g.get("name", "") if isinstance(g, dict) else str(g))
-    except Exception:
-        pass
-    try:
-        for g in await stack.seerr.get_tv_genres():
+        for g in await src.get_tv_genres():
             all_genres.add(g.get("name", "") if isinstance(g, dict) else str(g))
     except Exception:
         pass

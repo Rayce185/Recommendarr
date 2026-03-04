@@ -100,7 +100,8 @@ async def _run_refresh(job_id: str, username: str):
                     logger.info(f"Refresh: loaded {len(anime)} anime from Sonarr Anime")
 
                 elif step_key == "profile":
-                    await stack.profiler.build_profile(username=username, domain="all", enrich_keywords=True, max_enrich=100)
+                    profile = await stack.profiler.build_profile(username=username, domain="all", enrich_keywords=True, max_enrich=100)
+                    cache.set_profile(username, "all", profile)
 
                 elif step_key == "tonight":
                     from app.services.recommender import RecommendationRequest

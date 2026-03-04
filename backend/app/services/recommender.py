@@ -111,6 +111,7 @@ class RecommendationEngine:
         sonarr_tv: SonarrClient,
         sonarr_anime: SonarrClient,
         profiler: TasteProfiler,
+        tmdb=None,
     ):
         self.tautulli = tautulli
         self.seerr = seerr
@@ -118,9 +119,11 @@ class RecommendationEngine:
         self.sonarr_tv = sonarr_tv
         self.sonarr_anime = sonarr_anime
         self.profiler = profiler
+        self.tmdb = tmdb  # TMDBClient — preferred over Seerr when available
         # Caches (per-session, refreshed on demand)
         self._library_cache: dict[int, dict] = {}
         self._profile_cache: dict[str, TasteProfile] = {}
+        self._genre_cache: dict[str, dict[int, str]] = {}  # {movie: {id: name}, tv: {id: name}}
 
     async def recommend(self, request: RecommendationRequest) -> list[Recommendation]:
         """Main entry point — route to the appropriate mode."""
@@ -264,22 +267,24 @@ class RecommendationEngine:
         candidates: list[dict] = []
 
         # Source 1: Trending
-        trending = await self.seerr.get_trending(page=1)
+        trending = await self._get_trending(page=1)
         for item in trending:
             if item.tmdb_id not in exclude:
-                candidates.append(self._discover_to_candidate(item, "trending"))
+                candidates.append(await self._discover_to_candidate(item, "trending"))
 
         # Source 2: TMDB discover filtered by top genres
         top_genres = profile.top_genres(3)
-        from app.clients.seerr import MOVIE_GENRE_MAP
-        reverse_genre_map = {v: k for k, v in MOVIE_GENRE_MAP.items()}
+        # Genre ID lookup from TMDB (cache populated on first resolve)
+        if not self._genre_cache.get("movie"):
+            await self._resolve_genre_ids([], "movie")  # Populate cache
+        reverse_genre_map = {v: k for k, v in self._genre_cache.get("movie", {}).items()}
         for ga in top_genres:
             genre_id = reverse_genre_map.get(ga.genre)
             if genre_id:
-                discovered = await self.seerr.discover_movies(page=1, genre=genre_id)
+                discovered = await self._discover_by_genre(genre_id, "movie", page=1)
                 for item in discovered[:10]:
                     if item.tmdb_id not in exclude:
-                        candidates.append(self._discover_to_candidate(item, "discover"))
+                        candidates.append(await self._discover_to_candidate(item, "discover"))
 
         # Source 3: Similar to user's top-rated watched titles
         # Get a few high-completion titles from history
@@ -288,10 +293,10 @@ class RecommendationEngine:
         # Pick up to 3 random high-completion titles as similarity seeds
         seeds = random.sample(user_events, min(3, len(user_events))) if user_events else []
         for seed in seeds:
-            similar = await self.seerr.get_similar(seed.tmdb_id, "movie", page=1)
+            similar = await self._get_similar(seed.tmdb_id, "movie", page=1)
             for item in similar[:8]:
                 if item.tmdb_id not in exclude:
-                    candidates.append(self._discover_to_candidate(item, "similar"))
+                    candidates.append(await self._discover_to_candidate(item, "similar"))
 
         # Deduplicate by tmdb_id (keep first occurrence = best source)
         seen = set()
@@ -307,16 +312,16 @@ class RecommendationEngine:
         # Enrich top candidates with keywords via Seerr (up to 40)
         for c in candidates[:40]:
             try:
-                detail = await self.seerr.get_detail(c["tmdb_id"], c.get("media_type", "movie"))
-                c["keywords"] = detail.keywords
-                c["directors"] = detail.directors
-                c["cast"] = [x["name"] for x in detail.cast[:5]]
-                c["overview"] = detail.overview
-                c["runtime"] = detail.runtime
-                c["original_language"] = detail.original_language
-                if detail.trailers:
-                    c["trailer_key"] = detail.trailers[0].get("key")
-                    c["trailer_site"] = detail.trailers[0].get("site")
+                detail = await self._get_detail(c["tmdb_id"], c.get("media_type", "movie"))
+                c["keywords"] = detail["keywords"]
+                c["directors"] = detail["directors"]
+                c["cast"] = [x["name"] if isinstance(x, dict) else x for x in detail.get("cast", [])[:5]]
+                c["overview"] = detail["overview"]
+                c["runtime"] = detail.get("runtime")
+                c["original_language"] = detail.get("original_language")
+                if detail.get("trailers"):
+                    c["trailer_key"] = detail["trailers"][0].get("key")
+                    c["trailer_site"] = detail["trailers"][0].get("site")
             except Exception as e:
                 logger.debug(f"Enrich failed for {c.get('tmdb_id')}: {e}")
 
@@ -421,27 +426,27 @@ class RecommendationEngine:
         for c in candidates[:req.limit]:
             try:
                 media_type = "movie" if c["media_type"] == "movie" else "tv"
-                detail = await self.seerr.get_detail(c["tmdb_id"], media_type)
+                detail = await self._get_detail(c["tmdb_id"], media_type)
                 rec = Recommendation(
                     tmdb_id=c["tmdb_id"],
                     media_type=media_type,
-                    title=detail.title,
-                    year=detail.year,
-                    poster_path=detail.poster_path,
-                    backdrop_path=detail.backdrop_path,
-                    genres=detail.genres,
-                    keywords=detail.keywords[:10],
-                    overview=detail.overview,
-                    vote_average=detail.vote_average,
-                    runtime=detail.runtime,
-                    original_language=detail.original_language,
+                    title=detail["title"],
+                    year=detail.get("year"),
+                    poster_path=detail.get("poster_path"),
+                    backdrop_path=detail.get("backdrop_path"),
+                    genres=detail.get("genres", []),
+                    keywords=detail.get("keywords", [])[:10],
+                    overview=detail.get("overview", ""),
+                    vote_average=detail.get("vote_average", 0),
+                    runtime=detail.get("runtime"),
+                    original_language=detail.get("original_language"),
                     score=c["staleness_score"] * (c["best_completion"] / 100),
                     score_breakdown={"staleness": c["staleness_score"], "completion": c["best_completion"]},
                     mode="rediscover",
                     in_library=True,
-                    directors=detail.directors,
-                    cast=[x["name"] for x in detail.cast[:5]],
-                    trailer_key=detail.trailers[0]["key"] if detail.trailers else None,
+                    directors=detail.get("directors", []),
+                    cast=[x["name"] if isinstance(x, dict) else x for x in detail.get("cast", [])[:5]],
+                    trailer_key=detail.get("trailers", [{}])[0].get("key") if detail.get("trailers") else None,
                 )
                 # Explanation
                 signals = []
@@ -827,14 +832,89 @@ class RecommendationEngine:
 
     # ── Helpers ──────────────────────────────────────────────────
 
-    def _discover_to_candidate(self, item: SeerrDiscoverResult, source: str) -> dict:
+    async def _resolve_genre_ids(self, genre_ids: list[int], media_type: str) -> list[str]:
+        """Resolve TMDB genre IDs to names using TMDB API (with caching)."""
+        if self.tmdb:
+            if media_type not in self._genre_cache:
+                try:
+                    if media_type == "movie":
+                        genres = await self.tmdb.get_movie_genres()
+                    else:
+                        genres = await self.tmdb.get_tv_genres()
+                    self._genre_cache[media_type] = {g["id"]: g["name"] for g in genres}
+                except Exception:
+                    self._genre_cache[media_type] = {}
+            return [self._genre_cache[media_type].get(gid, f"Genre:{gid}") for gid in genre_ids
+                    if gid in self._genre_cache.get(media_type, {})]
+        # Fallback to Seerr
+        return self.seerr.resolve_genre_ids(genre_ids, media_type)
+
+    async def _get_detail(self, tmdb_id: int, media_type: str) -> dict:
+        """Get detail from TMDB (preferred) or Seerr, returning a normalized dict."""
+        if self.tmdb:
+            d = await self.tmdb.get_detail(tmdb_id, media_type)
+            return {
+                "title": d.get("title", ""),
+                "year": d.get("year"),
+                "poster_path": d.get("poster_path"),
+                "backdrop_path": d.get("backdrop_path"),
+                "genres": d.get("genres", []),
+                "keywords": d.get("keywords", []),
+                "overview": d.get("overview", ""),
+                "vote_average": d.get("vote_average", 0),
+                "runtime": d.get("runtime"),
+                "original_language": d.get("original_language"),
+                "directors": [c["name"] for c in d.get("crew", []) if c.get("job") == "Director"],
+                "cast": d.get("cast", []),
+                "trailers": [],  # TMDB detail doesn't include videos by default
+            }
+        # Fallback to Seerr
+        detail = await self.seerr.get_detail(tmdb_id, media_type)
+        return {
+            "title": detail.title,
+            "year": detail.year,
+            "poster_path": detail.poster_path,
+            "backdrop_path": detail.backdrop_path,
+            "genres": detail.genres,
+            "keywords": detail.keywords,
+            "overview": detail.overview,
+            "vote_average": detail.vote_average,
+            "runtime": detail.runtime,
+            "original_language": detail.original_language,
+            "directors": detail.directors,
+            "cast": detail.cast,
+            "trailers": detail.trailers if hasattr(detail, "trailers") else [],
+        }
+
+    async def _get_trending(self, page: int = 1):
+        """Get trending from TMDB (preferred) or Seerr."""
+        if self.tmdb:
+            results, _ = await self.tmdb.get_trending("all", "week", page)
+            return results
+        return await self.seerr.get_trending(page)
+
+    async def _discover_by_genre(self, genre_id: int, media_type: str = "movie", page: int = 1):
+        """Discover by genre from TMDB (preferred) or Seerr."""
+        if self.tmdb:
+            return await self.tmdb.discover_by_genre(genre_id, media_type, page)
+        if media_type == "movie":
+            return await self.seerr.discover_movies(page=page, genre=genre_id)
+        return await self.seerr.discover_tv(page=page, genre=genre_id)
+
+    async def _get_similar(self, tmdb_id: int, media_type: str = "movie", page: int = 1):
+        """Get similar titles from TMDB (preferred) or Seerr."""
+        if self.tmdb:
+            return await self.tmdb.get_similar(tmdb_id, media_type, page)
+        return await self.seerr.get_similar(tmdb_id, media_type, page)
+
+    async def _discover_to_candidate(self, item, source: str) -> dict:
         """Convert Seerr discover result to candidate dict."""
         return {
             "tmdb_id": item.tmdb_id,
             "media_type": item.media_type,
             "title": item.title,
             "year": item.year,
-            "genres": self.seerr.resolve_genre_ids(item.genre_ids, item.media_type),
+            "genres": await self._resolve_genre_ids(item.genre_ids, item.media_type) if hasattr(item, 'genre_ids') else item.genres if hasattr(item, 'genres') else [],
             "overview": item.overview,
             "vote_average": item.vote_average,
             "poster_path": item.poster_path,
@@ -901,15 +981,24 @@ class RecommendationEngine:
         return (top_tier + rest)[:limit]
 
     async def _get_profile(self, username: str, domain: str) -> TasteProfile:
-        """Get or build taste profile (with in-memory caching)."""
+        """Get or build taste profile (with shared + in-memory caching)."""
         cache_key = f"{username}:{domain}"
         if cache_key not in self._profile_cache:
-            self._profile_cache[cache_key] = await self.profiler.build_profile(
-                username=username,
-                domain=domain,
-                enrich_keywords=True,
-                max_enrich=100,
-            )
+            # Check shared cache first
+            from app.services.cache import get_cache
+            shared = get_cache()
+            cached = shared.get_profile(username, domain)
+            if cached is not None:
+                self._profile_cache[cache_key] = cached
+            else:
+                profile = await self.profiler.build_profile(
+                    username=username,
+                    domain=domain,
+                    enrich_keywords=True,
+                    max_enrich=100,
+                )
+                self._profile_cache[cache_key] = profile
+                shared.set_profile(username, domain, profile)
         return self._profile_cache[cache_key]
 
     def clear_cache(self):

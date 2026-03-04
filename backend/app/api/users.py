@@ -49,18 +49,24 @@ async def get_user_profile(
     and keyword enrichment depth. Subsequent calls in the same session
     are cached in memory.
     """
+    from app.services.cache import get_cache
     stack = get_stack()
+    cache = get_cache()
 
-    try:
-        profile = await stack.profiler.build_profile(
-            username=username,
-            domain=domain,
-            depth_months=depth_months,
-            enrich_keywords=True,
-            max_enrich=100,
-        )
-    except Exception as e:
-        raise HTTPException(500, f"Profile build error: {e}")
+    # Use cached profile if available
+    profile = cache.get_profile(username, domain)
+    if profile is None:
+        try:
+            profile = await stack.profiler.build_profile(
+                username=username,
+                domain=domain,
+                depth_months=depth_months,
+                enrich_keywords=True,
+                max_enrich=100,
+            )
+            cache.set_profile(username, domain, profile)
+        except Exception as e:
+            raise HTTPException(500, f"Profile build error: {e}")
 
     return {
         "username": profile.username,
