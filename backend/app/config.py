@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     plex_url: str = ""
     plex_token: str = ""
     plex_machine_id: str = ""
+    plex_external_url: str = ""  # e.g. https://plex.example.com or auto (uses app.plex.tv)
 
     # Tautulli
     tautulli_url: str = ""
@@ -43,7 +44,7 @@ class Settings(BaseSettings):
     # App
     debug: bool = False
     log_level: str = "info"
-    recommendarr_port: int = 30800
+    recommendarr_port: int = 5055
 
     class Config:
         env_file = [".env", "../.env"]

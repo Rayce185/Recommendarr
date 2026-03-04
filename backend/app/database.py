@@ -1,7 +1,15 @@
-"""Async database engine and session management."""
+"""SQLite database engine — auto-creates on first use, no external deps."""
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+import os
+import logging
+from pathlib import Path
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+logger = logging.getLogger(__name__)
+
+DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
+DB_PATH = DATA_DIR / "recommendarr.db"
 
 
 class Base(DeclarativeBase):
@@ -9,41 +17,48 @@ class Base(DeclarativeBase):
     pass
 
 
-# Lazy engine — initialized on first use so .env has time to load
+# Synchronous engine for SQLite (no async driver needed — SQLite is single-file)
 _engine = None
-_async_session = None
+_session_factory = None
+
+
+def _sqlite_wal_mode(dbapi_conn, connection_record):
+    """Enable WAL mode for better concurrent read performance."""
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.close()
 
 
 def get_engine():
     global _engine
     if _engine is None:
-        from app.config import settings
-        _engine = create_async_engine(
-            settings.database_url,
-            echo=False,
-            pool_size=10,
-            max_overflow=20,
-            pool_pre_ping=True,
-        )
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        url = f"sqlite:///{DB_PATH}"
+        _engine = create_engine(url, echo=False, pool_pre_ping=True)
+        event.listen(_engine, "connect", _sqlite_wal_mode)
+        logger.info(f"Database engine created: {DB_PATH}")
     return _engine
 
 
 def get_session_factory():
-    global _async_session
-    if _async_session is None:
-        _async_session = async_sessionmaker(get_engine(), class_=AsyncSession, expire_on_commit=False)
-    return _async_session
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = sessionmaker(get_engine(), class_=Session, expire_on_commit=False)
+    return _session_factory
 
 
-async def get_db() -> AsyncSession:
-    """FastAPI dependency — yields an async DB session."""
+def get_db() -> Session:
+    """Get a database session (context manager style)."""
     factory = get_session_factory()
-    async with factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+    return factory()
+
+
+def init_db():
+    """Create all tables if they don't exist. Safe to call on every startup."""
+    engine = get_engine()
+    # Import models so Base.metadata knows about them
+    import app.models.tables  # noqa: F401
+    Base.metadata.create_all(engine)
+    logger.info("Database tables initialized")

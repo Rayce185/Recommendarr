@@ -13,6 +13,31 @@ from app.services.media_router import MediaRouter, DEFAULT_ROUTING_RULES
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["library"])
 
+def _log_request(username: str, tmdb_id: int, media_type: str, title: str,
+                 instance: str, root_folder: str, tags: list, status: str):
+    """Log request to SQLite + fire ChromaDB sync."""
+    import json as _json
+    try:
+        from app.database import get_db
+        from app.models.tables import RequestLog
+        with get_db() as db:
+            db.add(RequestLog(
+                username=username, tmdb_id=tmdb_id, media_type=media_type,
+                title=title, instance=instance, root_folder=root_folder,
+                tags=_json.dumps(tags) if tags else None, status=status,
+            ))
+            db.commit()
+    except Exception as e:
+        logger.debug(f"Request log failed: {e}")
+
+    from app.services.chroma_sync import get_chroma_sync, fire_and_forget
+    sync = get_chroma_sync()
+    if sync:
+        fire_and_forget(sync.sync_request(username, tmdb_id, media_type, title,
+                                          instance, root_folder, status))
+
+
+
 
 class AddMediaRequest(BaseModel):
     tmdb_id: int
@@ -81,6 +106,7 @@ async def add_to_library(req: AddMediaRequest, user: TokenPayload = Depends(get_
                     root_folder=root_folder, already_exists=True)
             result = await radarr.add_movie(tmdb_id=req.tmdb_id, quality_profile_id=qp_id,
                 root_folder=root_folder, tags=tags, search_now=req.search_now)
+            _log_request(user.username, req.tmdb_id, req.media_type, title, instance_name, root_folder, tags, "added")
             return AddMediaResponse(success=True, message=f"Added '{title}' to {instance_name}",
                 tmdb_id=req.tmdb_id, title=result.get("title", title),
                 instance=instance_name, root_folder=root_folder)
@@ -100,6 +126,7 @@ async def add_to_library(req: AddMediaRequest, user: TokenPayload = Depends(get_
                 tmdb_id=req.tmdb_id if not tvdb_id else None,
                 quality_profile_id=qp_id, root_folder=root_folder, tags=tags,
                 search_now=req.search_now, series_type=series_type)
+            _log_request(user.username, req.tmdb_id, req.media_type, title, instance_name, root_folder, tags, "added")
             return AddMediaResponse(success=True, message=f"Added '{title}' to {instance_name}",
                 tmdb_id=req.tmdb_id, title=result.get("title", title),
                 instance=instance_name, root_folder=root_folder)

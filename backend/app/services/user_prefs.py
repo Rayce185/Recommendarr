@@ -1,170 +1,148 @@
-"""Per-user preferences with global defaults cascade.
+"""User preferences — SQLite-backed with hierarchical resolution.
 
-Resolution order (highest wins):
-1. User-specific value in /app/data/user_prefs/{username}.json
-2. Global defaults in /app/data/user_prefs/_global.json
-3. Code defaults (PREF_DEFAULTS below)
-
-Admin can set global defaults that apply to all users who haven't
-overridden that specific setting. Per-user changes only affect that user.
+Resolution order: user-specific > global > hardcoded defaults.
+ChromaDB sync fires on every preference change.
 """
 
 import json
 import logging
-from pathlib import Path
 from typing import Any, Optional
+from sqlalchemy import select, and_
+
+from app.database import get_db
+from app.models.tables import UserPreference
 
 logger = logging.getLogger(__name__)
 
-PREFS_DIR = Path("/app/data/user_prefs")
-GLOBAL_FILE = PREFS_DIR / "_global.json"
-
-# Code-level defaults for all preference keys
-PREF_DEFAULTS = {
-    # Watchlist
-    "watchlist_sort": "addedAt:desc",         # addedAt:desc|asc, titleSort:asc|desc, year:desc|asc, rating:desc|asc
-    "watchlist_filter": "all",                # all | movie | tv
-
-    # Playback
-    "default_device_id": "",                  # Plex clientIdentifier for "Watch Now"
-    "default_device_name": "",                # Display name (cached for UI)
-
-    # AI
-    "ai_temperature": 0.7,
-    "ai_explanations_enabled": True,
-    "ai_mood_enabled": True,
-
-    # Display
-    "hide_watched": False,
-    "cards_per_row": 0,                       # 0 = auto
-    "language": "en",                         # en | de
-}
-
-# Keys that are valid for global defaults (admin-controlled)
-GLOBAL_KEYS = {
-    "ai_temperature", "ai_explanations_enabled", "ai_mood_enabled",
-    "hide_watched", "cards_per_row", "language",
-    "watchlist_sort", "watchlist_filter",
+DEFAULTS = {
+    "default_mode": "grab",
+    "default_limit": 20,
+    "genre_filter": None,
+    "media_type_filter": None,
+    "default_device_id": None,
+    "ui_theme": "dark",
+    "show_explanations": True,
+    "show_trailers": True,
+    "language": "en",
 }
 
 
-class UserPrefsStore:
-    """Manages per-user preferences with global defaults."""
+class UserPrefsService:
+    """Hierarchical preferences: user → global → defaults."""
 
-    def __init__(self):
-        PREFS_DIR.mkdir(parents=True, exist_ok=True)
-        import os
-        os.chmod(str(PREFS_DIR), 0o777)
-        self._cache: dict[str, dict] = {}
+    def get(self, username: str, key: str, default=None) -> Any:
+        """Get a preference with hierarchical fallback."""
+        try:
+            with get_db() as db:
+                # User-specific first
+                row = db.execute(
+                    select(UserPreference).where(
+                        and_(UserPreference.username == username, UserPreference.key == key)
+                    )
+                ).scalar_one_or_none()
+                if row:
+                    return json.loads(row.value)
 
-    def _user_file(self, username: str) -> Path:
-        # Sanitize username for filesystem
-        safe = "".join(c for c in username if c.isalnum() or c in "-_.")
-        return PREFS_DIR / f"{safe}.json"
+                # Global fallback
+                row = db.execute(
+                    select(UserPreference).where(
+                        and_(UserPreference.username == "_global", UserPreference.key == key)
+                    )
+                ).scalar_one_or_none()
+                if row:
+                    return json.loads(row.value)
+        except Exception as e:
+            logger.debug(f"UserPrefs get failed: {e}")
 
-    def _load_file(self, path: Path) -> dict:
-        if path.exists():
-            try:
-                with open(path, "r") as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, OSError) as e:
-                logger.warning(f"Failed to load {path}: {e}")
-        return {}
-
-    def _save_file(self, path: Path, data: dict):
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
-
-    def _load_global(self) -> dict:
-        return self._load_file(GLOBAL_FILE)
-
-    def _load_user(self, username: str) -> dict:
-        return self._load_file(self._user_file(username))
-
-    # ── Public API ─────────────────────────────────────────────────
-
-    def get(self, username: str, key: str) -> Any:
-        """Get a single preference value (user → global → default)."""
-        user_data = self._load_user(username)
-        if key in user_data:
-            return user_data[key]
-        global_data = self._load_global()
-        if key in global_data:
-            return global_data[key]
-        return PREF_DEFAULTS.get(key)
+        # Hardcoded defaults
+        return DEFAULTS.get(key, default)
 
     def get_all(self, username: str) -> dict:
-        """Get all resolved preferences for a user.
+        """Get all preferences for a user (merged with globals and defaults)."""
+        result = dict(DEFAULTS)
+        try:
+            with get_db() as db:
+                # Layer global
+                globals_ = db.execute(
+                    select(UserPreference).where(UserPreference.username == "_global")
+                ).scalars().all()
+                for row in globals_:
+                    result[row.key] = json.loads(row.value)
 
-        Returns dict with resolved values + metadata about source.
-        """
-        global_data = self._load_global()
-        user_data = self._load_user(username)
-
-        result = {}
-        for key, default in PREF_DEFAULTS.items():
-            if key in user_data:
-                result[key] = {"value": user_data[key], "source": "user"}
-            elif key in global_data:
-                result[key] = {"value": global_data[key], "source": "global"}
-            else:
-                result[key] = {"value": default, "source": "default"}
+                # Layer user-specific (overrides globals)
+                if username != "_global":
+                    user_rows = db.execute(
+                        select(UserPreference).where(UserPreference.username == username)
+                    ).scalars().all()
+                    for row in user_rows:
+                        result[row.key] = json.loads(row.value)
+        except Exception as e:
+            logger.debug(f"UserPrefs get_all failed: {e}")
         return result
 
-    def get_flat(self, username: str) -> dict:
-        """Get all resolved preference values (flat dict, no source info)."""
-        return {k: v["value"] for k, v in self.get_all(username).items()}
+    def set(self, username: str, key: str, value: Any):
+        """Set a preference for a user (or _global)."""
+        try:
+            with get_db() as db:
+                row = db.execute(
+                    select(UserPreference).where(
+                        and_(UserPreference.username == username, UserPreference.key == key)
+                    )
+                ).scalar_one_or_none()
+                if row:
+                    row.value = json.dumps(value)
+                else:
+                    db.add(UserPreference(username=username, key=key, value=json.dumps(value)))
+                db.commit()
 
-    def set_user(self, username: str, updates: dict) -> dict:
-        """Set per-user preferences. Returns updated user prefs."""
-        user_data = self._load_user(username)
-        for k, v in updates.items():
-            if k in PREF_DEFAULTS:
-                user_data[k] = v
-        self._save_file(self._user_file(username), user_data)
-        return user_data
+            # ChromaDB sync
+            from app.services.chroma_sync import get_chroma_sync, fire_and_forget
+            sync = get_chroma_sync()
+            if sync:
+                fire_and_forget(sync.sync_preference(username, key, value))
+        except Exception as e:
+            logger.error(f"UserPrefs set failed: {e}")
 
-    def reset_user_key(self, username: str, key: str) -> bool:
-        """Reset a single user pref to inherit from global/default."""
-        user_data = self._load_user(username)
-        if key in user_data:
-            del user_data[key]
-            self._save_file(self._user_file(username), user_data)
-            return True
-        return False
+    def set_many(self, username: str, prefs: dict):
+        """Set multiple preferences at once."""
+        try:
+            with get_db() as db:
+                for key, value in prefs.items():
+                    row = db.execute(
+                        select(UserPreference).where(
+                            and_(UserPreference.username == username, UserPreference.key == key)
+                        )
+                    ).scalar_one_or_none()
+                    if row:
+                        row.value = json.dumps(value)
+                    else:
+                        db.add(UserPreference(username=username, key=key, value=json.dumps(value)))
+                db.commit()
+        except Exception as e:
+            logger.error(f"UserPrefs set_many failed: {e}")
 
-    def set_global(self, updates: dict) -> dict:
-        """Set global default preferences (admin only). Returns updated globals."""
-        global_data = self._load_global()
-        for k, v in updates.items():
-            if k in GLOBAL_KEYS:
-                global_data[k] = v
-        self._save_file(GLOBAL_FILE, global_data)
-        return global_data
-
-    def get_global(self) -> dict:
-        """Get global defaults with metadata."""
-        global_data = self._load_global()
-        result = {}
-        for key in GLOBAL_KEYS:
-            default = PREF_DEFAULTS.get(key)
-            if key in global_data:
-                result[key] = {"value": global_data[key], "source": "global"}
-            else:
-                result[key] = {"value": default, "source": "default"}
-        return result
-
-    def get_user_overrides(self, username: str) -> dict:
-        """Get only the keys the user has explicitly overridden."""
-        return self._load_user(username)
+    def delete(self, username: str, key: str):
+        """Delete a specific preference."""
+        try:
+            with get_db() as db:
+                row = db.execute(
+                    select(UserPreference).where(
+                        and_(UserPreference.username == username, UserPreference.key == key)
+                    )
+                ).scalar_one_or_none()
+                if row:
+                    db.delete(row)
+                    db.commit()
+        except Exception as e:
+            logger.error(f"UserPrefs delete failed: {e}")
 
 
 # Singleton
-_store: Optional[UserPrefsStore] = None
+_prefs: Optional[UserPrefsService] = None
 
 
-def get_user_prefs() -> UserPrefsStore:
-    global _store
-    if _store is None:
-        _store = UserPrefsStore()
-    return _store
+def get_user_prefs() -> UserPrefsService:
+    global _prefs
+    if _prefs is None:
+        _prefs = UserPrefsService()
+    return _prefs

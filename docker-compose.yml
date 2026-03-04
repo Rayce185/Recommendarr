@@ -1,45 +1,29 @@
-# Recommendarr v2 — unRAID deployment
-# Backend API + Frontend UI
+# Recommendarr — unified deployment
+# Single container: FastAPI backend + React frontend
 version: "3.8"
 
 services:
   recommendarr:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: recommendarr
     restart: unless-stopped
     ports:
-      - "30800:30800"
+      - "${RECOMMENDARR_PORT:-5055}:5055"
     env_file:
       - .env
     environment:
-      - TZ=Europe/Zurich
+      - TZ=${TZ:-Europe/Zurich}
+      - DATA_DIR=/app/data
     volumes:
-      - /mnt/user/system/appdata/recommendarr:/app/data
+      - ${DATA_DIR:-./data}:/app/data
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:30800/api/v1/health')"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      test: ["CMD", "curl", "-f", "http://localhost:5055/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
       start_period: 15s
     labels:
       - "net.unraid.docker.managed=dockerman"
-      - "net.unraid.docker.webui=http://[IP]:[PORT:30800]/api/docs"
-
-  recommendarr-ui:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: recommendarr-ui
-    restart: unless-stopped
-    ports:
-      - "30801:80"
-    depends_on:
-      recommendarr:
-        condition: service_healthy
-    environment:
-      - TZ=Europe/Zurich
-    labels:
-      - "net.unraid.docker.managed=dockerman"
-      - "net.unraid.docker.webui=http://[IP]:[PORT:30801]/"
+      - "net.unraid.docker.webui=http://[IP]:[PORT:${RECOMMENDARR_PORT:-5055}]/"

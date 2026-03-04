@@ -58,6 +58,13 @@ async def submit_feedback(
     # Invalidate cached recs so feedback takes effect on next load
     get_cache().invalidate_user(username)
 
+    # ChromaDB sync (non-blocking)
+    from app.services.chroma_sync import get_chroma_sync, fire_and_forget
+    sync = get_chroma_sync()
+    if sync:
+        fire_and_forget(sync.sync_feedback(
+            username, body.tmdb_id, body.media_type, body.title, body.action))
+
     return {"status": "ok", "action": body.action, "tmdb_id": body.tmdb_id}
 
 

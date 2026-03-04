@@ -1,4 +1,4 @@
-"""Re-export all SQLAlchemy models for Alembic and import convenience."""
+"""Re-export all SQLAlchemy models for import convenience."""
 
 from app.models.tables import (  # noqa: F401
     User, UserLibraryAccess, WatchHistory, TmdbCache,
@@ -17,4 +17,6 @@ from app.models.tables import (  # noqa: F401
     Notification, NotificationChannel,
     OnboardingQuiz, ReleaseNotification,
     Plugin,
+    # Active tables (currently wired up)
+    AppSetting, UserPreference, RoutingRule, RequestLog, AiSetting,
 )

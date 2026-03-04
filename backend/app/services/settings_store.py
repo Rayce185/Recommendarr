@@ -1,107 +1,134 @@
-"""Persistent settings store — JSON file overlay on top of env vars.
+"""Settings store — SQLite-backed with ChromaDB sync.
 
-Settings hierarchy (highest wins):
-1. Runtime overrides from /app/data/settings.json
-2. Environment variables / .env file
-3. Pydantic defaults in config.py
-
-The store only persists fields that were explicitly saved by the admin.
-Unsaved fields continue to read from env vars as before.
+Replaces the JSON file store. Provides the same interface so callers
+don't need to change.
 """
 
 import json
-import os
-from pathlib import Path
+import logging
 from typing import Any, Optional
+from pathlib import Path
+from sqlalchemy import select
 
-SETTINGS_FILE = Path("/app/data/settings.json")
+from app.database import get_db, DATA_DIR
+from app.models.tables import AppSetting
 
-# Fields that can be edited via the UI
+logger = logging.getLogger(__name__)
+
 EDITABLE_FIELDS = {
-    # Service URLs
-    "plex_url", "tautulli_url", "radarr_url", "sonarr_url",
-    "sonarr_anime_url", "seerr_url",
-    # Service API keys
-    "plex_token", "tautulli_api_key", "radarr_api_key", "sonarr_api_key",
-    "sonarr_anime_api_key", "seerr_api_key", "tmdb_api_key",
-    # Plex
-    "plex_machine_id",
-    # LLM
+    "plex_url", "plex_token", "plex_machine_id",
+    "tautulli_url", "tautulli_api_key",
+    "tmdb_api_key",
+    "radarr_url", "radarr_api_key",
+    "sonarr_url", "sonarr_api_key",
+    "sonarr_anime_url", "sonarr_anime_api_key",
+    "seerr_url", "seerr_api_key",
     "llm_base_url", "chromadb_url", "embedding_model",
-    # Auth
-    "jwt_expiry_hours",
-    # App
-    "debug", "log_level",
+    "jwt_expiry_hours", "debug", "log_level",
+    "recommendarr_port",
 }
 
-# Fields that must NEVER be exposed or editable via API
-PROTECTED_FIELDS = {"jwt_secret", "database_url"}
+# Backward compat: if DB isn't ready yet (config import-time), fall back to JSON
+SETTINGS_JSON = DATA_DIR / "settings.json"
 
 
 class SettingsStore:
-    """Read/write persistent settings overlay."""
+    """Key/value settings store backed by SQLite."""
 
-    def __init__(self):
-        self._overrides: dict[str, Any] = {}
-        self._load()
+    def get(self, key: str, default=None) -> Any:
+        """Get a setting by key."""
+        try:
+            with get_db() as db:
+                row = db.execute(
+                    select(AppSetting).where(AppSetting.key == key)
+                ).scalar_one_or_none()
+                if row:
+                    return json.loads(row.value)
+        except Exception:
+            # DB not ready — fall back to JSON
+            return self._json_get(key, default)
+        return default
 
-    def _load(self):
-        """Load overrides from JSON file."""
-        if SETTINGS_FILE.exists():
-            try:
-                with open(SETTINGS_FILE, "r") as f:
-                    data = json.load(f)
-                # Only load known editable fields
-                self._overrides = {
-                    k: v for k, v in data.items()
-                    if k in EDITABLE_FIELDS
-                }
-            except (json.JSONDecodeError, OSError) as e:
-                print(f"[settings_store] Failed to load {SETTINGS_FILE}: {e}")
-                self._overrides = {}
+    def set(self, key: str, value: Any):
+        """Set a setting. Creates or updates."""
+        try:
+            with get_db() as db:
+                row = db.execute(
+                    select(AppSetting).where(AppSetting.key == key)
+                ).scalar_one_or_none()
+                if row:
+                    row.value = json.dumps(value)
+                else:
+                    db.add(AppSetting(key=key, value=json.dumps(value)))
+                db.commit()
 
-    def _save(self):
-        """Persist current overrides to JSON."""
-        SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(SETTINGS_FILE, "w") as f:
-            json.dump(self._overrides, f, indent=2)
+            # Fire ChromaDB sync (non-blocking)
+            from app.services.chroma_sync import get_chroma_sync, fire_and_forget
+            sync = get_chroma_sync()
+            if sync:
+                fire_and_forget(sync.sync_setting(key, value))
+        except Exception as e:
+            logger.error(f"Settings store set failed: {e}")
+            # Fall back to JSON
+            self._json_set(key, value)
 
-    def get(self, field: str) -> Optional[Any]:
-        """Get override value for a field, or None if not overridden."""
-        return self._overrides.get(field)
+    def get_all(self) -> dict:
+        """Get all settings as a dict."""
+        try:
+            with get_db() as db:
+                rows = db.execute(select(AppSetting)).scalars().all()
+                return {r.key: json.loads(r.value) for r in rows}
+        except Exception:
+            return self._json_get_all()
 
-    def has_override(self, field: str) -> bool:
-        """Check if a field has a persistent override."""
-        return field in self._overrides
+    def get_all_overrides(self) -> dict:
+        """Get all settings as overrides dict (for config.py import-time use)."""
+        return self.get_all()
 
-    def update(self, updates: dict[str, Any]) -> dict[str, Any]:
-        """Update multiple fields. Returns the saved values.
+    def delete(self, key: str):
+        """Delete a setting."""
+        try:
+            with get_db() as db:
+                row = db.execute(
+                    select(AppSetting).where(AppSetting.key == key)
+                ).scalar_one_or_none()
+                if row:
+                    db.delete(row)
+                    db.commit()
+        except Exception as e:
+            logger.error(f"Settings store delete failed: {e}")
 
-        Only accepts EDITABLE_FIELDS. Silently ignores protected/unknown fields.
-        """
-        changed = {}
-        for k, v in updates.items():
-            if k in EDITABLE_FIELDS:
-                self._overrides[k] = v
-                changed[k] = v
-        if changed:
-            self._save()
-        return changed
+    def remove(self, key: str):
+        """Alias for delete (backward compat)."""
+        self.delete(key)
 
-    def remove(self, field: str) -> bool:
-        """Remove an override, reverting to env var value."""
-        if field in self._overrides:
-            del self._overrides[field]
-            self._save()
-            return True
-        return False
+    def update(self, data: dict):
+        """Set multiple keys at once."""
+        for key, value in data.items():
+            self.set(key, value)
 
-    def get_all_overrides(self) -> dict[str, Any]:
-        """Get all current overrides."""
-        return dict(self._overrides)
+    # ── JSON fallback (used before DB is initialized) ──
+
+    def _json_get(self, key: str, default=None) -> Any:
+        if SETTINGS_JSON.exists():
+            data = json.loads(SETTINGS_JSON.read_text())
+            return data.get(key, default)
+        return default
+
+    def _json_set(self, key: str, value: Any):
+        data = {}
+        if SETTINGS_JSON.exists():
+            data = json.loads(SETTINGS_JSON.read_text())
+        data[key] = value
+        SETTINGS_JSON.write_text(json.dumps(data, indent=2))
+
+    def _json_get_all(self) -> dict:
+        if SETTINGS_JSON.exists():
+            return json.loads(SETTINGS_JSON.read_text())
+        return {}
 
 
-# Singleton
+# Module-level singleton
 _store: Optional[SettingsStore] = None
 
 

@@ -1,7 +1,7 @@
-"""Recommendarr v2 — FastAPI application entry point.
+"""Recommendarr — FastAPI application entry point.
 
-API-first architecture: no local DB required for core recommendation flow.
-All data sourced live from Tautulli + Seerr + Radarr/Sonarr APIs.
+SQLite DB for persistence, TMDB for metadata, Radarr/Sonarr for library.
+Optional ChromaDB sync for RAG pipeline integration.
 """
 
 import logging
@@ -9,6 +9,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 
 from app.config import settings
 from app.api import health, users, recommendations, auth, refresh, feedback
@@ -32,9 +35,29 @@ logger = logging.getLogger("recommendarr")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: build service stack, probe integrations, load user map."""
-    logger.info("=== Recommendarr v2 starting ===")
-    logger.info(f"Architecture: API-first (no embeddings, no local DB for recs)")
+    """Startup: init DB, migrate data, build service stack, probe integrations."""
+    logger.info("=== Recommendarr starting ===")
+
+    # Initialize SQLite database + run migrations
+    from app.database import init_db
+    init_db()
+
+    from app.services.db_migrate import migrate_json_to_sqlite
+    migrate_json_to_sqlite()
+
+    # Initialize ChromaDB sync (optional — only if configured)
+    from app.services.chroma_sync import init_chroma_sync
+    from app.services.settings_store import get_settings_store
+    store = get_settings_store()
+    chromadb_url = store.get("chromadb_url") or settings.chromadb_url
+    embed_url = store.get("llm_base_url") or settings.llm_base_url
+    embed_model = store.get("embedding_model") or settings.embedding_model
+    if chromadb_url and embed_url:
+        sync = init_chroma_sync(chromadb_url, embed_url, embed_model)
+        if sync:
+            logger.info(f"ChromaDB sync enabled → {chromadb_url}")
+    else:
+        logger.info("ChromaDB sync disabled (no chromadb_url configured)")
 
     # Build all clients and services
     stack = build_stack()
@@ -83,22 +106,27 @@ async def lifespan(app: FastAPI):
     if not probes.get("tautulli"):
         logger.error("CRITICAL: Tautulli not reachable — watch history unavailable")
     if not probes.get("seerr"):
-        logger.error("CRITICAL: Seerr not reachable — metadata enrichment unavailable")
+        logger.warning("Seerr not reachable — using TMDB direct for metadata")
 
     # Load user ID ↔ username mapping
     await init_user_map(stack)
 
-    logger.info("=== Recommendarr v2 ready ===")
+    logger.info("=== Recommendarr ready ===")
     yield
-    logger.info("=== Recommendarr v2 shutting down ===")
+    # Cleanup ChromaDB sync
+    from app.services.chroma_sync import get_chroma_sync
+    sync = get_chroma_sync()
+    if sync:
+        await sync.close()
+    logger.info("=== Recommendarr shutting down ===")
 
 
 # ── App ──────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="Recommendarr",
-    version="0.2.0",
-    description="Personal media recommendation engine — API-first, zero GPU",
+    version="0.5.0",
+    description="Personal media recommendation engine — SQLite + TMDB + ChromaDB RAG",
     lifespan=lifespan,
     docs_url="/api/docs" if settings.debug else None,
     redoc_url="/api/redoc" if settings.debug else None,
@@ -134,11 +162,22 @@ app.include_router(watchlist.router,             prefix="/api/v1", tags=["watchl
 app.include_router(library.router,               prefix="/api/v1", tags=["library"])
 
 
-@app.get("/")
-async def root():
-    return {
-        "name": "Recommendarr",
-        "version": "0.2.0",
-        "docs": "/api/docs",
-        "health": "/api/v1/health",
-    }
+# ── Static files (frontend) ───────────────────────────────────────
+STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+if os.path.isdir(STATIC_DIR):
+    _assets_dir = os.path.join(STATIC_DIR, "assets")
+    if os.path.isdir(_assets_dir):
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        """Serve React SPA — all non-API routes return index.html."""
+        if full_path:
+            file_path = os.path.join(STATIC_DIR, full_path)
+            if os.path.isfile(file_path):
+                return FileResponse(file_path)
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+else:
+    @app.get("/")
+    async def root():
+        return {"name": "Recommendarr", "version": "0.5.0", "docs": "/api/docs"}
