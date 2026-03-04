@@ -4198,7 +4198,7 @@ export default function Recommendarr() {
             </div>
           )}
           <div className="sidebar-footer">
-            Recommendarr v0.3.0
+            Recommendarr v{health?.version || "0.5.0"}
           </div>
         </nav>
 
