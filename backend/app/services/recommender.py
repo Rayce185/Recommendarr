@@ -98,6 +98,7 @@ class RecommendationRequest:
     include_genres: set[str] = field(default_factory=set)
     exclude_libraries: set[str] = field(default_factory=set)
     group_users: list[str] = field(default_factory=list)  # For group mode
+    skip_explanations: bool = False  # Skip AI explanation generation (for refresh/pre-warm)
 
 
 class RecommendationEngine:
@@ -162,7 +163,7 @@ class RecommendationEngine:
             return []
 
         # Generate AI explanations (if enabled + we have results)
-        if results:
+        if results and not request.skip_explanations:
             try:
                 profile = await self._get_profile(request.username, request.domain)
                 profile_summary = build_profile_summary(profile)
@@ -822,8 +823,63 @@ class RecommendationEngine:
                     "popularity": 0,
                 })
 
+        self._fix_poster_urls(candidates)
         cache.set_library(domain, candidates)
         return candidates
+
+    def _fix_poster_urls(self, candidates: list[dict]) -> None:
+        """Replace TVDB poster URLs with TMDB paths from cache.
+        
+        Sonarr returns TVDB poster URLs which get hotlink-blocked in browsers.
+        This does a bulk lookup against tmdb_cache and swaps them for TMDB paths.
+        Items not in cache are queued for background TMDB enrichment.
+        """
+        # Find candidates with TVDB (or other non-TMDB) poster URLs
+        needs_fix = []
+        for c in candidates:
+            pp = c.get("poster_path") or ""
+            if pp.startswith("http") and "image.tmdb.org" not in pp:
+                needs_fix.append(c)
+        
+        if not needs_fix:
+            return
+        
+        # Bulk lookup tmdb_cache for TMDB poster paths
+        try:
+            from app.database import get_db
+            from app.models.tables import TmdbCache
+            from sqlalchemy import select, and_
+            
+            tmdb_ids = [c["tmdb_id"] for c in needs_fix]
+            poster_map = {}  # tmdb_id -> tmdb_poster_path
+            
+            with get_db() as db:
+                rows = db.execute(
+                    select(TmdbCache.tmdb_id, TmdbCache.poster_path).where(
+                        TmdbCache.tmdb_id.in_(tmdb_ids),
+                        TmdbCache.poster_path.isnot(None),
+                        TmdbCache.poster_path != "",
+                    )
+                ).all()
+                for row in rows:
+                    # Only use paths that look like TMDB paths (start with /)
+                    if row.poster_path and row.poster_path.startswith("/"):
+                        poster_map[row.tmdb_id] = row.poster_path
+            
+            fixed = 0
+            still_broken = 0
+            for c in needs_fix:
+                tmdb_poster = poster_map.get(c["tmdb_id"])
+                if tmdb_poster:
+                    c["poster_path"] = tmdb_poster
+                    fixed += 1
+                else:
+                    still_broken += 1
+            
+            if fixed or still_broken:
+                logger.info(f"Poster fix: {fixed} swapped TVDB→TMDB, {still_broken} still need enrichment")
+        except Exception as e:
+            logger.warning(f"Poster URL fix failed: {e}")
 
     async def _get_library_tmdb_ids(self, domain: str = "all") -> set[int]:
         """Get set of all TMDB IDs in the library (for dedup in grab mode)."""

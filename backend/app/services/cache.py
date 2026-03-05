@@ -102,6 +102,24 @@ class RecommendationCache:
         key = f"{username}:{domain}"
         self._profiles[key] = CacheEntry(value=profile, created_at=time.time(), ttl_seconds=self.PROFILE_TTL)
 
+    # ── Collections ───────────────────────────────────────────────
+
+    COLLECTIONS_TTL = 3600  # 1 hour for collection scan results
+
+    def get_collections(self, username: str) -> Optional[list]:
+        key = f"coll:{username}"
+        entry = self._recs.get(key)  # reuse _recs store
+        if entry and entry.is_fresh:
+            self._stats["hits"] += 1
+            return entry.value
+        self._stats["misses"] += 1
+        return None
+
+    def set_collections(self, username: str, data: list):
+        key = f"coll:{username}"
+        self._recs[key] = CacheEntry(value=data, created_at=time.time(), ttl_seconds=self.COLLECTIONS_TTL)
+        logger.debug(f"Cache SET collections:{username} ({len(data)} collections)")
+
     # ── Maintenance ──────────────────────────────────────────────
 
     def invalidate_user(self, username: str):

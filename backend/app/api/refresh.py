@@ -56,7 +56,7 @@ class RefreshStep:
 # ── Background refresh task ──────────────────────────────────────
 
 async def _run_refresh(job_id: str, username: str):
-    """Execute cache refresh steps and push progress to SSE queue."""
+    """Execute cache refresh: profile first, then modes in parallel, cache results."""
     global _active_job
     job = _jobs[job_id]
     queue: asyncio.Queue = job["queue"]
@@ -64,69 +64,99 @@ async def _run_refresh(job_id: str, username: str):
     cache = get_cache()
     stack = get_stack()
 
+    # Import here to avoid circular
+    from app.services.recommender import RecommendationRequest
+    from app.api.recommendations import _rec_to_dict, _img_url
+    from app.services.feedback import get_feedback_store
+
     steps = [
         ("Clearing stale caches", "clear"),
-        ("Loading movie library (Radarr)", "radarr"),
-        ("Loading TV library (Sonarr)", "sonarr_tv"),
-        ("Loading anime library (Sonarr Anime)", "sonarr_anime"),
+        ("Loading libraries", "libraries"),
         ("Building taste profile", "profile"),
-        ("Generating Watch Tonight", "tonight"),
-        ("Generating Worth Grabbing", "grab"),
-        ("Generating Rediscover", "rediscover"),
+        ("Generating recommendations", "recs_parallel"),
         ("Fetching Trending", "trending"),
     ]
     total = len(steps)
 
+    async def _send(step_num, label):
+        elapsed = int((time.time() - start) * 1000)
+        await queue.put(RefreshStep(step_num, total, label, elapsed))
+
+    def _cache_recs(mode, recs):
+        """Format + cache recommendation results (same format as API endpoint)."""
+        fb_store = get_feedback_store()
+        response = {
+            "recommendations": [_rec_to_dict(r, plex=stack.plex) for r in recs],
+            "meta": {"username": username, "mode": mode, "domain": "all",
+                     "count": len(recs), "cached": False},
+        }
+        for rec in response["recommendations"]:
+            rec["user_feedback"] = fb_store.get_action(username, rec["tmdb_id"])
+        cache.set_recs(username, mode, "all", response)
+        return len(recs)
+
     try:
-        for i, (label, step_key) in enumerate(steps):
-            step_start = time.time()
-            elapsed = int((time.time() - start) * 1000)
-            await queue.put(RefreshStep(i + 1, total, label, elapsed))
+        # Step 1: Clear caches
+        step_start = time.time()
+        await _send(1, "Clearing stale caches")
+        cache.invalidate_all()
+        cache.set_step_duration("clear", int((time.time() - step_start) * 1000))
 
+        # Step 2: Pre-warm library candidates (one fetch, cached for all modes)
+        step_start = time.time()
+        await _send(2, "Loading libraries")
+        await stack.engine._get_library_candidates("all")
+        cache.set_step_duration("libraries", int((time.time() - step_start) * 1000))
+        logger.info(f"Refresh: libraries loaded in {time.time() - step_start:.1f}s")
+
+        # Step 3: Build taste profile (needed by scoring)
+        step_start = time.time()
+        await _send(3, "Building taste profile")
+        profile = await stack.profiler.build_profile(
+            username=username, domain="all", enrich_keywords=True, max_enrich=100)
+        cache.set_profile(username, "all", profile)
+        cache.set_step_duration("profile", int((time.time() - step_start) * 1000))
+
+        # Step 4: Run tonight + grab + rediscover IN PARALLEL, skip AI explanations
+        step_start = time.time()
+        await _send(4, "Generating recommendations (parallel)")
+
+        async def _run_mode(mode):
+            t0 = time.time()
             try:
-                if step_key == "clear":
-                    cache.invalidate_all()
-
-                elif step_key == "radarr":
-                    movies = await stack.radarr.get_all_movies()
-                    logger.info(f"Refresh: loaded {len(movies)} movies from Radarr")
-
-                elif step_key == "sonarr_tv":
-                    series = await stack.sonarr_tv.get_all_series()
-                    logger.info(f"Refresh: loaded {len(series)} TV series from Sonarr")
-
-                elif step_key == "sonarr_anime":
-                    anime = await stack.sonarr_anime.get_all_series()
-                    logger.info(f"Refresh: loaded {len(anime)} anime from Sonarr Anime")
-
-                elif step_key == "profile":
-                    profile = await stack.profiler.build_profile(username=username, domain="all", enrich_keywords=True, max_enrich=100)
-                    cache.set_profile(username, "all", profile)
-
-                elif step_key == "tonight":
-                    from app.services.recommender import RecommendationRequest
-                    req = RecommendationRequest(username=username, mode="tonight", domain="all", limit=20)
-                    await stack.engine.recommend(req)
-
-                elif step_key == "grab":
-                    from app.services.recommender import RecommendationRequest
-                    req = RecommendationRequest(username=username, mode="grab", domain="all", limit=20)
-                    await stack.engine.recommend(req)
-
-                elif step_key == "rediscover":
-                    from app.services.recommender import RecommendationRequest
-                    req = RecommendationRequest(username=username, mode="rediscover", domain="all", limit=20)
-                    await stack.engine.recommend(req)
-
-                elif step_key == "trending":
-                    await stack.seerr.get_trending(page=1)
-
+                req = RecommendationRequest(
+                    username=username, mode=mode, domain="all",
+                    limit=30, skip_explanations=True)
+                recs = await stack.engine.recommend(req)
+                count = _cache_recs(mode, recs)
+                ms = int((time.time() - t0) * 1000)
+                cache.set_step_duration(mode, ms)
+                logger.info(f"Refresh: {mode} done — {count} recs in {ms}ms")
+                return mode, count, ms
             except Exception as e:
-                logger.warning(f"Refresh step '{step_key}' failed: {e}")
-                # Continue to next step — partial refresh is better than none
+                logger.warning(f"Refresh: {mode} failed: {e}")
+                cache.set_step_duration(mode, int((time.time() - t0) * 1000))
+                return mode, 0, int((time.time() - t0) * 1000)
 
-            step_ms = int((time.time() - step_start) * 1000)
-            cache.set_step_duration(step_key, step_ms)
+        results = await asyncio.gather(
+            _run_mode("tonight"),
+            _run_mode("grab"),
+            _run_mode("rediscover"),
+            return_exceptions=True,
+        )
+        cache.set_step_duration("recs_parallel", int((time.time() - step_start) * 1000))
+
+        # Step 5: Trending (fast — direct TMDB query)
+        step_start = time.time()
+        await _send(5, "Fetching Trending")
+        try:
+            if stack.tmdb:
+                await stack.tmdb.get_trending("all", "week", 1)
+            else:
+                await stack.seerr.get_trending(page=1)
+        except Exception as e:
+            logger.warning(f"Refresh: trending failed: {e}")
+        cache.set_step_duration("trending", int((time.time() - step_start) * 1000))
 
         total_ms = int((time.time() - start) * 1000)
         cache.set_last_refresh(total_ms)

@@ -150,6 +150,80 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.debug(f"Library warming skipped: {e}")
 
+            # Background: enrich TVDB poster URLs with TMDB paths
+            try:
+                from app.services.cache import get_cache
+                cache = get_cache()
+                candidates = cache.get_library("all") or []
+                tvdb_items = [
+                    c for c in candidates
+                    if (c.get("poster_path") or "").startswith("http")
+                    and "image.tmdb.org" not in (c.get("poster_path") or "")
+                ]
+                if tvdb_items and s.engine.tmdb:
+                    logger.info(f"Poster enrichment: {len(tvdb_items)} items need TMDB poster lookup")
+                    enriched = 0
+                    for item in tvdb_items:
+                        try:
+                            mt = item.get("media_type", "movie")
+                            # get_detail() auto-caches to tmdb_cache
+                            detail = await s.engine.tmdb.get_detail(item["tmdb_id"], mt)
+                            if detail and detail.get("poster_path", "").startswith("/"):
+                                item["poster_path"] = detail["poster_path"]
+                                enriched += 1
+                            # Rate limit: ~30 req/s to be safe
+                            if enriched % 30 == 0:
+                                await asyncio.sleep(1)
+                        except Exception:
+                            pass  # Skip failures, will retry next startup
+                    # Update the cached candidates with fixed poster paths
+                    if enriched:
+                        cache.set_library("all", candidates)
+                        logger.info(f"Poster enrichment done: {enriched}/{len(tvdb_items)} fixed")
+            except Exception as e:
+                logger.debug(f"Poster enrichment skipped: {e}")
+
+            # Pre-warm collection scans (avoids 20s+ wait on Collections page)
+            try:
+                from app.services.collections import CollectionService
+                from app.services.cache import get_cache
+                import time as _t2
+                cache = get_cache()
+                if s.tmdb and s.radarr and s.tautulli:
+                    if not hasattr(s, '_collection_svc') or s._collection_svc is None:
+                        s._collection_svc = CollectionService(s.tmdb, s.radarr, s.tautulli)
+                    for username in active:
+                        try:
+                            _start = _t2.monotonic()
+                            colls = await s._collection_svc.get_user_collections(username)
+                            # Cache the serialized response (same format as API)
+                            coll_data = []
+                            for c in colls:
+                                coll_data.append({
+                                    "collection_id": c.collection_id,
+                                    "name": c.name,
+                                    "poster_url": c.poster_url,
+                                    "backdrop_url": c.backdrop_url,
+                                    "total_parts": c.total_parts,
+                                    "watched_count": c.watched_count,
+                                    "in_library_count": c.in_library_count,
+                                    "completion_pct": c.completion_pct,
+                                    "parts": [{"tmdb_id": p.tmdb_id, "title": p.title, "year": p.year,
+                                               "poster_url": p.poster_url, "vote_average": p.vote_average,
+                                               "in_library": p.in_library, "watched": p.watched,
+                                               "release_date": p.release_date} for p in c.parts],
+                                    "missing": [{"tmdb_id": p.tmdb_id, "title": p.title, "year": p.year,
+                                                 "poster_url": p.poster_url, "vote_average": p.vote_average,
+                                                 "in_library": p.in_library, "watched": p.watched,
+                                                 "release_date": p.release_date} for p in c.missing_parts],
+                                })
+                            cache.set_collections(username, coll_data)
+                            logger.info(f"Collections warmed: {username} ({len(colls)} collections, {_t2.monotonic()-_start:.1f}s)")
+                        except Exception as e:
+                            logger.warning(f"Collection warming failed for {username}: {e}")
+            except Exception as e:
+                logger.debug(f"Collection warming skipped: {e}")
+
             # Pre-warm recommendation results (includes AI explanations)
             if warmed > 0:
                 from app.services.recommender import RecommendationRequest

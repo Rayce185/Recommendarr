@@ -279,6 +279,7 @@ class TasteProfiler:
                                 "keywords": keywords,
                                 "cast": cast_crew.get("cast", [])[:5],
                                 "directors": cast_crew.get("directors", []),
+                                "original_language": row.original_language,
                             }
                             _cache_hits += 1
                         else:
@@ -299,6 +300,7 @@ class TasteProfiler:
                                 "keywords": d.get("keywords", []),
                                 "cast": [c["name"] for c in d.get("cast", [])[:5]],
                                 "directors": [c["name"] for c in d.get("crew", []) if c.get("job") == "Director"],
+                                "original_language": d.get("original_language"),
                             }
                             # Persist to SQLite
                             try:
@@ -416,7 +418,17 @@ class TasteProfiler:
                 director_names = meta.get("directors", [])
 
             # 6. Accumulate into vectors
+            # Split "Animation" into "Anime" (Japanese) vs "Animation" (Western)
+            orig_lang = None
+            if tmdb_id and item_key in _enrich_cache:
+                orig_lang = _enrich_cache[item_key].get("original_language")
+            processed_genres = []
             for genre in genres:
+                if genre == "Animation" and orig_lang == "ja":
+                    processed_genres.append("Anime")
+                else:
+                    processed_genres.append(genre)
+            for genre in processed_genres:
                 g = genre_scores[genre]
                 g["score"] += item_score
                 g["count"] += 1

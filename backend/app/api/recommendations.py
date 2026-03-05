@@ -690,6 +690,71 @@ async def invalidate_cache(username: Optional[str] = None):
 
 
 
+@router.post("/recommend/{username}/explain")
+async def lazy_explain(
+    username: str,
+    user: TokenPayload = Depends(get_current_user),
+    mode: str = Query("tonight"),
+    domain: str = Query("all"),
+):
+    """Backfill AI explanations for cached recommendations.
+
+    Call after page load to fill in explanations without blocking initial render.
+    Updates the cached response in-place and returns the explanations.
+    """
+    if user.username != username and not user.is_admin:
+        raise HTTPException(403, "Cannot explain other users' recommendations")
+
+    cache = get_cache()
+    cached = cache.get_recs(username, mode, domain)
+    if not cached:
+        raise HTTPException(404, "No cached recommendations to explain")
+
+    recs_data = cached.get("recommendations", [])
+    # Check if explanations already exist
+    has_explanations = any(r.get("explanation") and not r["explanation"].startswith(" ") for r in recs_data[:3])
+    if has_explanations:
+        return {"status": "already_explained", "count": len(recs_data)}
+
+    # Build lightweight Recommendation objects for the AI explainer
+    from app.services.recommender import Recommendation
+    from app.services.ai_explanations import generate_explanations, build_profile_summary
+
+    stack = get_stack()
+    profile = await stack.profiler.build_profile(username=username, domain=domain, enrich_keywords=True, max_enrich=100)
+    cache.set_profile(username, domain, profile)
+    profile_summary = build_profile_summary(profile)
+
+    recs = []
+    for r in recs_data:
+        recs.append(Recommendation(
+            tmdb_id=r.get("tmdb_id", 0),
+            media_type=r.get("media_type", "movie"),
+            title=r.get("title", ""),
+            year=r.get("year"),
+            genres=r.get("genres", []),
+            keywords=r.get("keywords", []),
+            overview=r.get("overview"),
+            vote_average=r.get("vote_average", 0),
+            score=r.get("score", 0),
+            score_breakdown=r.get("score_breakdown", {}),
+            explanation_signals=r.get("explanation_signals", []),
+            mode=mode,
+            in_library=r.get("in_library", False),
+        ))
+
+    try:
+        explanations = await generate_explanations(recs, profile_summary)
+        for rec_data, expl in zip(recs_data, explanations):
+            rec_data["explanation"] = expl
+        # Update cache with explanations
+        cache.set_recs(username, mode, domain, cached)
+        return {"status": "explained", "count": len(explanations)}
+    except Exception as e:
+        logger.warning(f"Lazy explanation failed: {e}")
+        raise HTTPException(500, f"Explanation generation failed: {e}")
+
+
 @router.get("/recommend/{username}/collections")
 async def get_collections(
     username: str,
@@ -707,6 +772,13 @@ async def get_collections(
     stack = get_stack()
     if not stack.tmdb:
         raise HTTPException(503, "TMDB client not configured — set TMDB_API_KEY")
+
+    # Check collection cache first
+    from app.services.cache import get_cache
+    cache = get_cache()
+    cached_colls = cache.get_collections(username)
+    if cached_colls is not None:
+        return {"username": username, "collections": cached_colls, "total": len(cached_colls), "cached": True}
 
     # Lazy-init collection service (reuse across requests)
     if not hasattr(stack, "_collection_svc") or stack._collection_svc is None:

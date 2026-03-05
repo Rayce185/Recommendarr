@@ -30,6 +30,7 @@ const api = {
   userHistory: (u) => authFetch(`${API_BASE}/users/${u}/history`).then(r => r.json()),
   recommend: (u, mode, opts = {}) => {
     const params = new URLSearchParams({ mode, limit: opts.limit || 20 });
+    if (opts.domain && opts.domain !== "all") params.set("domain", opts.domain);
     if (opts.mood) params.set("mood", opts.mood);
     if (opts.refresh) params.set("refresh", "true");
     if (opts.exclude_genres) params.set("exclude_genres", opts.exclude_genres);
@@ -2311,10 +2312,21 @@ function RecommendationsPage({ user, mode, onCardClick }) {
     if (f.hideWatched) opts.hide_watched = true;
     api.recommend(user, mode, opts)
       .then(data => {
-        setItems(data.recommendations || []);
+        const recs = data.recommendations || [];
+        setItems(recs);
         setCached(data.meta?.cached || false);
         setCacheAge(data.meta?.cache_age_seconds || null);
         setProfileModifiedAt(data.meta?.profile_modified_at || null);
+        // Lazy-load AI explanations if missing
+        if (recs.length > 0 && !recs[0]?.explanation) {
+          api.lazyExplain(user, mode).then(res => {
+            if (res.status === "explained") {
+              // Re-fetch from cache (now has explanations)
+              api.recommend(user, mode, { ...opts, refresh: undefined })
+                .then(d2 => { if (d2.recommendations?.length) setItems(d2.recommendations); });
+            }
+          }).catch(() => {}); // Non-fatal
+        }
       })
       .catch(err => setError(err.message))
       .finally(() => { setLoading(false); setRefreshing(false); });
@@ -2411,6 +2423,8 @@ function MoodPage({ user, onCardClick }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [presetsLoading, setPresetsLoading] = useState(true);
+  const [mediaFilter, setMediaFilter] = useState("all");
+  const [hideWatched, setHideWatched] = useState(false);
 
   useEffect(() => {
     api.moodPresets()
@@ -2422,15 +2436,17 @@ function MoodPage({ user, onCardClick }) {
     if (!user || !q) return;
     setLoading(true);
     setMoodInfo(null);
+    const opts = { mood: q, limit: 30, domain: mediaFilter };
+    if (hideWatched) opts.hide_watched = true;
     Promise.all([
-      api.recommend(user, "mood", { mood: q, limit: 20 }),
+      api.recommend(user, "mood", opts),
       api.moodParse(q)
     ]).then(([recData, parseData]) => {
       setItems(recData.recommendations || []);
       setMoodInfo(parseData);
     }).catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [user, mediaFilter, hideWatched]);
 
   const handlePreset = (preset) => {
     setActivePreset(preset.name);
@@ -2462,6 +2478,20 @@ function MoodPage({ user, onCardClick }) {
             {loading ? <Loader2 size={16} className="spinner" /> : <Search size={16} />}
             Search
           </button>
+        </div>
+
+        <div className="mood-filters" style={{ display: "flex", gap: "12px", alignItems: "center", margin: "8px 0 4px" }}>
+          <select value={mediaFilter} onChange={e => { setMediaFilter(e.target.value); if (query.trim()) search(query); }}
+            style={{ background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13 }}>
+            <option value="all">All Media</option>
+            <option value="movies">Movies Only</option>
+            <option value="tv">TV Shows Only</option>
+            <option value="anime">Anime Only</option>
+          </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-muted)", cursor: "pointer" }}>
+            <input type="checkbox" checked={hideWatched} onChange={e => { setHideWatched(e.target.checked); if (query.trim()) search(query); }} />
+            Hide watched
+          </label>
         </div>
 
         {!presetsLoading && presets.length > 0 && (
