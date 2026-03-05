@@ -85,18 +85,27 @@ async def lifespan(app: FastAPI):
     except Exception:
         probes["sonarr_anime"] = False
 
-    # Plex (optional — for deep links)
+    # Plex (optional — for deep links, library sections, watched state)
     if stack.plex:
-        try:
-            probes["plex"] = await stack.plex.test_connection()
-            if probes["plex"]:
-                if not stack.plex.machine_id:
-                    await stack.plex.init()
-                await stack.plex.build_tmdb_map()
-                logger.info(f"Plex TMDB map: {stack.plex.map_size} items indexed")
-        except Exception as e:
-            probes["plex"] = False
-            logger.warning(f"Plex init failed: {e}")
+        plex_ok = False
+        for attempt in range(5):
+            try:
+                plex_ok = await stack.plex.test_connection()
+                if plex_ok:
+                    if not stack.plex.machine_id:
+                        await stack.plex.init()
+                    await stack.plex.build_tmdb_map()
+                    logger.info(f"Plex TMDB map: {stack.plex.map_size} items across {len(stack.plex.sections)} sections")
+                    break
+                else:
+                    logger.warning(f"Plex probe attempt {attempt+1}/5 failed — retrying in 3s")
+                    await asyncio.sleep(3)
+            except Exception as e:
+                logger.warning(f"Plex probe attempt {attempt+1}/5 error: {e} — retrying in 3s")
+                await asyncio.sleep(3)
+        probes["plex"] = plex_ok
+        if not plex_ok:
+            logger.error("Plex unreachable after 5 attempts — library filters and watched state unavailable")
     else:
         logger.info("Plex not configured — deep links disabled")
 
