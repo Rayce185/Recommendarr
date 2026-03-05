@@ -134,6 +134,24 @@ class TautulliClient(IWatchHistoryProvider):
         data = await self._get("get_user_watch_time_stats", {"user_id": user_id})
         return data if isinstance(data, list) else data
 
+    async def get_plays_by_hourofday(self, user_id: str = None) -> list[int]:
+        """Get total play counts by hour of day (0-23) in server time.
+
+        Returns a 24-element list where index = hour, value = total plays.
+        If user_id is provided, returns data for that user only.
+        """
+        params = {}
+        if user_id:
+            params["user_id"] = user_id
+        data = await self._get("get_plays_by_hourofday", params)
+        series = data.get("series", [])
+        cats = data.get("categories", [])
+        totals = [0] * max(len(cats), 24)
+        for s in series:
+            for i, v in enumerate(s.get("data", [])):
+                totals[i] += v
+        return totals[:24]
+
     async def get_recently_added(self, count: int = 25) -> list[dict]:
         """Get recently added items on the server."""
         data = await self._get("get_recently_added", {"count": count})
