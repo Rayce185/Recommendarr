@@ -57,6 +57,8 @@ const api = {
   },
   trendingCountries: () => authFetch(`${API_BASE}/discover/countries`).then(r => r.json()),
   trendingProviders: (region = "CH") => authFetch(`${API_BASE}/discover/providers?country=${region}`).then(r => r.json()),
+  getSchedule: (u) => authFetch(`${API_BASE}/schedule/${u}`).then(r => r.json()),
+  updateSchedule: (u, data) => authFetch(`${API_BASE}/schedule/${u}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
   systemSettings: () => authFetch(`${API_BASE}/system/settings`).then(r => r.json()),
   systemSettingsEdit: () => authFetch(`${API_BASE}/system/settings?edit=true`).then(r => r.json()),
   updateSettings: (data) => authFetch(`${API_BASE}/system/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings: data }) }).then(r => r.json()),
@@ -3361,7 +3363,7 @@ function WatchlistPage({ user, onCardClick }) {
 }
 
 // ─── Page: System Settings ───────────────────────────────────────
-function AdminPage({ subtab: initialSubtab, onSubtabChange }) {
+function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser }) {
   const [settingsTab, setSettingsTabRaw] = useState(initialSubtab || "services");
   const [devicesList, setDevicesList] = useState([]);
   const [globalPrefs, setGlobalPrefs] = useState(null);
@@ -3378,6 +3380,8 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange }) {
   const [testing, setTesting] = useState({});
   const [editMode, setEditMode] = useState(false);
   const [editValues, setEditValues] = useState({});
+  const [schedule, setSchedule] = useState(null);
+  const [schedSaving, setSchedSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
   const [showKeys, setShowKeys] = useState({});
@@ -3392,6 +3396,9 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange }) {
       api.cacheDetailed().catch(() => null),
     ])
       .then(([h, s, cfg, cache]) => { setHealth(h); setStats(s); setSysSettings(cfg); setCacheInfo(cache); })
+      .then(() => {
+        if (currentUser) api.getSchedule(currentUser).then(setSchedule).catch(() => {});
+      })
       .then(() => {
         api.devices().then(r => setDevicesList(r.devices || [])).catch(() => {});
         api.preferences().then(r => setUserPrefs(r.preferences || {})).catch(() => {});
@@ -3719,6 +3726,65 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange }) {
                   {devicesList.length} device{devicesList.length !== 1 ? "s" : ""} online
                 </div>
               )}
+            </div>
+
+            {/* Auto-Refresh Schedule */}
+            <div style={{ background: "var(--bg-elevated)", borderRadius: 8, padding: 16 }}>
+              <h4 style={{ margin: "0 0 4px" }}><Clock size={15} /> Scheduled Refresh</h4>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 12px" }}>
+                Automatically refresh recommendations daily. Runs at your local time so fresh picks are ready when you open the app.
+              </p>
+              {schedule && (() => {
+                const updateSched = async (patch) => {
+                  setSchedSaving(true);
+                  try {
+                    const u = schedule.username;
+                    const res = await api.updateSchedule(u, patch);
+                    setSchedule(res);
+                  } catch (e) { console.error(e); }
+                  setSchedSaving(false);
+                };
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                      <input type="checkbox" checked={schedule.enabled} onChange={e => updateSched({ enabled: e.target.checked })} />
+                      <span style={{ fontSize: 13 }}>Enable daily auto-refresh</span>
+                      {schedSaving && <Loader2 size={13} className="spinner" />}
+                    </label>
+                    {schedule.enabled && (
+                      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Time</label>
+                          <input type="time"
+                            value={`${String(schedule.hour).padStart(2,"0")}:${String(schedule.minute).padStart(2,"0")}`}
+                            onChange={e => {
+                              const [h, m] = e.target.value.split(":").map(Number);
+                              updateSched({ hour: h, minute: m });
+                            }}
+                            style={{ background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 8px", fontSize: 13 }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Timezone</label>
+                          <select value={schedule.timezone} onChange={e => updateSched({ timezone: e.target.value })}
+                            style={{ background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 8px", fontSize: 13, maxWidth: 220 }}>
+                            {["UTC","US/Eastern","US/Central","US/Mountain","US/Pacific","Europe/Zurich","Europe/Berlin","Europe/London","Asia/Tokyo","Asia/Shanghai","Australia/Sydney"]
+                              .map(tz => <option key={tz} value={tz}>{tz.replace(/_/g," ")}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                    {schedule.last_run_at && (
+                      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                        Last auto-refresh: {new Date(schedule.last_run_at).toLocaleString()}
+                        {schedule.last_run_ms ? ` (${(schedule.last_run_ms/1000).toFixed(1)}s)` : ""}
+                        {schedule.last_error && <span style={{ color: "var(--red)" }}> — Error: {schedule.last_error}</span>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              {!schedule && <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading schedule...</div>}
             </div>
 
             {/* Global Defaults (Admin only) */}
@@ -4172,7 +4238,7 @@ export default function Recommendarr() {
       case "profile":
         return <TasteProfilePage user={selectedUser} />;
       case "admin":
-        return <AdminPage subtab={hashSubtab} onSubtabChange={setSubtab} />;
+        return <AdminPage subtab={hashSubtab} onSubtabChange={setSubtab} user={authUser?.username} />;
       default:
         return <RecommendationsPage user={selectedUser} mode="tonight" onCardClick={openDetail} />;
     }

@@ -675,3 +675,22 @@ class AiSetting(Base):
     key: Mapped[str] = mapped_column(String(200), primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=False)  # JSON-encoded
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+
+# ── Scheduled Refresh ────────────────────────────────────────────
+
+class RefreshSchedule(Base):
+    __tablename__ = "refresh_schedules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    timezone: Mapped[str] = mapped_column(String(60), default="UTC")  # IANA tz, e.g. "America/New_York"
+    hour: Mapped[int] = mapped_column(Integer, default=4)  # 0-23, local time
+    minute: Mapped[int] = mapped_column(Integer, default=0)  # 0-59
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_run_ms: Mapped[Optional[int]] = mapped_column(Integer)
+    last_error: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

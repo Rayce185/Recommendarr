@@ -261,12 +261,22 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_warm_profiles())
 
+    # Start scheduled refresh background task
+    from app.services.scheduler import get_scheduler
+    scheduler = get_scheduler()
+    scheduler.start()
+    logger.info("Scheduled refresh background task started")
+
     yield
     # Cleanup ChromaDB sync
     from app.services.chroma_sync import get_chroma_sync
     sync = get_chroma_sync()
     if sync:
         await sync.close()
+    # Stop scheduled refresh
+    from app.services.scheduler import get_scheduler
+    sched = get_scheduler()
+    await sched.stop()
     logger.info("=== Recommendarr shutting down ===")
 
 
@@ -309,6 +319,9 @@ app.include_router(settings_api.router,        prefix="/api/v1/system", tags=["s
 app.include_router(ai_settings.router,          prefix="/api/v1/system", tags=["AI"])
 app.include_router(watchlist.router,             prefix="/api/v1", tags=["watchlist"])
 app.include_router(library.router,               prefix="/api/v1", tags=["library"])
+
+from app.api import schedule
+app.include_router(schedule.router,              prefix="/api/v1", tags=["schedule"])
 
 
 # ── Static files (frontend) ───────────────────────────────────────
