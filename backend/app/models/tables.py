@@ -686,7 +686,6 @@ class RefreshSchedule(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    timezone: Mapped[str] = mapped_column(String(60), default="UTC")  # IANA tz, e.g. "America/New_York"
     hour: Mapped[int] = mapped_column(Integer, default=4)  # 0-23, local time
     minute: Mapped[int] = mapped_column(Integer, default=0)  # 0-59
     last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

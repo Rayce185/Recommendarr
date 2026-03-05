@@ -58,7 +58,7 @@ const api = {
   trendingCountries: () => authFetch(`${API_BASE}/discover/countries`).then(r => r.json()),
   trendingProviders: (region = "CH") => authFetch(`${API_BASE}/discover/providers?country=${region}`).then(r => r.json()),
   getSchedule: (u) => authFetch(`${API_BASE}/schedule/${u}`).then(r => r.json()),
-  suggestSchedule: (u, tz) => authFetch(`${API_BASE}/schedule/${u}/suggest?user_tz=${encodeURIComponent(tz)}`).then(r => r.json()),
+  suggestSchedule: (u) => authFetch(`${API_BASE}/schedule/${u}/suggest`).then(r => r.json()),
   updateSchedule: (u, data) => authFetch(`${API_BASE}/schedule/${u}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
   systemSettings: () => authFetch(`${API_BASE}/system/settings`).then(r => r.json()),
   systemSettingsEdit: () => authFetch(`${API_BASE}/system/settings?edit=true`).then(r => r.json()),
@@ -3400,13 +3400,8 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
       .then(([h, s, cfg, cache]) => { setHealth(h); setStats(s); setSysSettings(cfg); setCacheInfo(cache); })
       .then(() => {
         if (currentUser) {
-          const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-          api.getSchedule(currentUser).then(s => {
-            setSchedule(s);
-            // If no schedule configured yet, auto-set timezone from browser
-            if (!s.last_run_at && s.timezone === "UTC") s.timezone = browserTz;
-          }).catch(() => {});
-          api.suggestSchedule(currentUser, browserTz).then(setSchedSuggestion).catch(() => {});
+          api.getSchedule(currentUser).then(setSchedule).catch(() => {});
+          api.suggestSchedule(currentUser).then(setSchedSuggestion).catch(() => {});
         }
       })
       .then(() => {
@@ -3742,10 +3737,9 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
             <div style={{ background: "var(--bg-elevated)", borderRadius: 8, padding: 16 }}>
               <h4 style={{ margin: "0 0 4px" }}><Clock size={15} /> Scheduled Refresh</h4>
               <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 12px" }}>
-                Automatically refresh recommendations daily. Runs at your local time so fresh picks are ready when you open the app.
+                Automatically refresh recommendations daily at the quietest time in your viewing pattern.
               </p>
               {schedule && (() => {
-                const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
                 const updateSched = async (patch) => {
                   setSchedSaving(true);
                   try {
@@ -3756,16 +3750,10 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
                 };
                 const applySuggestion = () => {
                   if (schedSuggestion) {
-                    updateSched({
-                      enabled: true,
-                      timezone: schedSuggestion.timezone || browserTz,
-                      hour: schedSuggestion.suggested_hour,
-                      minute: schedSuggestion.suggested_minute || 0,
-                    });
+                    updateSched({ enabled: true, hour: schedSuggestion.suggested_hour, minute: 0 });
                   }
                 };
-                const isSuggested = schedSuggestion && schedule.hour === schedSuggestion.suggested_hour
-                  && schedule.timezone === (schedSuggestion.timezone || browserTz);
+                const isSuggested = schedSuggestion && schedule.hour === schedSuggestion.suggested_hour && schedule.minute === 0;
                 return (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
@@ -3777,9 +3765,9 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
                       <div style={{ background: "var(--surface)", borderRadius: 6, padding: "8px 12px", fontSize: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <Sparkles size={14} style={{ color: "var(--accent)", flexShrink: 0 }} />
                         <span style={{ color: "var(--text-muted)" }}>
-                          Based on {schedSuggestion.total_plays} viewing sessions, your quietest time is{" "}
-                          <strong style={{ color: "var(--text)" }}>{String(schedSuggestion.suggested_hour).padStart(2,"0")}:00 {schedSuggestion.timezone}</strong>
-                          {" "}({schedSuggestion.confidence} confidence)
+                          Based on {schedSuggestion.total_plays} plays, your quietest hour is{" "}
+                          <strong style={{ color: "var(--text)" }}>{String(schedSuggestion.suggested_hour).padStart(2,"0")}:00</strong>
+                          {" "}(peak: {String(schedSuggestion.peak_hour).padStart(2,"0")}:00)
                         </span>
                         {!isSuggested && (
                           <button onClick={applySuggestion} style={{
@@ -3791,9 +3779,9 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
                       </div>
                     )}
                     {schedule.enabled && (
-                      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                          <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Time</label>
+                          <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Time (server)</label>
                           <input type="time"
                             value={`${String(schedule.hour).padStart(2,"0")}:${String(schedule.minute).padStart(2,"0")}`}
                             onChange={e => {
@@ -3802,14 +3790,6 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
                             }}
                             style={{ background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 8px", fontSize: 13 }}
                           />
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                          <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Timezone</label>
-                          <select value={schedule.timezone} onChange={e => updateSched({ timezone: e.target.value })}
-                            style={{ background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 8px", fontSize: 13, maxWidth: 220 }}>
-                            {["UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/Zurich","Europe/Berlin","Europe/London","Asia/Tokyo","Asia/Shanghai","Australia/Sydney"]
-                              .map(tz => <option key={tz} value={tz}>{tz.replace(/_/g," ")}</option>)}
-                          </select>
                         </div>
                       </div>
                     )}
@@ -3826,7 +3806,7 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
               {!schedule && <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading schedule...</div>}
             </div>
 
-            {/* Global Defaults (Admin only) */}
+            {/* Global Defaults (Admin only) */}            {/* Global Defaults (Admin only) */}
             {globalPrefs && (
               <div className="global-prefs-section">
                 <h4><Globe size={15} /> Global Defaults (all users)</h4>

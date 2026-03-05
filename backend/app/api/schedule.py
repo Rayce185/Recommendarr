@@ -14,30 +14,26 @@ from app.models.tables import RefreshSchedule
 
 logger = logging.getLogger(__name__)
 
-from app.config import settings
-
 router = APIRouter(prefix="/schedule", tags=["schedule"])
 
-# Server timezone (Tautulli reports in server time)
-SERVER_TZ = "Europe/Zurich"
 
 
-def _find_quietest_hour(hourly_plays: list[int], user_tz: str = None) -> dict:
-    """Analyze hourly play data to find the optimal refresh time.
+def _find_quietest_hour(hourly_plays: list[int]) -> dict:
+    """Find the quietest hour from Tautulli hourly play data.
+
+    Tautulli reports in server time. Server runs the scheduler in server time.
+    No timezone conversion needed — the data already reflects when the user
+    is actually inactive because their viewing patterns encode their timezone.
 
     Args:
-        hourly_plays: 24-element list, index=hour (server time), value=plays
-        user_tz: IANA timezone for the user (to convert suggestion)
+        hourly_plays: 24-element list, index=hour, value=play count
 
     Returns:
-        dict with suggested_hour (user-local), analysis data
+        dict with suggested_hour (server time), confidence, analysis
     """
-    from zoneinfo import ZoneInfo
-    from datetime import datetime, timezone as tz
-
     if not hourly_plays or len(hourly_plays) < 24 or sum(hourly_plays) == 0:
         return {"suggested_hour": 4, "suggested_minute": 0, "confidence": "low",
-                "reason": "Not enough viewing data — using default 4:00 AM"}
+                "reason": "Not enough viewing data — using default 4:00"}
 
     # Find quietest 2-hour window (wraps around midnight)
     best_start = 0
@@ -48,48 +44,26 @@ def _find_quietest_hour(hourly_plays: list[int], user_tz: str = None) -> dict:
             best_score = window
             best_start = h
 
-    # Pick the middle of the 2h window, offset by 30min into the quieter hour
-    quiet_hour_server = best_start if hourly_plays[best_start] <= hourly_plays[(best_start + 1) % 24] else (best_start + 1) % 24
-
-    # Convert from server time to user's local time
-    suggested_hour = quiet_hour_server
-    if user_tz and user_tz != SERVER_TZ:
-        try:
-            server_tz = ZoneInfo(SERVER_TZ)
-            target_tz = ZoneInfo(user_tz)
-            # Use today's date for DST-aware conversion
-            now = datetime.now(tz.utc)
-            # Create a datetime at the quiet hour in server time
-            server_dt = now.replace(hour=quiet_hour_server, minute=0, second=0, microsecond=0).astimezone(server_tz)
-            # Adjust to be actually AT that hour in server tz
-            from datetime import timedelta
-            offset = server_dt.hour - quiet_hour_server
-            server_dt -= timedelta(hours=offset)
-            # Convert to user tz
-            user_dt = server_dt.astimezone(target_tz)
-            suggested_hour = user_dt.hour
-        except Exception:
-            pass  # Fall back to server hour
+    # Pick the quieter of the two hours in the window
+    quiet_hour = best_start if hourly_plays[best_start] <= hourly_plays[(best_start + 1) % 24] else (best_start + 1) % 24
 
     total_plays = sum(hourly_plays)
     confidence = "high" if total_plays >= 50 else "medium" if total_plays >= 20 else "low"
     peak_hour = hourly_plays.index(max(hourly_plays))
 
     return {
-        "suggested_hour": suggested_hour,
+        "suggested_hour": quiet_hour,
         "suggested_minute": 0,
         "confidence": confidence,
         "reason": f"Quietest viewing window based on {total_plays} plays",
-        "server_quiet_hour": quiet_hour_server,
-        "server_peak_hour": peak_hour,
+        "peak_hour": peak_hour,
         "total_plays": total_plays,
-        "hourly_plays_server": hourly_plays,
+        "hourly_plays": hourly_plays,
     }
 
 
 class ScheduleUpdate(BaseModel):
     enabled: Optional[bool] = None
-    timezone: Optional[str] = Field(None, max_length=60)
     hour: Optional[int] = Field(None, ge=0, le=23)
     minute: Optional[int] = Field(None, ge=0, le=59)
 
@@ -97,7 +71,6 @@ class ScheduleUpdate(BaseModel):
 class ScheduleResponse(BaseModel):
     username: str
     enabled: bool
-    timezone: str
     hour: int
     minute: int
     last_run_at: Optional[str] = None
@@ -109,7 +82,6 @@ def _sched_to_response(sched: RefreshSchedule) -> dict:
     return {
         "username": sched.username,
         "enabled": sched.enabled,
-        "timezone": sched.timezone,
         "hour": sched.hour,
         "minute": sched.minute,
         "last_run_at": sched.last_run_at.isoformat() if sched.last_run_at else None,
@@ -137,7 +109,6 @@ async def get_schedule(
         return {
             "username": username,
             "enabled": False,
-            "timezone": "UTC",
             "hour": 4,
             "minute": 0,
             "last_run_at": None,
@@ -158,14 +129,6 @@ async def update_schedule(
     if user.username != username and not user.is_admin:
         raise HTTPException(403, "Cannot modify other users' schedules")
 
-    # Validate timezone
-    if body.timezone:
-        try:
-            from zoneinfo import ZoneInfo
-            ZoneInfo(body.timezone)
-        except Exception:
-            raise HTTPException(400, f"Invalid timezone: {body.timezone}")
-
     with get_db() as db:
         sched = db.execute(
             select(RefreshSchedule).where(RefreshSchedule.username == username)
@@ -175,7 +138,6 @@ async def update_schedule(
             sched = RefreshSchedule(
                 username=username,
                 enabled=body.enabled if body.enabled is not None else False,
-                timezone=body.timezone or "UTC",
                 hour=body.hour if body.hour is not None else 4,
                 minute=body.minute if body.minute is not None else 0,
             )
@@ -183,8 +145,6 @@ async def update_schedule(
         else:
             if body.enabled is not None:
                 sched.enabled = body.enabled
-            if body.timezone is not None:
-                sched.timezone = body.timezone
             if body.hour is not None:
                 sched.hour = body.hour
             if body.minute is not None:
@@ -196,46 +156,36 @@ async def update_schedule(
         result = _sched_to_response(sched)
 
     action = "enabled" if result["enabled"] else "disabled"
-    logger.info(f"Schedule {action} for {username}: {result['hour']:02d}:{result['minute']:02d} {result['timezone']}")
+    logger.info(f"Schedule {action} for {username}: {result['hour']:02d}:{result['minute']:02d} server time")
     return result
 
 
 @router.get("/{username}/suggest")
 async def suggest_schedule(
     username: str,
-    user_tz: str = "UTC",
     user: TokenPayload = Depends(get_current_user),
 ):
     """Suggest optimal refresh time based on Tautulli viewing patterns.
 
-    Analyzes the user's hourly play distribution to find when they're
-    least likely to be watching. Converts from server time to user's timezone.
+    Analyzes per-user hourly play distribution to find their quietest hour.
+    All times are server time — no timezone conversion needed because
+    Tautulli data already reflects when the user is actually inactive.
     """
     if user.username != username and not user.is_admin:
         raise HTTPException(403, "Cannot view other users' schedules")
 
-    # Validate timezone
-    try:
-        from zoneinfo import ZoneInfo
-        ZoneInfo(user_tz)
-    except Exception:
-        raise HTTPException(400, f"Invalid timezone: {user_tz}")
-
-    # Get user's Tautulli ID
     from app.services.factory import get_stack, resolve_user_id
     stack = get_stack()
     uid = resolve_user_id(username)
 
-    # Fetch hourly play data
     try:
         hourly = await stack.tautulli.get_plays_by_hourofday(uid)
     except Exception as e:
         logger.warning(f"Tautulli hourly data failed for {username}: {e}")
         hourly = []
 
-    analysis = _find_quietest_hour(hourly, user_tz)
+    analysis = _find_quietest_hour(hourly)
     analysis["username"] = username
-    analysis["timezone"] = user_tz
 
     return analysis
 
