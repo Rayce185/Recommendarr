@@ -354,7 +354,7 @@ async def get_trending(
             "year": t.year,
             "poster_url": poster,
             "vote_average": t.vote_average,
-            "genres": genres,
+            "genres": normalize_genres(genres, original_language=t.original_language if hasattr(t, 'original_language') else None),
             "popularity": getattr(t, "popularity", 0),
             "original_language": getattr(t, "original_language", None),
             "release_date": getattr(t, "release_date", None),
@@ -484,7 +484,7 @@ async def get_similar(
                 "year": s.year,
                 "poster_url": f"https://image.tmdb.org/t/p/w342{s.poster_path}" if s.poster_path else None,
                 "vote_average": s.vote_average,
-                "genres": [_tmdb_genre_cache.get(gid) for gid in (s.genre_ids if hasattr(s, "genre_ids") else []) if gid in _tmdb_genre_cache] if hasattr(s, "genre_ids") else [],
+                "genres": normalize_genres([_tmdb_genre_cache.get(gid) for gid in (s.genre_ids if hasattr(s, "genre_ids") else []) if gid in _tmdb_genre_cache], original_language=getattr(s, "original_language", None)) if hasattr(s, "genre_ids") else [],
             }
             for s in similar
         ],
@@ -515,7 +515,7 @@ async def get_detail(
                 "overview": d.get("overview", ""),
                 "poster_url": f"https://image.tmdb.org/t/p/w500{d['poster_path']}" if d.get("poster_path") else None,
                 "backdrop_url": f"https://image.tmdb.org/t/p/w1280{d['backdrop_path']}" if d.get("backdrop_path") else None,
-                "genres": d.get("genres", []),
+                "genres": normalize_genres(d.get("genres", []), original_language=d.get("original_language")),
                 "keywords": d.get("keywords", []),
                 "vote_average": d.get("vote_average", 0),
                 "vote_count": d.get("vote_count", 0),
@@ -541,7 +541,7 @@ async def get_detail(
                 "overview": detail.overview,
                 "poster_url": f"https://image.tmdb.org/t/p/w500{detail.poster_path}" if detail.poster_path else None,
                 "backdrop_url": f"https://image.tmdb.org/t/p/w1280{detail.backdrop_path}" if detail.backdrop_path else None,
-                "genres": detail.genres,
+                "genres": normalize_genres(detail.genres, original_language=getattr(detail, "original_language", None)),
                 "keywords": detail.keywords,
                 "vote_average": detail.vote_average,
                 "vote_count": detail.vote_count,
@@ -661,7 +661,7 @@ async def get_filter_options():
         ]
 
     return {
-        "genres": sorted(all_genres - {""}),
+        "genres": sorted((all_genres | {"Anime"}) - {""}),
         "libraries": libraries,
     }
 

@@ -80,45 +80,44 @@ class RefreshScheduler:
             try:
                 if self._is_due(sched, now_utc):
                     logger.info(f"Scheduled refresh due for {sched.username} "
-                                f"(tz={sched.timezone}, hour={sched.hour:02d}:{sched.minute:02d})")
+                                f"(hour={sched.hour:02d}:{sched.minute:02d} server time)")
                     await self._run_user_refresh(sched)
             except Exception as e:
                 logger.warning(f"Schedule check failed for {sched.username}: {e}")
                 self._record_error(sched.username, str(e))
 
     def _is_due(self, sched: RefreshSchedule, now_utc: datetime) -> bool:
-        """Check if a user's scheduled refresh window has arrived.
+        """Check if scheduled refresh is due. All times are server time.
 
-        Logic:
-          1. Convert now_utc to user's local time
-          2. Build today's scheduled datetime in user's tz
-          3. If now_local >= scheduled AND last_run < scheduled → due
+        Tautulli data is server time, quiet hours are server time,
+        scheduler runs in server time. No timezone conversion.
         """
+        import os
         try:
-            tz = ZoneInfo(sched.timezone)
+            from zoneinfo import ZoneInfo
+            server_tz = ZoneInfo(os.environ.get("TZ", "UTC"))
+            now_server = now_utc.astimezone(server_tz)
         except Exception:
-            logger.warning(f"Invalid timezone '{sched.timezone}' for {sched.username}")
-            return False
+            now_server = now_utc
 
-        now_local = now_utc.astimezone(tz)
-        today_scheduled = now_local.replace(
+        today_scheduled = now_server.replace(
             hour=sched.hour, minute=sched.minute, second=0, microsecond=0
         )
 
-        # Not yet past the scheduled time today
-        if now_local < today_scheduled:
+        if now_server < today_scheduled:
             return False
 
-        # Don't run if scheduled time is more than 2 hours ago (prevent catch-up storms)
-        if (now_local - today_scheduled).total_seconds() > 7200:
+        # 2-hour catch-up window
+        if (now_server - today_scheduled).total_seconds() > 7200:
             return False
 
-        # Check if already ran today (after this scheduled time)
         if sched.last_run_at:
-            last_run_local = sched.last_run_at.astimezone(tz) if sched.last_run_at.tzinfo else \
-                sched.last_run_at.replace(tzinfo=timezone.utc).astimezone(tz)
-            if last_run_local >= today_scheduled:
-                return False  # Already ran today
+            try:
+                last = sched.last_run_at.astimezone(server_tz) if sched.last_run_at.tzinfo else sched.last_run_at
+            except Exception:
+                last = sched.last_run_at
+            if last >= today_scheduled:
+                return False
 
         return True
 

@@ -31,6 +31,7 @@ from app.services.ai_mood import parse_mood_ai
 from app.services.ai_explanations import generate_explanations, build_profile_summary
 from app.services.profile_overrides import get_override_store, ProfileOverrides
 from app.services.feedback import get_feedback_store
+from app.utils.genres import normalize_genres
 
 logger = logging.getLogger(__name__)
 
@@ -435,7 +436,7 @@ class RecommendationEngine:
                     year=detail.get("year"),
                     poster_path=detail.get("poster_path"),
                     backdrop_path=detail.get("backdrop_path"),
-                    genres=detail.get("genres", []),
+                    genres=normalize_genres(detail.get("genres", []), original_language=detail.get("original_language")),
                     keywords=detail.get("keywords", [])[:10],
                     overview=detail.get("overview", ""),
                     vote_average=detail.get("vote_average", 0),
@@ -764,7 +765,7 @@ class RecommendationEngine:
                     "media_type": "movie",
                     "title": m.title,
                     "year": m.year,
-                    "genres": m.genres,
+                    "genres": normalize_genres(m.genres, original_language=m.original_language if hasattr(m, 'original_language') else None),
                     "overview": m.overview,
                     "vote_average": m.vote_average,
                     "runtime": m.runtime_minutes,
@@ -789,7 +790,7 @@ class RecommendationEngine:
                     "media_type": "tv",
                     "title": s.title,
                     "year": s.year,
-                    "genres": s.genres,
+                    "genres": normalize_genres(s.genres, original_language=s.original_language if hasattr(s, 'original_language') else None),
                     "overview": s.overview,
                     "vote_average": s.vote_average,
                     "runtime": s.runtime_minutes if hasattr(s, 'runtime_minutes') else None,
@@ -811,7 +812,7 @@ class RecommendationEngine:
                     "media_type": "tv",
                     "title": s.title,
                     "year": s.year,
-                    "genres": s.genres,
+                    "genres": normalize_genres(s.genres, is_anime_source=True),
                     "overview": s.overview,
                     "vote_average": s.vote_average,
                     "runtime": s.runtime_minutes if hasattr(s, 'runtime_minutes') else None,
@@ -931,7 +932,7 @@ class RecommendationEngine:
             "year": detail.year,
             "poster_path": detail.poster_path,
             "backdrop_path": detail.backdrop_path,
-            "genres": detail.genres,
+            "genres": normalize_genres(detail.genres, original_language=getattr(detail, 'original_language', None)),
             "keywords": detail.keywords,
             "overview": detail.overview,
             "vote_average": detail.vote_average,
@@ -970,7 +971,7 @@ class RecommendationEngine:
             "media_type": item.media_type,
             "title": item.title,
             "year": item.year,
-            "genres": await self._resolve_genre_ids(item.genre_ids, item.media_type) if hasattr(item, 'genre_ids') else item.genres if hasattr(item, 'genres') else [],
+            "genres": normalize_genres(await self._resolve_genre_ids(item.genre_ids, item.media_type) if hasattr(item, 'genre_ids') else item.genres if hasattr(item, 'genres') else [], original_language=getattr(item, 'original_language', None)),
             "overview": item.overview,
             "vote_average": item.vote_average,
             "poster_path": item.poster_path,
