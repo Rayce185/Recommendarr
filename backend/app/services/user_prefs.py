@@ -169,6 +169,23 @@ class UserPrefsService:
         self.set_many("_global", updates)
         return updates
 
+    def reset_user_key(self, username: str, key: str) -> bool:
+        """Remove a user-specific override so it falls back to global/default."""
+        try:
+            with get_db() as db:
+                row = db.execute(
+                    select(UserPreference).where(
+                        and_(UserPreference.username == username, UserPreference.key == key)
+                    )
+                ).scalar_one_or_none()
+                if row:
+                    db.delete(row)
+                    db.commit()
+                    return True
+        except Exception as e:
+            logger.debug(f"UserPrefs reset_user_key failed: {e}")
+        return False
+
     def delete(self, username: str, key: str):
         """Delete a specific preference."""
         try:
