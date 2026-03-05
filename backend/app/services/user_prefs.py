@@ -121,6 +121,54 @@ class UserPrefsService:
         except Exception as e:
             logger.error(f"UserPrefs set_many failed: {e}")
 
+    def get_user_overrides(self, username: str) -> dict:
+        """Get only user-specific overrides (not globals or defaults)."""
+        result = {}
+        try:
+            with get_db() as db:
+                rows = db.execute(
+                    select(UserPreference).where(UserPreference.username == username)
+                ).scalars().all()
+                for row in rows:
+                    result[row.key] = json.loads(row.value)
+        except Exception as e:
+            logger.debug(f"UserPrefs get_user_overrides failed: {e}")
+        return result
+
+    def set_user(self, username: str, updates: dict) -> dict:
+        """Set multiple user preferences. Returns saved keys."""
+        self.set_many(username, updates)
+        return updates
+
+    def get_flat(self, username: str) -> dict:
+        """Get all preferences as flat values (no source metadata)."""
+        return self.get_all(username)
+
+    def get_global_defaults(self) -> dict:
+        """Get global defaults with source annotations."""
+        result = {}
+        for key, default in DEFAULTS.items():
+            result[key] = {"value": default, "source": "default"}
+        try:
+            with get_db() as db:
+                rows = db.execute(
+                    select(UserPreference).where(UserPreference.username == "_global")
+                ).scalars().all()
+                for row in rows:
+                    result[row.key] = {"value": json.loads(row.value), "source": "global"}
+        except Exception:
+            pass
+        return result
+
+    def get_global(self) -> dict:
+        """Get global settings with source annotation (for admin UI)."""
+        return self.get_global_defaults()
+
+    def set_global(self, updates: dict) -> dict:
+        """Set global default preferences."""
+        self.set_many("_global", updates)
+        return updates
+
     def delete(self, username: str, key: str):
         """Delete a specific preference."""
         try:
