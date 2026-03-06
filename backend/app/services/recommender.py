@@ -361,7 +361,7 @@ class RecommendationEngine:
         # First pass: collect candidates by staleness/completion (no TMDB resolution yet)
         pre_candidates = []
         for item_key, events in by_item.items():
-            best_completion = max(e.completion_pct for e in events)
+            best_completion = min(max(e.completion_pct for e in events), 100)
             most_recent = max((e.started_at for e in events if e.started_at), default=None)
 
             if best_completion < 70:
@@ -443,7 +443,7 @@ class RecommendationEngine:
                     runtime=detail.get("runtime"),
                     original_language=detail.get("original_language"),
                     score=c["staleness_score"] * (c["best_completion"] / 100),
-                    score_breakdown={"staleness": c["staleness_score"], "completion": c["best_completion"]},
+                    score_breakdown={"staleness": c["staleness_score"], "completion": c["best_completion"] / 100},
                     mode="rediscover",
                     in_library=True,
                     directors=detail.get("directors", []),

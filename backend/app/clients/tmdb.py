@@ -98,9 +98,13 @@ class TMDBClient:
                     )
                 ).scalar_one_or_none()
                 if row and row.genres:
+                    # Check cache_crew for schema v2 fields (trailers, networks)
+                    cast_crew_raw = row.cast_crew if isinstance(row.cast_crew, dict) else _json.loads(row.cast_crew) if row.cast_crew else {}
+                    if "trailers" not in cast_crew_raw:
+                        return None  # Schema v1 entry — force re-fetch to get trailers, networks etc.
                     genres = row.genres if isinstance(row.genres, list) else _json.loads(row.genres) if row.genres else []
                     keywords = row.keywords if isinstance(row.keywords, list) else _json.loads(row.keywords) if row.keywords else []
-                    cast_crew = row.cast_crew if isinstance(row.cast_crew, dict) else _json.loads(row.cast_crew) if row.cast_crew else {}
+                    cc = cast_crew_raw
                     return {
                         "tmdb_id": tmdb_id,
                         "media_type": media_type,
@@ -111,15 +115,28 @@ class TMDBClient:
                         "poster_path": row.poster_path,
                         "backdrop_path": row.backdrop_path,
                         "vote_average": float(row.vote_average) if row.vote_average else 0,
+                        "vote_count": cc.get("vote_count", 0),
                         "popularity": float(row.popularity) if row.popularity else 0,
                         "genres": genres,
                         "keywords": keywords,
-                        "cast": cast_crew.get("cast", []),
-                        "crew": cast_crew.get("crew", []),
-                        "directors": cast_crew.get("directors", []),
+                        "cast": cc.get("cast", []),
+                        "crew": cc.get("crew", []),
+                        "directors": cc.get("directors", []),
                         "runtime": row.runtime_minutes,
                         "original_language": row.original_language,
-                        "imdb_id": cast_crew.get("imdb_id"),
+                        "imdb_id": cc.get("imdb_id"),
+                        "tvdb_id": cc.get("tvdb_id"),
+                        "tagline": cc.get("tagline", ""),
+                        "production_companies": cc.get("production_companies", []),
+                        "networks": cc.get("networks", []),
+                        "trailers": cc.get("trailers", []),
+                        "episode_runtime": cc.get("episode_runtime"),
+                        "last_air_date": cc.get("last_air_date", ""),
+                        "number_of_seasons": cc.get("number_of_seasons"),
+                        "number_of_episodes": cc.get("number_of_episodes"),
+                        "release_date": cc.get("release_date", ""),
+                        "status": cc.get("status"),
+                        "content_rating": "",
                     }
         except Exception:
             pass
@@ -137,6 +154,18 @@ class TMDBClient:
                 "crew": [{"name": c["name"], "job": c["job"]} for c in data.get("crew", []) if isinstance(c, dict)],
                 "directors": data.get("directors", []) if isinstance(data.get("directors"), list) else [],
                 "imdb_id": data.get("imdb_id"),
+                "tvdb_id": data.get("tvdb_id"),
+                "tagline": data.get("tagline", ""),
+                "production_companies": data.get("production_companies", []),
+                "networks": data.get("networks", []),
+                "trailers": data.get("trailers", []),
+                "episode_runtime": data.get("episode_runtime"),
+                "last_air_date": data.get("last_air_date", ""),
+                "number_of_seasons": data.get("number_of_seasons"),
+                "number_of_episodes": data.get("number_of_episodes"),
+                "release_date": data.get("release_date", ""),
+                "status": data.get("status"),
+                "vote_count": data.get("vote_count", 0),
             }
 
             with get_db() as db:
@@ -322,7 +351,12 @@ class TMDBClient:
             return cached
 
         endpoint = f"/movie/{tmdb_id}" if media_type == "movie" else f"/tv/{tmdb_id}"
-        d = await self._get(endpoint, {"append_to_response": "keywords,credits,external_ids"})
+        append = "keywords,credits,external_ids,videos"
+        if media_type == "movie":
+            append += ",release_dates"
+        else:
+            append += ",content_ratings"
+        d = await self._get(endpoint, {"append_to_response": append})
         genres = [g["name"] for g in d.get("genres", [])]
 
         # Keywords
@@ -345,6 +379,41 @@ class TMDBClient:
 
         external = d.get("external_ids", {})
 
+        # Videos — extract YouTube trailers
+        videos = d.get("videos", {}).get("results", [])
+        trailers = [
+            {"key": v["key"], "name": v.get("name", "Trailer"), "site": v["site"], "type": v.get("type", "")}
+            for v in videos
+            if v.get("site") == "YouTube" and v.get("type") in ("Trailer", "Teaser")
+        ][:5]  # Max 5 trailers
+
+        # Content certification
+        certification = ""
+        if media_type == "movie":
+            for country_release in d.get("release_dates", {}).get("results", []):
+                if country_release.get("iso_3166_1") in ("US", "CH", "DE"):
+                    for rd in country_release.get("release_dates", []):
+                        if rd.get("certification"):
+                            certification = rd["certification"]
+                            break
+                if certification:
+                    break
+        else:
+            for cr in d.get("content_ratings", {}).get("results", []):
+                if cr.get("iso_3166_1") in ("US", "CH", "DE"):
+                    certification = cr.get("rating", "")
+                    break
+
+        # Networks (TV only)
+        networks = [n["name"] for n in d.get("networks", [])]
+
+        # Episode runtime (TV: episode_run_time is a list, take first)
+        ep_runtime = d.get("episode_run_time", [])
+        episode_runtime = ep_runtime[0] if ep_runtime else None
+
+        # Last air date for TV
+        last_air_date = d.get("last_air_date", "")
+
         result = {
             "tmdb_id": tmdb_id,
             "media_type": media_type,
@@ -366,15 +435,39 @@ class TMDBClient:
             "tagline": d.get("tagline", ""),
             "original_language": d.get("original_language"),
             "production_companies": [c["name"] for c in d.get("production_companies", [])],
-            "content_rating": d.get("content_rating", ""),
+            "content_rating": certification or d.get("content_rating", ""),
             "imdb_id": external.get("imdb_id"),
             "tvdb_id": external.get("tvdb_id"),
             "release_date": date_str,
             "number_of_seasons": d.get("number_of_seasons"),
             "number_of_episodes": d.get("number_of_episodes"),
+            "trailers": trailers,
+            "networks": networks,
+            "episode_runtime": episode_runtime,
+            "last_air_date": last_air_date,
         }
         self._write_cache(tmdb_id, media_type, result)
         return result
+
+    # ── Watch Providers ───────────────────────────────────────────
+
+    async def get_watch_providers(self, tmdb_id: int, media_type: str = "movie", region: str = "CH") -> dict:
+        """Get streaming/rent/buy providers for a title in a given region."""
+        endpoint = f"/{'movie' if media_type == 'movie' else 'tv'}/{tmdb_id}/watch/providers"
+        try:
+            d = await self._get(endpoint)
+            results = d.get("results", {}).get(region, {})
+            providers = {}
+            for category in ("flatrate", "rent", "buy", "free"):
+                items = results.get(category, [])
+                if items:
+                    providers[category] = [
+                        {"provider_name": p["provider_name"], "logo_path": p.get("logo_path")}
+                        for p in items[:6]
+                    ]
+            return {"providers": providers, "link": results.get("link", "")}
+        except Exception:
+            return {"providers": {}, "link": ""}
 
     # ── Keywords ─────────────────────────────────────────────────
 

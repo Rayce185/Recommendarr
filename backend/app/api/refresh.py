@@ -75,6 +75,7 @@ async def _run_refresh(job_id: str, username: str):
         ("Building taste profile", "profile"),
         ("Generating recommendations", "recs_parallel"),
         ("Fetching Trending", "trending"),
+        ("Pre-warming collections", "collections"),
     ]
     total = len(steps)
 
@@ -157,6 +158,41 @@ async def _run_refresh(job_id: str, username: str):
         except Exception as e:
             logger.warning(f"Refresh: trending failed: {e}")
         cache.set_step_duration("trending", int((time.time() - step_start) * 1000))
+
+        # Step 6: Pre-warm collections (background — avoid slow first load)
+        step_start = time.time()
+        await _send(6, "Pre-warming collections")
+        try:
+            from app.services.collections import CollectionService
+            if not hasattr(stack, "_collection_svc") or stack._collection_svc is None:
+                stack._collection_svc = CollectionService(stack.tmdb, stack.radarr, stack.tautulli)
+            collections = await stack._collection_svc.get_user_collections(username)
+            coll_list = [
+                {
+                    "collection_id": c.collection_id,
+                    "name": c.name,
+                    "poster_url": c.poster_url,
+                    "backdrop_url": c.backdrop_url,
+                    "total_parts": c.total_parts,
+                    "watched_count": c.watched_count,
+                    "in_library_count": c.in_library_count,
+                    "completion_pct": c.completion_pct,
+                    "parts": [{"tmdb_id": p.tmdb_id, "title": p.title, "year": p.year,
+                               "poster_url": p.poster_url, "vote_average": p.vote_average,
+                               "in_library": p.in_library, "watched": p.watched,
+                               "release_date": p.release_date} for p in c.parts],
+                    "missing": [{"tmdb_id": p.tmdb_id, "title": p.title, "year": p.year,
+                                 "poster_url": p.poster_url, "vote_average": p.vote_average,
+                                 "in_library": p.in_library, "watched": p.watched,
+                                 "release_date": p.release_date} for p in c.missing_parts],
+                }
+                for c in collections
+            ]
+            cache.set_collections(username, coll_list)
+            logger.info(f"Refresh: collections pre-warmed — {len(coll_list)} collections")
+        except Exception as e:
+            logger.warning(f"Refresh: collections pre-warm failed: {e}")
+        cache.set_step_duration("collections", int((time.time() - step_start) * 1000))
 
         total_ms = int((time.time() - start) * 1000)
         cache.set_last_refresh(total_ms)

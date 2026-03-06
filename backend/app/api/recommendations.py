@@ -18,6 +18,7 @@ from app.services.mood_mapper import parse_mood, mood_to_explanation, MOOD_PRESE
 from app.services.ai_mood import parse_mood_ai
 from app.clients.tmdb import TMDBClient, COUNTRY_OPTIONS
 
+from app.utils.genres import normalize_genres
 from app.services.collections import CollectionService
 
 router = APIRouter()
@@ -106,7 +107,7 @@ async def get_recommendations(
     exclude_genres: Optional[str] = Query(None, description="Comma-separated genre names to exclude"),
     include_genres: Optional[str] = Query(None, description="Comma-separated genre names to include"),
     exclude_libraries: Optional[str] = Query(None, description="Comma-separated Plex library names to exclude"),
-    hide_watched: bool = Query(False, description="Hide already-watched items"),
+    watched_filter: str = Query("all", pattern="^(all|unseen|seen)$", description="Filter by watched status: all/unseen/seen"),
     refresh: bool = Query(False, description="Force cache refresh"),
 ):
     """Get personalized recommendations.
@@ -197,7 +198,7 @@ async def get_recommendations(
         "recommendations": [
                 _rec_to_dict(r, plex=stack.plex)
                 for r in recs
-                if not (hide_watched and r.is_watched)
+                if (watched_filter == "all" or (watched_filter == "unseen" and not r.is_watched) or (watched_filter == "seen" and r.is_watched))
             ],
         "meta": {
             "username": username,
@@ -240,7 +241,7 @@ async def get_group_recommendations(
     domain: str = Query("all", pattern="^(all|movies|tv|anime)$"),
     limit: int = Query(20, ge=1, le=50),
     genre: Optional[str] = None,
-    hide_watched: bool = Query(False, description="Hide already-watched items"),
+    watched_filter: str = Query("all", pattern="^(all|unseen|seen)$", description="Filter by watched status: all/unseen/seen"),
 ):
     """Group Night — find titles matching taste intersection of multiple users."""
     stack = get_stack()
@@ -264,7 +265,7 @@ async def get_group_recommendations(
         "recommendations": [
                 _rec_to_dict(r, plex=stack.plex)
                 for r in recs
-                if not (hide_watched and r.is_watched)
+                if (watched_filter == "all" or (watched_filter == "unseen" and not r.is_watched) or (watched_filter == "seen" and r.is_watched))
             ],
         "meta": {
             "mode": "group",
@@ -506,6 +507,11 @@ async def get_detail(
             # Check library status from Plex map
             label = "movie" if media_type == "movie" else "show"
             in_library = bool(stack.plex._tmdb_map.get(f"{label}:{tmdb_id}")) if stack.plex else False
+            # Fetch watch providers (region-specific, not cached in detail)
+            wp = await stack.tmdb.get_watch_providers(tmdb_id, media_type, region="CH")
+            # Build trailer URLs from video keys
+            trailers_raw = d.get("trailers", [])
+            trailer_url = f"https://www.youtube.com/embed/{trailers_raw[0]['key']}" if trailers_raw else None
             return {
                 "tmdb_id": d["tmdb_id"],
                 "media_type": d["media_type"],
@@ -513,6 +519,7 @@ async def get_detail(
                 "original_title": d.get("original_title", ""),
                 "year": d.get("year"),
                 "overview": d.get("overview", ""),
+                "tagline": d.get("tagline", ""),
                 "poster_url": f"https://image.tmdb.org/t/p/w500{d['poster_path']}" if d.get("poster_path") else None,
                 "backdrop_url": f"https://image.tmdb.org/t/p/w1280{d['backdrop_path']}" if d.get("backdrop_path") else None,
                 "genres": normalize_genres(d.get("genres", []), original_language=d.get("original_language")),
@@ -520,13 +527,28 @@ async def get_detail(
                 "vote_average": d.get("vote_average", 0),
                 "vote_count": d.get("vote_count", 0),
                 "runtime": d.get("runtime"),
+                "episode_runtime": d.get("episode_runtime"),
                 "status": d.get("status"),
                 "original_language": d.get("original_language"),
                 "imdb_id": d.get("imdb_id"),
+                "tvdb_id": d.get("tvdb_id"),
+                "release_date": d.get("release_date", ""),
+                "last_air_date": d.get("last_air_date", ""),
+                "number_of_seasons": d.get("number_of_seasons"),
+                "number_of_episodes": d.get("number_of_episodes"),
+                "production_companies": d.get("production_companies", []),
+                "networks": d.get("networks", []),
                 "cast": d.get("cast", [])[:10],
                 "directors": [c["name"] for c in d.get("crew", []) if c.get("job") == "Director"],
                 "writers": [c["name"] for c in d.get("crew", []) if c.get("job") in ("Writer", "Screenplay")],
-                "trailers": [],
+                "creators": [c["name"] for c in d.get("crew", []) if c.get("job") == "Creator"],
+                "trailer_url": trailer_url,
+                "trailers": [{"key": t["key"], "name": t["name"]} for t in trailers_raw],
+                "watch_providers": wp.get("providers", {}),
+                "watch_providers_link": wp.get("link", ""),
+                "content_rating": d.get("content_rating", ""),
+                "writers": [c["name"] for c in d.get("crew", []) if c.get("job") in ("Writer", "Screenplay")],
+                "creators": [c["name"] for c in d.get("crew", []) if c.get("job") == "Creator"],
                 "in_library": in_library,
                 "media_status": None,
             }
@@ -798,25 +820,26 @@ async def get_collections(
             "release_date": p.release_date,
         }
 
-    return {
-        "username": username,
-        "collections": [
-            {
-                "collection_id": c.collection_id,
-                "name": c.name,
-                "poster_url": c.poster_url,
-                "backdrop_url": c.backdrop_url,
-                "total_parts": c.total_parts,
-                "watched_count": c.watched_count,
-                "in_library_count": c.in_library_count,
-                "completion_pct": c.completion_pct,
-                "parts": [_fmt_part(p) for p in c.parts],
-                "missing": [_fmt_part(p) for p in c.missing_parts],
-            }
-            for c in collections
-        ],
-        "total": len(collections),
-    }
+    coll_list = [
+        {
+            "collection_id": c.collection_id,
+            "name": c.name,
+            "poster_url": c.poster_url,
+            "backdrop_url": c.backdrop_url,
+            "total_parts": c.total_parts,
+            "watched_count": c.watched_count,
+            "in_library_count": c.in_library_count,
+            "completion_pct": c.completion_pct,
+            "parts": [_fmt_part(p) for p in c.parts],
+            "missing": [_fmt_part(p) for p in c.missing_parts],
+        }
+        for c in collections
+    ]
+
+    # Write-through cache so next navigation is instant
+    cache.set_collections(username, coll_list)
+
+    return {"username": username, "collections": coll_list, "total": len(coll_list)}
 
 
 @router.get("/collection/for/{tmdb_id}")

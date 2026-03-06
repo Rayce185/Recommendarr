@@ -342,6 +342,8 @@ app.include_router(watchlist.router,             prefix="/api/v1", tags=["watchl
 app.include_router(library.router,               prefix="/api/v1", tags=["library"])
 
 from app.api import schedule
+from app.api import browse
+app.include_router(browse.router,               prefix="/api/v1", tags=["browse"])
 app.include_router(schedule.router,              prefix="/api/v1", tags=["schedule"])
 
 

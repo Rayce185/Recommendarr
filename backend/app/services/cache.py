@@ -104,7 +104,7 @@ class RecommendationCache:
 
     # ── Collections ───────────────────────────────────────────────
 
-    COLLECTIONS_TTL = 3600  # 1 hour for collection scan results
+    COLLECTIONS_TTL = 21600  # 6 hours for collection scan results
 
     def get_collections(self, username: str) -> Optional[list]:
         key = f"coll:{username}"
@@ -126,7 +126,7 @@ class RecommendationCache:
         """Invalidate all caches for a specific user (e.g., after new watch event)."""
         removed = 0
         for cache in (self._recs, self._profiles):
-            keys = [k for k in cache if k.startswith(f"{username}:")]
+            keys = [k for k in cache if k.startswith(f"{username}:") or k == f"coll:{username}"]
             for k in keys:
                 del cache[k]
                 removed += 1

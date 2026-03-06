@@ -36,7 +36,7 @@ const api = {
     if (opts.exclude_genres) params.set("exclude_genres", opts.exclude_genres);
     if (opts.include_genres) params.set("include_genres", opts.include_genres);
     if (opts.exclude_libraries) params.set("exclude_libraries", opts.exclude_libraries);
-    if (opts.hide_watched) params.set("hide_watched", "true");
+    if (opts.watched_filter) params.set("watched_filter", opts.watched_filter);
     return authFetch(`${API_BASE}/recommend/${u}?${params}`).then(r => r.json());
   },
   moodPresets: () => authFetch(`${API_BASE}/mood/presets`).then(r => r.json()),
@@ -119,6 +119,19 @@ const api = {
   }).then(r => r.json()),
   removeFeedback: (u, tmdbId) => authFetch(`${API_BASE}/users/${u}/feedback/${tmdbId}`, { method: "DELETE" }).then(r => r.json()),
   getFeedback: (u) => authFetch(`${API_BASE}/users/${u}/feedback`).then(r => r.json()),
+  // Browse/search
+  browseSearch: (q, page = 1) => authFetch(`${API_BASE}/browse/search?q=${encodeURIComponent(q)}&page=${page}`).then(r => r.json()),
+  browseDiscover: (opts = {}) => {
+    const p = new URLSearchParams();
+    if (opts.media_type) p.set("media_type", opts.media_type);
+    if (opts.genre_id) p.set("genre_id", opts.genre_id);
+    if (opts.year_min) p.set("year_min", opts.year_min);
+    if (opts.year_max) p.set("year_max", opts.year_max);
+    if (opts.sort_by) p.set("sort_by", opts.sort_by);
+    if (opts.page) p.set("page", opts.page);
+    return authFetch(`${API_BASE}/browse/discover?${p}`).then(r => r.json());
+  },
+  browseGenres: () => authFetch(`${API_BASE}/browse/genres`).then(r => r.json()),
 };
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -163,6 +176,7 @@ const cssText = `
     --bg-surface: #181a27;
     --bg-elevated: #1e2035;
     --bg-hover: #252840;
+    --bg-card: #1a1c2e;
     --border: #2a2d45;
     --border-subtle: #1e2035;
     --text-primary: #e8e9f0;
@@ -1576,6 +1590,11 @@ const cssText = `
     border-color: rgba(34, 197, 94, 0.5);
     color: #22c55e;
   }
+  .filter-chip.chip-active {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.5);
+    color: #f59e0b;
+  }
   .filter-actions {
     display: flex;
     justify-content: space-between;
@@ -1871,7 +1890,7 @@ function MediaCard({ item, onClick, onFeedback }) {
   );
 }
 
-function DetailModal({ item, detail, onClose, onRequest, requesting, requestResult, onFeedback, user }) {
+function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest, requesting, requestResult, onFeedback, user }) {
   const d = detail || item;
   const poster = posterUrl(d.poster_url || item.poster_url, "w500");
   const backdrop = d.backdrop_url ? fixPosterUrl(d.backdrop_url) : null;
@@ -1931,9 +1950,24 @@ function DetailModal({ item, detail, onClose, onRequest, requesting, requestResu
               <div className="modal-title-meta">
                 {d.year && <span>{d.year}</span>}
                 {d.runtime && <><span className="sep">·</span><span>{d.runtime} min</span></>}
-                {d.vote_average && <><span className="sep">·</span><span>★ {d.vote_average.toFixed(1)}</span></>}
+                {d.episode_runtime && !d.runtime && <><span className="sep">·</span><span>{d.episode_runtime} min/ep</span></>}
+                {d.vote_average > 0 && <><span className="sep">·</span><span style={{ color: d.vote_average >= 7 ? "#2ecc71" : d.vote_average >= 5 ? "#f59e0b" : "#ef4444", fontWeight: 600 }}>★ {d.vote_average.toFixed(1)}</span></>}
+                {d.content_rating && <><span className="sep">·</span><span style={{ padding: "1px 6px", border: "1px solid var(--text-muted)", borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{d.content_rating}</span></>}
                 {d.media_type && <><span className="sep">·</span><span>{d.media_type === "movie" ? "Movie" : "Series"}</span></>}
+                {d.status && <><span className="sep">·</span><span style={{ color: d.status === "Ended" || d.status === "Canceled" ? "var(--text-muted)" : "#2ecc71" }}>{d.status}</span></>}
               </div>
+              {d.tagline && <div style={{ fontSize: 13, fontStyle: "italic", color: "var(--text-muted)", marginTop: 4 }}>{d.tagline}</div>}
+              {detailLoading && !detail && (
+                <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 12 }}>
+                  <Loader2 size={14} className="spinning" /> Loading details...
+                </div>
+              )}
+              {(d.number_of_seasons || d.number_of_episodes) && (
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6, display: "flex", gap: 12 }}>
+                  {d.number_of_seasons && <span>{d.number_of_seasons} Season{d.number_of_seasons !== 1 ? "s" : ""}</span>}
+                  {d.number_of_episodes && <span>{d.number_of_episodes} Episode{d.number_of_episodes !== 1 ? "s" : ""}</span>}
+                </div>
+              )}
               <div className="modal-genres">
                 {(d.genres || []).slice(0, 6).map((g, i) => <span className="genre-tag" key={i}>{typeof g === 'string' ? g : g.name}</span>)}
               </div>
@@ -1961,7 +1995,7 @@ function DetailModal({ item, detail, onClose, onRequest, requesting, requestResu
               {Object.entries(item.score_breakdown).map(([key, val]) => (
                 <div className="score-pill" key={key}>
                   <span className="score-dot" style={{ background: val > 0.5 ? "var(--green)" : val > 0 ? "var(--accent)" : "var(--text-muted)" }} />
-                  {breakdownLabels[key] || key}: {Math.round(val * 100)}%
+                  {breakdownLabels[key] || key}: {Math.round(Math.min(val, 1) * 100)}%
                 </div>
               ))}
             </div>
@@ -1972,6 +2006,49 @@ function DetailModal({ item, detail, onClose, onRequest, requesting, requestResu
           {hasTrailer && (
             <div className="modal-trailer">
               <iframe src={d.trailer_url} allow="autoplay; encrypted-media" allowFullScreen title="Trailer" />
+            </div>
+          )}
+
+          {/* Where to Watch */}
+          {d.watch_providers && Object.keys(d.watch_providers).length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Where to Watch</div>
+              {["flatrate", "rent", "buy", "free"].map(cat => {
+                const items = d.watch_providers[cat];
+                if (!items || items.length === 0) return null;
+                const catLabel = { flatrate: "Stream", rent: "Rent", buy: "Buy", free: "Free" }[cat];
+                return (
+                  <div key={cat} style={{ marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)", marginRight: 8 }}>{catLabel}:</span>
+                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      {items.map((p, i) => (
+                        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "var(--bg-card)", padding: "3px 8px", borderRadius: 6, fontSize: 12, color: "var(--text-secondary)" }}>
+                          {p.logo_path && <img src={`https://image.tmdb.org/t/p/w45${p.logo_path}`} alt="" style={{ width: 16, height: 16, borderRadius: 3 }} />}
+                          {p.provider_name}
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                );
+              })}
+              {d.watch_providers_link && (
+                <a href={d.watch_providers_link} target="_blank" rel="noopener noreferrer"
+                   style={{ fontSize: 11, color: "var(--accent)", textDecoration: "none" }}>
+                  View all options on TMDB →
+                </a>
+              )}
+            </div>
+          )}
+
+          {/* Networks / Studios */}
+          {((d.networks && d.networks.length > 0) || (d.production_companies && d.production_companies.length > 0)) && (
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 16 }}>
+              {d.networks && d.networks.length > 0 && (
+                <div style={{ marginBottom: 4 }}><span style={{ fontWeight: 600 }}>Network:</span> {d.networks.join(", ")}</div>
+              )}
+              {d.production_companies && d.production_companies.length > 0 && (
+                <div><span style={{ fontWeight: 600 }}>Studio:</span> {d.production_companies.slice(0, 3).join(", ")}</div>
+              )}
             </div>
           )}
 
@@ -2039,6 +2116,14 @@ function DetailModal({ item, detail, onClose, onRequest, requesting, requestResu
             </button>
             <button className="btn btn-secondary" onClick={() => window.open(`https://www.themoviedb.org/${item.media_type || "movie"}/${d.tmdb_id || item.tmdb_id}`, "_blank")}>
               <ExternalLink size={15} /> TMDB
+            </button>
+            {d.imdb_id && (
+              <button className="btn btn-secondary" onClick={() => window.open(`https://www.imdb.com/title/${d.imdb_id}`, "_blank")}>
+                <ExternalLink size={15} /> IMDb
+              </button>
+            )}
+            <button className="btn btn-secondary" onClick={() => window.open(`https://trakt.tv/search/tmdb/${d.tmdb_id || item.tmdb_id}?id_type=${item.media_type === "tv" ? "show" : "movie"}`, "_blank")}>
+              <ExternalLink size={15} /> Trakt
             </button>
           </div>
 
@@ -2240,19 +2325,29 @@ function FilterPanel({ filters, onChange, onApply }) {
             </div>
           </div>
 
-          {/* Watched Toggle */}
+          {/* Watched Status */}
           <div className="filter-section">
             <div className="filter-section-title">Watched Status</div>
             <div className="filter-chips">
-              <button
-                className={`filter-chip ${filters.hideWatched ? "chip-exclude" : ""}`}
-                onClick={() => {
-                  const next = { ...filters, hideWatched: !filters.hideWatched };
-                  onChange(next);
-                }}
-              >
-                {filters.hideWatched ? <><EyeOff size={12} /> Hiding watched</> : <><Eye size={12} /> Showing all</>}
-              </button>
+              {[
+                { value: "all", label: "Showing all", icon: null },
+                { value: "unseen", label: "Unseen only", icon: null },
+                { value: "seen", label: "Seen only", icon: null },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  className={`filter-chip ${(filters.watchedFilter || "all") === opt.value ? "chip-active" : ""}`}
+                  onClick={() => {
+                    const next = { ...filters, watchedFilter: opt.value };
+                    delete next.hideWatched;
+                    onChange(next);
+                  }}
+                >
+                  {opt.value === "unseen" && <EyeOff size={12} />}
+                  {opt.value === "seen" && <Eye size={12} />}
+                  {opt.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -2312,7 +2407,7 @@ function RecommendationsPage({ user, mode, onCardClick }) {
     if (f.excludeGenres?.length) opts.exclude_genres = f.excludeGenres.join(",");
     if (f.includeGenres?.length) opts.include_genres = f.includeGenres.join(",");
     if (f.excludeLibraries?.length) opts.exclude_libraries = f.excludeLibraries.join(",");
-    if (f.hideWatched) opts.hide_watched = true;
+    if (f.watchedFilter && f.watchedFilter !== 'all') opts.watched_filter = f.watchedFilter;
     api.recommend(user, mode, opts)
       .then(data => {
         const recs = data.recommendations || [];
@@ -2427,7 +2522,7 @@ function MoodPage({ user, onCardClick }) {
   const [loading, setLoading] = useState(false);
   const [presetsLoading, setPresetsLoading] = useState(true);
   const [mediaFilter, setMediaFilter] = useState("all");
-  const [hideWatched, setHideWatched] = useState(false);
+  const [watchedFilter, setWatchedFilter] = useState("all");
 
   useEffect(() => {
     api.moodPresets()
@@ -2440,7 +2535,7 @@ function MoodPage({ user, onCardClick }) {
     setLoading(true);
     setMoodInfo(null);
     const opts = { mood: q, limit: 30, domain: mediaFilter };
-    if (hideWatched) opts.hide_watched = true;
+    if (watchedFilter !== "all") opts.watched_filter = watchedFilter;
     Promise.all([
       api.recommend(user, "mood", opts),
       api.moodParse(q)
@@ -2449,7 +2544,7 @@ function MoodPage({ user, onCardClick }) {
       setMoodInfo(parseData);
     }).catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, [user, mediaFilter, hideWatched]);
+  }, [user, mediaFilter, watchedFilter]);
 
   const handlePreset = (preset) => {
     setActivePreset(preset.name);
@@ -2492,8 +2587,12 @@ function MoodPage({ user, onCardClick }) {
             <option value="anime">Anime Only</option>
           </select>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-muted)", cursor: "pointer" }}>
-            <input type="checkbox" checked={hideWatched} onChange={e => { setHideWatched(e.target.checked); if (query.trim()) search(query); }} />
-            Hide watched
+            <select value={watchedFilter} onChange={e => { setWatchedFilter(e.target.value); if (query.trim()) search(query); }}
+              style={{ background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13 }}>
+              <option value="all">All</option>
+              <option value="unseen">Unseen Only</option>
+              <option value="seen">Seen Only</option>
+            </select>
           </label>
         </div>
 
@@ -3364,6 +3463,257 @@ function WatchlistPage({ user, onCardClick }) {
 }
 
 // ─── Page: System Settings ───────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════
+// BrowsePage — Search TMDB + Discover by genre/year
+// ═══════════════════════════════════════════════════════════════
+function BrowsePage({ onCardClick }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState("discover"); // "search" | "discover"
+  const [mediaType, setMediaType] = useState("movie");
+  const [genres, setGenres] = useState({ movie_genres: [], tv_genres: [] });
+  const [selectedGenre, setSelectedGenre] = useState(null);
+  const [yearRange, setYearRange] = useState(null); // { min, max }
+  const [sortBy, setSortBy] = useState("popularity.desc");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const searchInputRef = useRef(null);
+
+  // Load genres on mount
+  useEffect(() => {
+    api.browseGenres().then(setGenres).catch(() => {});
+  }, []);
+
+  // Auto-discover on filter change
+  useEffect(() => {
+    if (mode === "discover") doDiscover(1);
+  }, [mediaType, selectedGenre, yearRange, sortBy]);
+
+  const doSearch = async (p = 1) => {
+    if (!query.trim()) return;
+    setLoading(true);
+    setMode("search");
+    try {
+      const data = await api.browseSearch(query, p);
+      if (p === 1) setResults(data.results);
+      else setResults(prev => [...prev, ...data.results]);
+      setPage(p);
+      setTotalPages(5); // TMDB multi-search doesn't return total_pages reliably
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const doDiscover = async (p = 1) => {
+    setLoading(true);
+    try {
+      const data = await api.browseDiscover({
+        media_type: mediaType,
+        genre_id: selectedGenre,
+        year_min: yearRange?.min,
+        year_max: yearRange?.max,
+        sort_by: sortBy,
+        page: p,
+      });
+      if (p === 1) setResults(data.results);
+      else setResults(prev => [...prev, ...data.results]);
+      setPage(p);
+      setTotalPages(data.total_pages || 1);
+      setTotalResults(data.total_results || 0);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const loadMore = () => {
+    if (page >= totalPages) return;
+    if (mode === "search") doSearch(page + 1);
+    else doDiscover(page + 1);
+  };
+
+  const clearSearch = () => {
+    setQuery("");
+    setMode("discover");
+    doDiscover(1);
+  };
+
+  const currentGenres = mediaType === "movie" ? genres.movie_genres : genres.tv_genres;
+
+  const decades = [
+    { label: "2020s", min: 2020, max: 2029 },
+    { label: "2010s", min: 2010, max: 2019 },
+    { label: "2000s", min: 2000, max: 2009 },
+    { label: "90s", min: 1990, max: 1999 },
+    { label: "80s", min: 1980, max: 1989 },
+    { label: "Classic", min: 1900, max: 1979 },
+  ];
+
+  const sortOptions = [
+    { value: "popularity.desc", label: "Most Popular" },
+    { value: "vote_average.desc", label: "Highest Rated" },
+    { value: "primary_release_date.desc", label: "Newest First" },
+    { value: "primary_release_date.asc", label: "Oldest First" },
+    { value: "revenue.desc", label: "Highest Revenue" },
+  ];
+
+  return (
+    <div className="page-content">
+      <div className="page-header">
+        <h1 className="page-title"><Search size={22} style={{ marginRight: 8 }} />Browse & Search</h1>
+        <p className="page-subtitle">Search TMDB or discover by genre, decade, and more</p>
+      </div>
+
+      {/* Search bar */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <div style={{ flex: 1, position: "relative" }}>
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search movies & TV shows..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") doSearch(1); }}
+            style={{
+              width: "100%", padding: "10px 40px 10px 14px", borderRadius: 10, border: "1px solid var(--border)",
+              background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: 14, outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+          {query && (
+            <button onClick={clearSearch} style={{
+              position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+              background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 4,
+            }}><X size={14} /></button>
+          )}
+        </div>
+        <button onClick={() => doSearch(1)} style={{
+          padding: "10px 20px", borderRadius: 10, border: "none", background: "var(--accent)", color: "#000",
+          fontWeight: 600, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 6,
+        }}>
+          <Search size={14} /> Search
+        </button>
+      </div>
+
+      {/* Filters — only show in discover mode */}
+      {mode === "discover" && (
+        <div style={{ marginBottom: 20 }}>
+          {/* Media type + Sort */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 2, background: "var(--bg-surface)", borderRadius: 8, padding: 2 }}>
+              {["movie", "tv"].map(mt => (
+                <button key={mt} onClick={() => { setMediaType(mt); setSelectedGenre(null); }}
+                  style={{
+                    padding: "6px 14px", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    background: mediaType === mt ? "var(--accent)" : "transparent",
+                    color: mediaType === mt ? "#000" : "var(--text-secondary)",
+                  }}>
+                  {mt === "movie" ? "Movies" : "TV Shows"}
+                </button>
+              ))}
+            </div>
+
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              style={{
+                padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-surface)",
+                color: "var(--text-secondary)", fontSize: 12, outline: "none",
+              }}>
+              {sortOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+
+            {totalResults > 0 && (
+              <span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: "auto" }}>
+                {totalResults.toLocaleString()} results
+              </span>
+            )}
+          </div>
+
+          {/* Decades */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+            <button onClick={() => setYearRange(null)}
+              className={`filter-chip ${!yearRange ? "chip-active" : ""}`}>All Years</button>
+            {decades.map(d => (
+              <button key={d.label} onClick={() => setYearRange(yearRange?.min === d.min ? null : { min: d.min, max: d.max })}
+                className={`filter-chip ${yearRange?.min === d.min ? "chip-active" : ""}`}>{d.label}</button>
+            ))}
+          </div>
+
+          {/* Genres */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button onClick={() => setSelectedGenre(null)}
+              className={`filter-chip ${!selectedGenre ? "chip-active" : ""}`}>All Genres</button>
+            {currentGenres.map(g => (
+              <button key={g.id} onClick={() => setSelectedGenre(selectedGenre === g.id ? null : g.id)}
+                className={`filter-chip ${selectedGenre === g.id ? "chip-active" : ""}`}>{g.name}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mode === "search" && query && (
+        <div style={{ marginBottom: 16 }}>
+          <button onClick={clearSearch} className="filter-chip chip-active" style={{ cursor: "pointer" }}>
+            <X size={12} /> Clear search — back to Browse
+          </button>
+        </div>
+      )}
+
+      {/* Results Grid */}
+      {loading && results.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)" }}>
+          <Loader2 size={24} className="spinning" /> Loading...
+        </div>
+      ) : results.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)" }}>
+          {mode === "search" ? "No results found." : "No titles match these filters."}
+        </div>
+      ) : (
+        <>
+          <div className="card-grid">
+            {results.map((item, idx) => (
+              <div key={`${item.tmdb_id}-${idx}`} className="media-card" onClick={() => onCardClick(item)}>
+                <div className="card-poster">
+                  {item.poster_url ? (
+                    <img src={item.poster_url} alt={item.title} loading="lazy" />
+                  ) : (
+                    <div style={{ aspectRatio: "2/3", background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 12 }}>No Poster</div>
+                  )}
+                  {item.in_library && item.is_watched && <div className="card-badge badge-watched"><Eye size={10} /> Seen</div>}
+                  {item.in_library && !item.is_watched && <div className="card-badge badge-library">In Library</div>}
+                  {item.vote_average > 0 && (
+                    <div style={{ position: "absolute", bottom: 6, right: 6, background: "rgba(0,0,0,0.75)", borderRadius: 6, padding: "2px 6px", fontSize: 11, fontWeight: 600, color: item.vote_average >= 7 ? "#2ecc71" : item.vote_average >= 5 ? "#f59e0b" : "#ef4444", display: "flex", alignItems: "center", gap: 3 }}>
+                      <Star size={10} /> {item.vote_average.toFixed(1)}
+                    </div>
+                  )}
+                </div>
+                <div className="card-info">
+                  <div className="card-title">{item.title}</div>
+                  <div className="card-meta">
+                    {item.year && <span>{item.year}</span>}
+                    {item.media_type && <><span className="sep">·</span><span>{item.media_type === "movie" ? "Movie" : "Series"}</span></>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Load More */}
+          {page < totalPages && (
+            <div style={{ textAlign: "center", marginTop: 24 }}>
+              <button onClick={loadMore} disabled={loading} style={{
+                padding: "10px 32px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-surface)",
+                color: "var(--text-primary)", fontSize: 14, fontWeight: 500, cursor: "pointer",
+              }}>
+                {loading ? <><Loader2 size={14} className="spinning" /> Loading...</> : "Load More"}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser }) {
   const [settingsTab, setSettingsTabRaw] = useState(initialSubtab || "services");
   const [devicesList, setDevicesList] = useState([]);
@@ -4232,6 +4582,7 @@ export default function Recommendarr() {
     { id: "rediscover", label: "Rediscover", icon: RefreshCw, section: "Recommendations" },
     { id: "mood", label: "Mood Match", icon: Sparkles, section: "Discovery" },
     { id: "trending", label: "Trending", icon: TrendingUp, section: "Discovery" },
+    { id: "browse", label: "Browse & Search", icon: Search, section: "Discovery" },
     { id: "collections", label: "Collections", icon: Layers, section: "Discovery" },
     { id: "watchlist", label: "Watchlist", icon: Bookmark, section: "Discovery" },
     { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
@@ -4252,6 +4603,8 @@ export default function Recommendarr() {
         return <TrendingPage onCardClick={openDetail} subtab={hashSubtab} onSubtabChange={setSubtab} />;
       case "collections":
         return <CollectionsPage user={selectedUser} onCardClick={openDetail} />;
+      case "browse":
+        return <BrowsePage onCardClick={openDetail} />;
       case "watchlist":
         return <WatchlistPage user={selectedUser} onCardClick={openDetail} />;
       case "profile":
@@ -4397,6 +4750,7 @@ export default function Recommendarr() {
         <DetailModal
           item={modalItem}
           detail={modalDetail}
+          loading={modalLoading}
           onClose={closeModal}
           onRequest={handleRequest}
           requesting={requesting}
