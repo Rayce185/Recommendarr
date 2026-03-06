@@ -140,6 +140,10 @@ const api = {
     return authFetch(`${API_BASE}/browse/discover?${p}`).then(r => r.json());
   },
   browseGenres: () => authFetch(`${API_BASE}/browse/genres`).then(r => r.json()),
+  // List Import
+  importExtract: (data) => authFetch(`${API_BASE}/import/extract`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Extract failed"); return d; })),
+  importBulkRequest: (tmdbIds) => authFetch(`${API_BASE}/import/bulk-request`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tmdb_ids: tmdbIds }) }).then(r => r.json()),
+  importBulkWatchlist: (tmdbIds) => authFetch(`${API_BASE}/import/bulk-watchlist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tmdb_ids: tmdbIds }) }).then(r => r.json()),
 };
 
 export { api, API_BASE };

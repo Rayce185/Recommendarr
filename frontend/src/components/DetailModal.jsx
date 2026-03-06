@@ -3,6 +3,7 @@ import { X, Star, Clock, Play, Download, ExternalLink, ThumbsUp, ThumbsDown, Boo
   CheckCircle2, XCircle, Film, Layers, ChevronDown, Loader2, Eye, Heart, MapPin } from "lucide-react";
 import { api, authFetch, API_BASE } from "../api.js";
 import { posterUrl, fixPosterUrl, scoreColor, scorePercent } from "../utils.js";
+import WatchProviders from "./WatchProviders.jsx";
 
 function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest, requesting, requestResult, onFeedback, user }) {
   const d = detail || item;
@@ -157,36 +158,7 @@ function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest,
             </div>
           )}
 
-          {/* Where to Watch */}
-          {d.watch_providers && Object.keys(d.watch_providers).length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Where to Watch</div>
-              {["flatrate", "rent", "buy", "free"].map(cat => {
-                const items = d.watch_providers[cat];
-                if (!items || items.length === 0) return null;
-                const catLabel = { flatrate: "Stream", rent: "Rent", buy: "Buy", free: "Free" }[cat];
-                return (
-                  <div key={cat} style={{ marginBottom: 8 }}>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", marginRight: 8 }}>{catLabel}:</span>
-                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                      {items.map((p, i) => (
-                        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "var(--bg-card)", padding: "3px 8px", borderRadius: 6, fontSize: 12, color: "var(--text-secondary)" }}>
-                          {p.logo_path && <img src={`https://image.tmdb.org/t/p/w45${p.logo_path}`} alt="" style={{ width: 16, height: 16, borderRadius: 3 }} />}
-                          {p.provider_name}
-                        </span>
-                      ))}
-                    </span>
-                  </div>
-                );
-              })}
-              {d.watch_providers_link && (
-                <a href={d.watch_providers_link} target="_blank" rel="noopener noreferrer"
-                   style={{ fontSize: 11, color: "var(--accent)", textDecoration: "none" }}>
-                  View all options on TMDB →
-                </a>
-              )}
-            </div>
-          )}
+          <WatchProviders providers={d.watch_providers} link={d.watch_providers_link} />
 
           {/* Networks / Studios */}
           {((d.networks && d.networks.length > 0) || (d.production_companies && d.production_companies.length > 0)) && (
