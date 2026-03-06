@@ -125,7 +125,7 @@ function PulsePage({ isAdmin }) {
       )}
 
       {/* Theme cards */}
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(340, 1fr))" }}>
+      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))" }}>
         {themes.map(theme => (
           <ThemeCard key={theme.id} theme={theme} isAdmin={isAdmin} onDeactivate={handleDeactivate} />
         ))}
