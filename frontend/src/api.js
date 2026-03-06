@@ -144,6 +144,14 @@ const api = {
   importExtract: (data) => authFetch(`${API_BASE}/import/extract`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Extract failed"); return d; })),
   importBulkRequest: (tmdbIds) => authFetch(`${API_BASE}/import/bulk-request`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tmdb_ids: tmdbIds }) }).then(r => r.json()),
   importBulkWatchlist: (tmdbIds) => authFetch(`${API_BASE}/import/bulk-watchlist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tmdb_ids: tmdbIds }) }).then(r => r.json()),
+  // Cultural Pulse
+  pulseThemes: (limit = 10) => authFetch(`${API_BASE}/pulse/themes?limit=${limit}`).then(r => r.json()),
+  pulseRefresh: () => authFetch(`${API_BASE}/pulse/refresh`, { method: "POST" }).then(r => r.json()),
+  pulseSources: () => authFetch(`${API_BASE}/pulse/sources`).then(r => r.json()),
+  pulseAddSource: (data) => authFetch(`${API_BASE}/pulse/sources`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  pulseUpdateSource: (id, data) => authFetch(`${API_BASE}/pulse/sources/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  pulseDeleteSource: (id) => authFetch(`${API_BASE}/pulse/sources/${id}`, { method: "DELETE" }).then(r => r.json()),
+  pulseDeactivateTheme: (id) => authFetch(`${API_BASE}/pulse/themes/${id}`, { method: "DELETE" }).then(r => r.json()),
 };
 
 export { api, API_BASE };

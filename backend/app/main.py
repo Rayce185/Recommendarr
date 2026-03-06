@@ -353,11 +353,13 @@ from app.api import browse
 from app.api import wrapped
 from app.api import social
 from app.api import list_import
+from app.api import cultural_pulse
 app.include_router(browse.router,               prefix="/api/v1", tags=["browse"])
 app.include_router(wrapped.router, prefix="/api/v1", tags=["wrapped"])
 app.include_router(social.router, prefix="/api/v1", tags=["social"])
 app.include_router(schedule.router,              prefix="/api/v1", tags=["schedule"])
 app.include_router(list_import.router,          prefix="/api/v1", tags=["import"])
+app.include_router(cultural_pulse.router,    prefix="/api/v1", tags=["pulse"])
 
 
 # ── Static files (frontend) ───────────────────────────────────────
