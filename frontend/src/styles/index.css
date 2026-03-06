@@ -1,0 +1,15 @@
+/* Recommendarr — Aggregated Styles */
+/* Split from monolithic styles.js (2267 lines) into modular CSS files */
+
+@import url('./base.css');
+@import url('./sidebar.css');
+@import url('./content.css');
+@import url('./cards.css');
+@import url('./states.css');
+@import url('./mood.css');
+@import url('./taste-profile.css');
+@import url('./admin.css');
+@import url('./detail-modal.css');
+@import url('./mobile.css');
+@import url('./world-cinema.css');
+@import url('./buzz.css');

@@ -1,0 +1,143 @@
+  /* ── Mobile Hamburger Button ── */
+  .mobile-menu-btn {
+    display: none;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 60;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-menu-btn svg { display: block; }
+
+  /* ── Mobile Overlay ── */
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 35;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── Mobile Responsive ── */
+  @media (max-width: 768px) {
+    .mobile-menu-btn { display: block; }
+    .sidebar-overlay.open { display: block; }
+
+    .sidebar {
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+    }
+    .sidebar.open {
+      transform: translateX(0);
+    }
+
+    .main-content {
+      margin-left: 0 !important;
+      width: 100%;
+    }
+    .page-header {
+      padding: 16px 16px 14px;
+      padding-top: 56px;
+    }
+    .page-body {
+      padding: 16px 12px 32px;
+    }
+    .card-grid {
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+    }
+
+    /* Modal responsive */
+    .modal-overlay .modal-content {
+      width: 95vw;
+      max-height: 90vh;
+      margin: 5vh auto;
+    }
+    .modal-body {
+      flex-direction: column !important;
+    }
+    .modal-poster {
+      width: 100% !important;
+      max-height: 260px !important;
+    }
+
+    /* Taste profile responsive */
+    .profile-grid, .stat-grid {
+      grid-template-columns: 1fr !important;
+    }
+  }
+
+/* Social */
+  .social-server-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .social-overlap-list { display: flex; flex-direction: column; gap: 12px; }
+  .social-overlap-card {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+  }
+  .social-overlap-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .social-overlap-info { flex: 1; }
+  .social-overlap-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .social-overlap-bar-track {
+    height: 6px;
+    background: var(--surface);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .social-overlap-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s ease;
+  }
+  .social-overlap-pct {
+    font-size: 16px;
+    font-weight: 700;
+    flex-shrink: 0;
+    min-width: 48px;
+    text-align: right;
+  }
+  .social-overlap-genres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .social-genre-chip {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .social-genre-chip.shared {
+    background: rgba(99,102,241,0.15);
+    color: var(--accent);
+  }
+  .social-genre-chip.unique {
+    background: rgba(234,179,8,0.15);
+    color: var(--yellow, #eab308);
+  }

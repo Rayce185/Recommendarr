@@ -1,13 +1,16 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Film, Tv, Heart, BarChart3, Settings, Play, Download, TrendingUp,
   Sparkles, X, Loader2, RefreshCw, Users, Menu, Bookmark, LogIn, LogOut,
-  Search, Globe, Layers } from "lucide-react";
-import { api, setApiToken, authFetch, API_BASE } from "./api.js";
+  Search, Globe, Layers, Eye } from "lucide-react";
+import { api, API_BASE } from "./api.js";
 import { posterUrl } from "./utils.js";
-import { cssText } from "./styles.js";
+import "./styles/index.css";
 import { LoadingState } from "./components/StateDisplays.jsx";
 import DetailModal from "./components/DetailModal.jsx";
 import { ToastContainer, useToast } from "./components/Toast.jsx";
+import { useAuth } from "./hooks/useAuth.js";
+import { useRefresh } from "./hooks/useRefresh.js";
+import { useDetailModal } from "./hooks/useDetailModal.js";
 import RecommendationsPage from "./pages/RecommendationsPage.jsx";
 import MoodPage from "./pages/MoodPage.jsx";
 import TrendingPage from "./pages/TrendingPage.jsx";
@@ -32,22 +35,19 @@ export default function Recommendarr() {
   const [view, setViewRaw] = useState(initialHash.view);
   const [hashSubtab, setHashSubtab] = useState(initialHash.subtab);
 
-  // Update hash when view changes
   const setView = useCallback((newView, subtab) => {
     setViewRaw(newView);
     setHashSubtab(subtab || null);
     const hash = subtab ? `${newView}/${subtab}` : newView;
-    window.history.replaceState(null, "", `#${hash}`);
+    window.location.hash = hash;
   }, []);
 
-  // Update hash when subtab changes (settings, trending)
   const setSubtab = useCallback((subtab) => {
     setHashSubtab(subtab);
     const hash = subtab ? `${view}/${subtab}` : view;
-    window.history.replaceState(null, "", `#${hash}`);
+    window.location.hash = hash;
   }, [view]);
 
-  // Handle browser back/forward
   useEffect(() => {
     const onHashChange = () => {
       const { view: v, subtab: s } = parseHash();
@@ -57,290 +57,32 @@ export default function Recommendarr() {
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [modalItem, setModalItem] = useState(null);
-  const [modalDetail, setModalDetail] = useState(null);
-  const [modalLoading, setModalLoading] = useState(false);
-  const [requesting, setRequesting] = useState(false);
-  const [requestResult, setRequestResult] = useState(null);
+
+  // ── Toast + Auth + Refresh hooks ──────────────────────────
   const { toasts, addToast } = useToast();
+  const {
+    authUser, authLoading, loginLoading,
+    viewAsUser, setViewAsUser, allUsers,
+    handlePlexLogin, handleLogout: authLogout,
+  } = useAuth(addToast);
+  const { refreshing, refreshProgress, lastRefreshAt, refreshEstimateMs, handleRefresh } = useRefresh(authUser, addToast);
 
-  // ── Auth state ──────────────────────────────────────────────
-  const [authUser, setAuthUser] = useState(null);        // { username, email, thumb, is_admin, plex_user_id }
-  const [authLoading, setAuthLoading] = useState(true);  // true while checking stored token on mount
-  const [loginLoading, setLoginLoading] = useState(false);
-  const pollRef = useRef(null);
-  const popupRef = useRef(null);
-
-  // ── Admin "View as" state ───────────────────────────────────
-  const [viewAsUser, setViewAsUser] = useState(null);    // null = self, or username string
-  const [allUsers, setAllUsers] = useState([]);           // [{username, thumb, friendly_name}]
-
-  // ── Refresh state ────────────────────────────────────────────
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshProgress, setRefreshProgress] = useState(null); // {step, total, label, elapsed_ms}
-  const [lastRefreshAt, setLastRefreshAt] = useState("");
-  const [refreshEstimateMs, setRefreshEstimateMs] = useState(0);
-  const refreshEventSourceRef = useRef(null);
-
-  // Derived: selectedUser respects admin "view as" override
   const selectedUser = viewAsUser || authUser?.username || null;
   const isViewingAsOther = viewAsUser && viewAsUser !== authUser?.username;
 
-  // ── Session hydration on mount ──────────────────────────────
-  useEffect(() => {
-    const stored = sessionStorage.getItem("recommendarr_token");
-    if (stored) {
-      setApiToken(stored);
-      api.authMe(stored)
-        .then(user => { setAuthUser(user); setApiToken(stored); })
-        .catch(() => { sessionStorage.removeItem("recommendarr_token"); setApiToken(null); })
-        .finally(() => setAuthLoading(false));
-    } else {
-      setAuthLoading(false);
-    }
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
+  const {
+    modalItem, modalDetail, modalLoading,
+    requesting, requestResult,
+    openDetail, closeModal, handleRequest, handleFeedback: handleModalFeedback,
+  } = useDetailModal(selectedUser, addToast);
 
-  // ── Fetch all users for admin "View as" switcher ─────────────
-  useEffect(() => {
-    if (authUser?.is_admin) {
-      api.users().then(data => {
-        const sorted = (data.users || [])
-          .filter(u => u.username)
-          .sort((a, b) => a.username.localeCompare(b.username));
-        setAllUsers(sorted);
-      }).catch(() => {});
-    } else {
-      setAllUsers([]);
-      setViewAsUser(null);
-    }
-  }, [authUser]);
-
-  // ── Fetch refresh status on mount ────────────────────────────
-  useEffect(() => {
-    if (authUser) {
-      api.refreshStatus().then(data => {
-        if (data.last_refresh_at) setLastRefreshAt(data.last_refresh_at);
-        if (data.last_refresh_ms) setRefreshEstimateMs(data.last_refresh_ms);
-      }).catch(() => {});
-    }
-  }, [authUser]);
-
-  // ── Handle refresh ─────────────────────────────────────────
-  const handleRefresh = useCallback(async () => {
-    if (refreshing) return;
-    setRefreshing(true);
-    setRefreshProgress(null);
-
-    try {
-      const { job_id, estimate_ms } = await api.refreshStart();
-      if (estimate_ms) setRefreshEstimateMs(estimate_ms);
-
-      // Connect SSE stream
-      const evtSource = new EventSource(`${API_BASE}/cache/refresh/${job_id}/stream`);
-      refreshEventSourceRef.current = evtSource;
-
-      evtSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          setRefreshProgress(data);
-          if (data.done) {
-            evtSource.close();
-            refreshEventSourceRef.current = null;
-            setRefreshing(false);
-            setLastRefreshAt(new Date().toISOString());
-            setRefreshEstimateMs(data.elapsed_ms || 0);
-            if (data.error) {
-              addToast(`Refresh completed with errors: ${data.error}`, "warning");
-            } else {
-              addToast(`Data refreshed in ${(data.elapsed_ms / 1000).toFixed(1)}s`, "success");
-            }
-          }
-        } catch (e) {}
-      };
-
-      evtSource.onerror = () => {
-        evtSource.close();
-        refreshEventSourceRef.current = null;
-        setRefreshing(false);
-        addToast("Refresh connection lost", "error");
-      };
-    } catch (err) {
-      setRefreshing(false);
-      addToast(`Refresh failed: ${err.message}`, "error");
-    }
-  }, [refreshing, addToast]);
-
-  // Cleanup SSE on unmount
-  useEffect(() => {
-    return () => { if (refreshEventSourceRef.current) refreshEventSourceRef.current.close(); };
-  }, []);
-
-  // ── Plex OAuth login (matches Overseerr flow) ───────────────
-  // Frontend handles PIN dance directly with plex.tv, then sends
-  // the resulting authToken to our backend for validation.
-  const handlePlexLogin = useCallback(async () => {
-    setLoginLoading(true);
-    try {
-      // Generate or reuse a persistent client identifier (same as Overseerr)
-      let clientId = sessionStorage.getItem("plex-client-id");
-      if (!clientId) {
-        // crypto.randomUUID() requires HTTPS — use fallback for HTTP origins
-        clientId = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
-          const r = (Math.random() * 16) | 0;
-          return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-        });
-        sessionStorage.setItem("plex-client-id", clientId);
-      }
-
-      const plexHeaders = {
-        "Accept": "application/json",
-        "X-Plex-Product": "Recommendarr",
-        "X-Plex-Version": "0.2.0",
-        "X-Plex-Client-Identifier": clientId,
-        "X-Plex-Device": navigator.platform || "Web",
-        "X-Plex-Device-Name": "Recommendarr (Web)",
-        "X-Plex-Model": "Plex OAuth",
-        "X-Plex-Platform": "Web",
-      };
-
-      // Step 1: Create PIN on plex.tv
-      const pinResp = await fetch("https://plex.tv/api/v2/pins?strong=true", {
-        method: "POST",
-        headers: plexHeaders,
-      });
-      if (!pinResp.ok) throw new Error("Failed to create PIN");
-      const pinData = await pinResp.json();
-      const pinId = pinData.id;
-      const pinCode = pinData.code;
-
-      // Step 2: Open Plex auth popup
-      const authUrl = `https://app.plex.tv/auth#!?clientID=${encodeURIComponent(clientId)}&code=${pinCode}&context%5Bdevice%5D%5Bproduct%5D=Recommendarr`;
-      const popup = window.open(authUrl, "PlexAuth", "width=600,height=700,scrollbars=yes");
-      popupRef.current = popup;
-
-      // Step 3: Poll plex.tv directly for PIN claim (every 1s, like Overseerr)
-      pollRef.current = setInterval(async () => {
-        try {
-          const checkResp = await fetch(`https://plex.tv/api/v2/pins/${pinId}`, {
-            headers: plexHeaders,
-          });
-          if (!checkResp.ok) return; // Keep polling
-          const checkData = await checkResp.json();
-
-          if (checkData.authToken) {
-            // PIN claimed — stop polling, close popup
-            clearInterval(pollRef.current);
-            pollRef.current = null;
-            if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
-
-            // Step 4: Send authToken to our backend for validation
-            try {
-              const result = await api.authPlex(checkData.authToken);
-              sessionStorage.setItem("recommendarr_token", result.token);
-              setApiToken(result.token);
-              setAuthUser(result.user);
-              addToast(`Welcome, ${result.user.username}!`, "success");
-            } catch (backendErr) {
-              addToast(backendErr.message || "Access denied.", "error");
-            }
-            setLoginLoading(false);
-          } else if (popupRef.current?.closed) {
-            // User closed popup without completing
-            clearInterval(pollRef.current);
-            pollRef.current = null;
-            setLoginLoading(false);
-          }
-        } catch (err) {
-          // Network hiccup — keep polling
-        }
-      }, 1000);
-
-      // Timeout after 5 minutes
-      setTimeout(() => {
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-          if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
-          setLoginLoading(false);
-          addToast("Login timed out. Please try again.", "error");
-        }
-      }, 300000);
-
-    } catch (err) {
-      setLoginLoading(false);
-      addToast("Failed to start Plex login. Try again.", "error");
-    }
-  }, [addToast]);
-
-  // ── Logout ─────────────────────────────────────────────────
+  // ── Wrap logout to also reset view ──────────────────────────
   const handleLogout = useCallback(() => {
-    sessionStorage.removeItem("recommendarr_token");
-    setApiToken(null);
-    setAuthUser(null);
+    authLogout();
     setView("tonight");
-    addToast("Signed out.", "success");
-  }, [addToast]);
-
-  // Open detail modal
-  const openDetail = useCallback((item) => {
-    setModalItem(item);
-    setModalDetail(null);
-    setRequestResult(null);
-    setModalLoading(true);
-    api.detail(item.tmdb_id, item.media_type || "movie")
-      .then(d => setModalDetail(d))
-      .catch(() => {})
-      .finally(() => setModalLoading(false));
-  }, []);
-
-  // Close modal
-  const closeModal = useCallback(() => {
-    setModalItem(null);
-    setModalDetail(null);
-    setRequestResult(null);
-  }, []);
-
-  // Seerr request
-  const handleRequest = useCallback((tmdbId, mediaType) => {
-    setRequesting(true);
-    api.addToLibrary(tmdbId, mediaType)
-      .then(data => {
-        setRequestResult({ success: true, already_exists: data.already_exists });
-        const msg = data.already_exists ? `"${data.title}" already in library` : `Added "${data.title}" to ${data.instance}`;
-        addToast(msg, data.already_exists ? "info" : "success");
-      })
-      .catch(err => {
-        setRequestResult({ success: false, error: err.message });
-        addToast(`Add failed: ${err.message}`, "error");
-      })
-      .finally(() => setRequesting(false));
-  }, [addToast]);
-
-  // Feedback from detail modal
-  const handleModalFeedback = useCallback((item, action) => {
-    if (!selectedUser || !item?.tmdb_id) return;
-    const username = selectedUser;
-    if (action === null) {
-      // Remove feedback
-      api.removeFeedback(username, item.tmdb_id).then(() => {
-        setModalItem(prev => prev ? { ...prev, user_feedback: null } : prev);
-        addToast("Feedback removed", "info");
-      }).catch(() => {});
-    } else {
-      api.submitFeedback(username, {
-        tmdb_id: item.tmdb_id,
-        media_type: item.media_type || "movie",
-        action,
-        title: item.title || "",
-        genres: (item.genres || []).map(g => typeof g === "string" ? g : g.name),
-      }).then(() => {
-        setModalItem(prev => prev ? { ...prev, user_feedback: action } : prev);
-        addToast(action === "up" ? "Liked!" : "Disliked", action === "up" ? "success" : "info");
-      }).catch(() => {});
-    }
-  }, [selectedUser, addToast]);
+  }, [authLogout, setView]);
 
   const navItems = [
     { id: "tonight", label: "Watch Tonight", icon: Play, section: "Recommendations" },
@@ -396,7 +138,7 @@ export default function Recommendarr() {
 
   return (
     <>
-      <style>{cssText}</style>
+
       <div className="app-layout">
         {/* Mobile hamburger */}
         <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(o => !o)}>

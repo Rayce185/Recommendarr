@@ -1,0 +1,25 @@
+/* ── Main Content ── */
+.main-content {
+  margin-left: 240px;
+  flex: 1;
+  min-height: 100vh;
+  background: var(--bg-deep);
+}
+.page-header {
+  padding: 28px 32px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+.page-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.page-header p {
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  margin-top: 4px;
+}
+.page-body {
+  padding: 24px 32px 40px;
+}

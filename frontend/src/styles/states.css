@@ -1,0 +1,15 @@
+/* ── Loading / Empty / Error States ── */
+.state-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+  gap: 12px;
+}
+.state-container svg { color: var(--text-muted); }
+.state-container h3 { color: var(--text-primary); font-size: 16px; }
+.state-container p { font-size: 13px; max-width: 320px; text-align: center; }
+.spinner { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

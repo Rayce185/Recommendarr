@@ -1,0 +1,54 @@
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    color-scheme: dark;
+    --bg-deep: #0a0b0f;
+    --bg-primary: #10111a;
+    --bg-surface: #181a27;
+    --bg-elevated: #1e2035;
+    --bg-hover: #252840;
+    --bg-card: #1a1c2e;
+    --border: #2a2d45;
+    --border-subtle: #1e2035;
+    --text-primary: #e8e9f0;
+    --text-secondary: #8b8fa3;
+    --text-muted: #5a5e75;
+    --accent: #e5a00d;
+    --accent-hover: #f0b429;
+    --accent-dim: rgba(229,160,13,0.12);
+    --accent-glow: rgba(229,160,13,0.25);
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.12);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.12);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.12);
+    --yellow: #eab308;
+    --yellow-dim: rgba(234,179,8,0.12);
+    --purple: #a855f7;
+    --purple-dim: rgba(168,85,247,0.12);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 20px;
+    --shadow-card: 0 2px 12px rgba(0,0,0,0.3);
+    --shadow-modal: 0 24px 80px rgba(0,0,0,0.6);
+    --transition: 200ms cubic-bezier(0.4,0,0.2,1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body, #root {
+    font-family: 'Outfit', -apple-system, sans-serif;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Global dark select/option — prevents white dropdown on any <select> */
+  select, select option { color-scheme: dark; background: var(--surface, #161828); color: var(--text, #e8e8f0); }
+  .app-layout {
+    display: flex;
+    min-height: 100vh;
+  }

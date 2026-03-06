@@ -1,0 +1,160 @@
+/* ── Cards Grid ── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  gap: 18px;
+}
+.media-card {
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition);
+  position: relative;
+}
+.media-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card);
+  border-color: var(--border);
+}
+.media-card:hover .card-overlay { opacity: 1; }
+.card-poster {
+  aspect-ratio: 2/3;
+  background: var(--bg-elevated);
+  position: relative;
+  overflow: hidden;
+}
+.card-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.card-poster .no-poster {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.card-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity var(--transition);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 12px;
+}
+.card-overlay .play-btn {
+  background: var(--accent);
+  color: var(--bg-deep);
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform var(--transition);
+}
+.card-overlay .play-btn:hover { transform: scale(1.1); }
+.card-score {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border-radius: 20px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  border: 1.5px solid;
+}
+.card-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.badge-library { background: var(--green-dim); color: var(--green); }
+.badge-grab { background: var(--blue-dim); color: var(--blue); }
+.badge-watched { background: rgba(255,255,255,0.12); color: var(--text-muted); }
+.badge-liked { background: rgba(34, 197, 94, 0.25); color: var(--green); }
+.badge-disliked { background: rgba(239, 68, 68, 0.25); color: var(--red); }
+.card-actions-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.card-action-btn {
+  background: rgba(255,255,255,0.12);
+  border: none;
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  transition: background 0.15s;
+}
+.card-action-btn:hover { background: rgba(255,255,255,0.25); }
+.card-feedback-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.card-fb-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  width: 28px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255,255,255,0.5);
+  transition: all 0.15s;
+}
+.card-fb-btn:hover { color: #fff; background: rgba(255,255,255,0.15); }
+.card-fb-btn.fb-up.active { background: rgba(34, 197, 94, 0.3); color: var(--green); border-color: var(--green); }
+.card-fb-btn.fb-down.active { background: rgba(239, 68, 68, 0.3); color: var(--red); border-color: var(--red); }
+.card-fb-btn.fb-dismiss.active { background: rgba(234, 179, 8, 0.3); color: var(--yellow); border-color: var(--yellow); }
+.card-info {
+  padding: 10px 11px;
+}
+.card-info h3 {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.card-meta .type-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
