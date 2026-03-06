@@ -79,6 +79,10 @@ const api = {
     if (opts.watched_filter) params.set("watched_filter", opts.watched_filter);
     return authFetch(`${API_BASE}/recommend/${username}/group?${params}`).then(r => r.json());
   },
+  wrapped: (username, year = null) => {
+    const params = year ? `?year=${year}` : "";
+    return authFetch(`${API_BASE}/users/${username}/wrapped${params}`).then(r => r.json());
+  },
   // Watchlist
   watchlist: (sort = "addedAt:desc", type = null) => {
     const params = new URLSearchParams({ sort });
@@ -1547,6 +1551,175 @@ const cssText = `
     .group-controls { flex-direction: column; }
     .group-go-btn { width: 100%; }
     .group-results-header { flex-direction: column; gap: 4px; }
+  }
+
+  /* Plex Wrapped */
+  .wrapped-hero {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .wrapped-stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+  .wrapped-stat-card.hero {
+    grid-column: span 2;
+    background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.1));
+    border-color: var(--accent);
+  }
+  .wrapped-stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.1;
+  }
+  .wrapped-stat-card.hero .wrapped-stat-value {
+    font-size: 36px;
+    color: var(--accent);
+  }
+  .wrapped-stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+  .wrapped-stat-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.7;
+    margin-top: 2px;
+  }
+  .wrapped-insight-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .wrapped-insight {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+    background: var(--surface);
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .wrapped-insight strong { color: var(--text); }
+  .wrapped-insight svg { color: var(--accent); flex-shrink: 0; }
+  .wrapped-chart-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .wrapped-chart-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 12px 0;
+  }
+  .wrapped-chart { overflow: hidden; }
+  .wrapped-chart-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 0;
+  }
+  .wrapped-genre-bars { display: flex; flex-direction: column; gap: 8px; }
+  .wrapped-genre-row { display: flex; align-items: center; gap: 10px; }
+  .wrapped-genre-name {
+    width: 100px;
+    font-size: 12px;
+    color: var(--text);
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+  }
+  .wrapped-genre-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--bg);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .wrapped-genre-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+  .wrapped-genre-count {
+    width: 30px;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .wrapped-top-list { display: flex; flex-direction: column; gap: 8px; }
+  .wrapped-top-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .wrapped-top-item:last-child { border-bottom: none; }
+  .wrapped-rank {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+    width: 30px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .wrapped-top-poster {
+    width: 36px;
+    height: 54px;
+    border-radius: 4px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .wrapped-top-info { flex: 1; }
+  .wrapped-top-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    display: block;
+  }
+  .wrapped-top-year {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .wrapped-top-plays {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .wrapped-year-select {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  @media (max-width: 768px) {
+    .wrapped-hero { grid-template-columns: 1fr 1fr; }
+    .wrapped-stat-card.hero { grid-column: span 2; }
+    .wrapped-chart-row { flex-direction: column; }
+    .wrapped-insight-row { flex-direction: column; }
   }
   .coll-missing-grid { display: flex; flex-direction: column; gap: 8px; }
   .coll-missing-item {
@@ -3219,6 +3392,265 @@ function TasteProfilePage({ user }) {
 
 
 // ─── Page: Collections ───────────────────────────────────────────
+// ─── Page: Plex Wrapped ─────────────────────────────────────────
+function WrappedPage({ user }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [year, setYear] = useState(new Date().getFullYear());
+
+  const load = useCallback(() => {
+    if (!user?.username) return;
+    setLoading(true);
+    setError(null);
+    api.wrapped(user.username, year)
+      .then(d => setData(d))
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [user?.username, year]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
+
+  if (loading) return (
+    <>
+      <div className="page-header">
+        <h2><BarChart3 size={22} style={{ verticalAlign: "text-bottom", marginRight: 6 }} />Plex Wrapped</h2>
+      </div>
+      <div className="page-body"><LoadingState message="Crunching your viewing stats..." /></div>
+    </>
+  );
+
+  if (error) return (
+    <>
+      <div className="page-header"><h2>Plex Wrapped</h2></div>
+      <div className="page-body"><ErrorState message={error} onRetry={load} /></div>
+    </>
+  );
+
+  if (!data || data.empty) return (
+    <>
+      <div className="page-header">
+        <h2>Plex Wrapped</h2>
+        <YearSelector year={year} options={yearOptions} onChange={setYear} />
+      </div>
+      <div className="page-body"><EmptyState icon={BarChart3} title="No viewing data" message={`No watch history found for ${year}.`} /></div>
+    </>
+  );
+
+  const s = data.summary;
+  const peak = data.peak;
+  const charts = data.charts;
+
+  return (
+    <>
+      <div className="page-header">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h2><BarChart3 size={22} style={{ verticalAlign: "text-bottom", marginRight: 6 }} />Plex Wrapped {year}</h2>
+          <YearSelector year={year} options={yearOptions} onChange={setYear} />
+        </div>
+        <p>Your viewing journey in numbers</p>
+      </div>
+      <div className="page-body">
+        {/* Hero stats */}
+        <div className="wrapped-hero">
+          <div className="wrapped-stat-card hero">
+            <div className="wrapped-stat-value">{s.total_hours.toLocaleString()}</div>
+            <div className="wrapped-stat-label">Hours Watched</div>
+            <div className="wrapped-stat-sub">That's {s.days_equivalent} full days of content</div>
+          </div>
+          <div className="wrapped-stat-card">
+            <div className="wrapped-stat-value">{s.movies_watched}</div>
+            <div className="wrapped-stat-label">Movies</div>
+          </div>
+          <div className="wrapped-stat-card">
+            <div className="wrapped-stat-value">{s.shows_watched}</div>
+            <div className="wrapped-stat-label">Shows</div>
+            <div className="wrapped-stat-sub">{s.episodes_watched} episodes</div>
+          </div>
+          <div className="wrapped-stat-card">
+            <div className="wrapped-stat-value">{s.avg_completion}%</div>
+            <div className="wrapped-stat-label">Avg Completion</div>
+          </div>
+          <div className="wrapped-stat-card">
+            <div className="wrapped-stat-value">{s.longest_streak_days}</div>
+            <div className="wrapped-stat-label">Day Streak</div>
+            <div className="wrapped-stat-sub">consecutive days</div>
+          </div>
+          <div className="wrapped-stat-card">
+            <div className="wrapped-stat-value">{s.binge_sessions}</div>
+            <div className="wrapped-stat-label">Binge Sessions</div>
+            <div className="wrapped-stat-sub">3+ episodes in a row</div>
+          </div>
+        </div>
+
+        {/* Peak times */}
+        <div className="wrapped-insight-row">
+          <div className="wrapped-insight">
+            <Clock size={16} />
+            <span>Peak hour: <strong>{peak.hour_label}</strong></span>
+          </div>
+          <div className="wrapped-insight">
+            <Activity size={16} />
+            <span>Most active day: <strong>{peak.day}</strong></span>
+          </div>
+          <div className="wrapped-insight">
+            <Film size={16} />
+            <span>~{s.feature_films_equivalent} feature films worth of content</span>
+          </div>
+        </div>
+
+        {/* Monthly Activity */}
+        <div className="wrapped-chart-section">
+          <h3>Monthly Activity</h3>
+          <div className="wrapped-chart" style={{ height: 220 }}>
+            <WrappedBarChart data={charts.monthly} dataKey="hours" xKey="month" color="var(--accent)" label="hours" />
+          </div>
+        </div>
+
+        {/* Hourly + Daily side by side */}
+        <div className="wrapped-chart-row">
+          <div className="wrapped-chart-section" style={{ flex: 1 }}>
+            <h3>By Hour of Day</h3>
+            <div className="wrapped-chart" style={{ height: 180 }}>
+              <WrappedBarChart data={charts.hourly} dataKey="plays" xKey="hour" color="#6366f1" />
+            </div>
+          </div>
+          <div className="wrapped-chart-section" style={{ flex: 1 }}>
+            <h3>By Day of Week</h3>
+            <div className="wrapped-chart" style={{ height: 180 }}>
+              <WrappedBarChart data={charts.daily} dataKey="plays" xKey="day" color="#8b5cf6" />
+            </div>
+          </div>
+        </div>
+
+        {/* Genre Breakdown */}
+        {charts.genres.length > 0 && (
+          <div className="wrapped-chart-section">
+            <h3>Top Genres</h3>
+            <div className="wrapped-genre-bars">
+              {charts.genres.map((g, i) => {
+                const maxCount = charts.genres[0].count;
+                const pct = (g.count / maxCount) * 100;
+                return (
+                  <div key={g.genre} className="wrapped-genre-row">
+                    <span className="wrapped-genre-name">{g.genre}</span>
+                    <div className="wrapped-genre-bar-track">
+                      <div className="wrapped-genre-bar-fill" style={{ width: `${pct}%`, opacity: 1 - (i * 0.06) }} />
+                    </div>
+                    <span className="wrapped-genre-count">{g.count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Top Movies */}
+        {/* Top Movies + Shows side by side */}
+        <div className="wrapped-chart-row">
+          {data.top_movies.length > 0 && (
+            <div className="wrapped-chart-section" style={{ flex: 1 }}>
+              <h3><Film size={16} style={{ verticalAlign: "text-bottom", marginRight: 4 }} />Most Watched Movies</h3>
+              <div className="wrapped-top-list">
+                {data.top_movies.slice(0, 5).map((m, i) => (
+                  <div key={i} className="wrapped-top-item">
+                    <span className="wrapped-rank">#{i + 1}</span>
+                    <div className="wrapped-top-info">
+                      <span className="wrapped-top-title">{m.title}</span>
+                      {m.year && <span className="wrapped-top-year">{m.year}</span>}
+                    </div>
+                    <span className="wrapped-top-plays">{m.plays}x</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {data.top_shows.length > 0 && (
+            <div className="wrapped-chart-section" style={{ flex: 1 }}>
+              <h3><Tv size={16} style={{ verticalAlign: "text-bottom", marginRight: 4 }} />Most Watched Shows</h3>
+              <div className="wrapped-top-list">
+                {data.top_shows.slice(0, 5).map((m, i) => (
+                  <div key={i} className="wrapped-top-item">
+                    <span className="wrapped-rank">#{i + 1}</span>
+                    <div className="wrapped-top-info">
+                      <span className="wrapped-top-title">{m.title}</span>
+                      {m.year && <span className="wrapped-top-year">{m.year}</span>}
+                    </div>
+                    <span className="wrapped-top-plays">{m.plays} eps</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Platforms */}
+        {charts.platforms && charts.platforms.length > 0 && (
+          <div className="wrapped-chart-section">
+            <h3><Monitor size={16} style={{ verticalAlign: "text-bottom", marginRight: 4 }} />Watching Platforms</h3>
+            <div className="wrapped-genre-bars">
+              {charts.platforms.map((p, i) => {
+                const maxCount = charts.platforms[0].count;
+                const pct = (p.count / maxCount) * 100;
+                return (
+                  <div key={p.platform} className="wrapped-genre-row">
+                    <span className="wrapped-genre-name">{p.platform}</span>
+                    <div className="wrapped-genre-bar-track">
+                      <div className="wrapped-genre-bar-fill" style={{ width: `${pct}%`, background: "#8b5cf6", opacity: 1 - (i * 0.12) }} />
+                    </div>
+                    <span className="wrapped-genre-count">{p.count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function YearSelector({ year, options, onChange }) {
+  return (
+    <select className="wrapped-year-select" value={year} onChange={e => onChange(parseInt(e.target.value))}>
+      {options.map(y => <option key={y} value={y}>{y}</option>)}
+    </select>
+  );
+}
+
+function WrappedBarChart({ data, dataKey, xKey, color, label }) {
+  // Simple SVG bar chart — no external dependency needed
+  if (!data || data.length === 0) return null;
+  const maxVal = Math.max(...data.map(d => d[dataKey]), 1);
+  const barWidth = Math.max(100 / data.length - 1, 2);
+
+  return (
+    <svg viewBox={`0 0 ${data.length * (barWidth + 1)} 100`} preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
+      {data.map((d, i) => {
+        const h = (d[dataKey] / maxVal) * 85;
+        return (
+          <g key={i}>
+            <rect
+              x={i * (barWidth + 1)}
+              y={100 - h}
+              width={barWidth}
+              height={h}
+              fill={color}
+              rx={1}
+              opacity={0.85}
+            >
+              <title>{d[xKey]}: {d[dataKey]} {label || ""}</title>
+            </rect>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 function GroupNightPage({ user, allUsers, onCardClick }) {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [domain, setDomain] = useState("all");
@@ -4982,6 +5414,7 @@ export default function Recommendarr() {
     { id: "group", label: "Group Night", icon: Users, section: "Discovery" },
     { id: "watchlist", label: "Watchlist", icon: Bookmark, section: "Discovery" },
     { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
+    { id: "wrapped", label: "Plex Wrapped", icon: BarChart3, section: "Profile" },
     { id: "admin", label: "System Settings", icon: Settings, section: "Admin" },
   ];
 
@@ -5007,6 +5440,8 @@ export default function Recommendarr() {
         return <WatchlistPage user={selectedUser} onCardClick={openDetail} />;
       case "profile":
         return <TasteProfilePage user={selectedUser} />;
+      case "wrapped":
+        return <WrappedPage user={selectedUser} />;
       case "admin":
         return <AdminPage subtab={hashSubtab} onSubtabChange={setSubtab} user={authUser?.username} />;
       default:
