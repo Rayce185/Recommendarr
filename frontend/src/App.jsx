@@ -19,6 +19,7 @@ import WatchlistPage from "./pages/WatchlistPage.jsx";
 import BrowsePage from "./pages/BrowsePage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import SocialPage from "./pages/SocialPage.jsx";
+import WorldCinemaPage from "./pages/WorldCinemaPage.jsx";
 
 export default function Recommendarr() {
   // ── Hash-based routing ──────────────────────────────────────
@@ -348,6 +349,7 @@ export default function Recommendarr() {
     { id: "mood", label: "Mood Match", icon: Sparkles, section: "Discovery" },
     { id: "trending", label: "Trending", icon: TrendingUp, section: "Discovery" },
     { id: "browse", label: "Browse & Search", icon: Search, section: "Discovery" },
+    { id: "world-cinema", label: "World Cinema", icon: Globe, section: "Discovery" },
     { id: "collections", label: "Collections", icon: Layers, section: "Discovery" },
     { id: "group", label: "Group Night", icon: Users, section: "Discovery" },
     { id: "watchlist", label: "Watchlist", icon: Bookmark, section: "Discovery" },
@@ -375,6 +377,8 @@ export default function Recommendarr() {
         return <GroupNightPage user={selectedUser} allUsers={allUsers} onCardClick={openDetail} />;
       case "browse":
         return <BrowsePage onCardClick={openDetail} />;
+      case "world-cinema":
+        return <WorldCinemaPage user={selectedUser} onCardClick={openDetail} />;
       case "watchlist":
         return <WatchlistPage user={selectedUser} onCardClick={openDetail} />;
       case "profile":

@@ -943,3 +943,32 @@ async def get_collection_for_movie(
         "parts": parts,
         "missing": missing,
     }
+
+
+# ── World Cinema Map ─────────────────────────────────────────────
+
+@router.get("/discover/world-cinema")
+async def get_world_cinema_map(
+    username: Optional[str] = Query(None, description="Username for taste matching"),
+):
+    """World cinema map with per-country taste match scores.
+
+    Returns all featured countries grouped by region. If username is provided,
+    each country gets a taste_match score (0-1) based on genre affinity.
+    """
+    from app.services.world_cinema import get_world_cinema_map as _get_map
+
+    user_genres = None
+    if username:
+        try:
+            stack = get_stack()
+            cache = get_cache()
+            profile = cache.get_profile(username, "all")
+            if not profile:
+                profile = await stack.profiler.build_profile(username=username, domain="all", enrich_keywords=False)
+                cache.set_profile(username, "all", profile)
+            user_genres = {g.genre: g.score for g in profile.genres}
+        except Exception as e:
+            import logging; logging.getLogger(__name__).warning(f"Could not build taste profile for world cinema: {e}")
+
+    return _get_map(user_genres)

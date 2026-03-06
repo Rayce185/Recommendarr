@@ -1995,6 +1995,187 @@ const cssText = `
     background: rgba(234,179,8,0.15);
     color: var(--yellow, #eab308);
   }
+
+  /* ── World Cinema Map ─────────────────────────────────────── */
+  .wc-top-matches {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .wc-top-matches h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  .wc-top-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .wc-top-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    transition: transform 0.15s;
+  }
+  .wc-top-chip:hover { transform: translateY(-1px); }
+  .wc-top-pct { font-weight: 600; font-size: 12px; opacity: 0.8; }
+
+  .wc-region {
+    margin-bottom: 16px;
+  }
+  .wc-region-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  .wc-region-header:hover { background: rgba(255,255,255,0.06); }
+  .wc-region-count {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-secondary);
+  }
+
+  .wc-country-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    padding: 12px 0;
+  }
+  .wc-country-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: left;
+    color: var(--text);
+    transition: all 0.15s;
+  }
+  .wc-country-card:hover {
+    background: rgba(255,255,255,0.06);
+    transform: translateY(-2px);
+  }
+  .wc-country-card.selected {
+    border-color: var(--accent);
+    background: rgba(99,102,241,0.08);
+  }
+  .wc-card-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wc-flag { font-size: 20px; }
+  .wc-name { font-weight: 600; font-size: 13px; }
+
+  .wc-match-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 14px;
+  }
+  .wc-match-bar {
+    height: 4px;
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+  .wc-match-pct {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 28px;
+  }
+
+  .wc-labels {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .wc-label {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgba(99,102,241,0.12);
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .wc-notable {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.3;
+  }
+
+  /* Trending results section */
+  .wc-trending-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .wc-trending-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .wc-trending-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 16px;
+  }
+  .wc-match-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .wc-match-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .wc-match-genres {
+    opacity: 0.7;
+  }
+
+  @media (max-width: 768px) {
+    .wc-country-grid {
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+  }
+
 `;
 
 export { cssText };
