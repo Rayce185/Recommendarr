@@ -1930,7 +1930,7 @@ function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest,
     setCollRequestingId(null);
   };
 
-  const breakdownLabels = { genre: "Genre", keyword: "Keyword", rating: "Rating", personnel: "Cast/Crew", popularity: "Popular", mood: "Mood" };
+  const breakdownLabels = { genre: "Genre Match", keyword: "Theme Match", rating: "Rating Fit", personnel: "Cast/Crew Match", popularity: "Popularity", mood: "Mood Fit", staleness: "Time Since Watched", completion: "Watch Completion" };
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -1990,14 +1990,48 @@ function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest,
             </div>
           )}
 
+          {/* External Ratings */}
+          {(d.vote_average > 0 || d.imdb_id) && (
+            <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+              {d.vote_average > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--bg-card)", padding: "6px 12px", borderRadius: 8, border: "1px solid var(--border)" }}>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: d.vote_average >= 7 ? "#2ecc71" : d.vote_average >= 5 ? "#f59e0b" : "#ef4444" }}>
+                    {d.vote_average.toFixed(1)}
+                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase" }}>TMDB</span>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{d.vote_count?.toLocaleString()} votes</span>
+                  </div>
+                </div>
+              )}
+              {d.imdb_id && (
+                <a href={`https://www.imdb.com/title/${d.imdb_id}`} target="_blank" rel="noopener noreferrer"
+                   style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--bg-card)", padding: "6px 12px", borderRadius: 8, border: "1px solid var(--border)", textDecoration: "none", color: "var(--text-secondary)", fontSize: 12, fontWeight: 600 }}>
+                  <span style={{ color: "#f5c518", fontWeight: 700, fontSize: 14 }}>IMDb</span>
+                  <ExternalLink size={10} />
+                </a>
+              )}
+              {d.tmdb_id && (
+                <a href={`https://www.themoviedb.org/${item.media_type || d.media_type || "movie"}/${d.tmdb_id}`} target="_blank" rel="noopener noreferrer"
+                   style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--bg-card)", padding: "6px 12px", borderRadius: 8, border: "1px solid var(--border)", textDecoration: "none", color: "var(--text-secondary)", fontSize: 12, fontWeight: 600 }}>
+                  <span style={{ color: "#01d277", fontWeight: 700, fontSize: 13 }}>TMDB</span>
+                  <ExternalLink size={10} />
+                </a>
+              )}
+            </div>
+          )}
+
           {item.score_breakdown && (
-            <div className="modal-score-row">
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Why we recommended this</div>
+              <div className="modal-score-row">
               {Object.entries(item.score_breakdown).map(([key, val]) => (
-                <div className="score-pill" key={key}>
+                <div className="score-pill" key={key} title={`How well this title matches your taste profile for ${(breakdownLabels[key] || key).toLowerCase()}`}>
                   <span className="score-dot" style={{ background: val > 0.5 ? "var(--green)" : val > 0 ? "var(--accent)" : "var(--text-muted)" }} />
                   {breakdownLabels[key] || key}: {Math.round(Math.min(val, 1) * 100)}%
                 </div>
               ))}
+            </div>
             </div>
           )}
 
