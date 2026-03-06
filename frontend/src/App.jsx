@@ -73,6 +73,12 @@ const api = {
   cacheDetailed: () => authFetch(`${API_BASE}/system/settings/cache`).then(r => r.json()),
   collections: (u) => authFetch(`${API_BASE}/recommend/${u}/collections`).then(r => r.json()),
   collectionFor: (tmdbId) => authFetch(`${API_BASE}/collection/for/${tmdbId}`).then(r => { if (r.status === 204) return null; return r.json(); }),
+  groupRecommend: (username, users, opts = {}) => {
+    const params = new URLSearchParams({ users: users.join(","), limit: opts.limit || 30 });
+    if (opts.domain && opts.domain !== "all") params.set("domain", opts.domain);
+    if (opts.watched_filter) params.set("watched_filter", opts.watched_filter);
+    return authFetch(`${API_BASE}/recommend/${username}/group?${params}`).then(r => r.json());
+  },
   // Watchlist
   watchlist: (sort = "addedAt:desc", type = null) => {
     const params = new URLSearchParams({ sort });
@@ -1342,6 +1348,206 @@ const cssText = `
     color: var(--text-secondary); margin: 0 0 10px 0; font-weight: 600;
   }
   .modal-collection-missing h4 svg { color: var(--accent); }
+
+  /* Group Night */
+  .group-selector {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .group-selector-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .group-selector-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .group-selector-count {
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .group-selector-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+  }
+  .btn-text {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .btn-text:hover { background: var(--accent-dim); }
+  .group-user-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .group-user-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+  }
+  .group-user-chip:hover { border-color: var(--accent); background: rgba(99,102,241,0.05); }
+  .group-user-chip.selected {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .group-user-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .group-user-avatar-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .group-user-name {
+    font-size: 13px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+  .group-self-badge {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    background: rgba(99,102,241,0.15);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .group-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+  }
+  .group-check.checked {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: white;
+  }
+  .group-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .group-go-btn {
+    flex: 1;
+    padding: 10px 16px !important;
+    font-size: 14px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .group-results-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .group-results-count {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .group-results-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .group-card-wrapper {
+    display: flex;
+    flex-direction: column;
+  }
+  .group-score-breakdown {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .group-user-score {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .group-user-score-name {
+    font-size: 10px;
+    color: var(--text-muted);
+    width: 55px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+  }
+  .group-user-score-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--bg);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .group-user-score-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+  .group-user-score-pct {
+    font-size: 10px;
+    font-weight: 600;
+    width: 28px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  @media (max-width: 768px) {
+    .group-user-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .group-controls { flex-direction: column; }
+    .group-go-btn { width: 100%; }
+    .group-results-header { flex-direction: column; gap: 4px; }
+  }
   .coll-missing-grid { display: flex; flex-direction: column; gap: 8px; }
   .coll-missing-item {
     display: flex; align-items: center; gap: 10px; padding: 8px;
@@ -3013,6 +3219,160 @@ function TasteProfilePage({ user }) {
 
 
 // ─── Page: Collections ───────────────────────────────────────────
+function GroupNightPage({ user, allUsers, onCardClick }) {
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [domain, setDomain] = useState("all");
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [meta, setMeta] = useState(null);
+
+  // Pre-select the logged-in user
+  useEffect(() => {
+    if (user?.username && selectedUsers.length === 0) {
+      setSelectedUsers([user.username]);
+    }
+  }, [user?.username]);
+
+  const toggleUser = (username) => {
+    setSelectedUsers(prev =>
+      prev.includes(username) ? prev.filter(u => u !== username) : [...prev, username]
+    );
+  };
+
+  const selectAll = () => setSelectedUsers((allUsers || []).map(u => u.username));
+  const selectNone = () => setSelectedUsers(user?.username ? [user.username] : []);
+
+  const findGroupPicks = () => {
+    if (selectedUsers.length < 2) return;
+    setLoading(true);
+    setError(null);
+    api.groupRecommend(user.username, selectedUsers, { domain, limit: 30, watched_filter: "unseen" })
+      .then(data => {
+        setItems(data.recommendations || []);
+        setMeta(data.meta || null);
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  };
+
+  const sortedUsers = [...(allUsers || [])].sort((a, b) => {
+    // Current user first, then active users, then alphabetical
+    if (a.username === user?.username) return -1;
+    if (b.username === user?.username) return 1;
+    if (a.is_active && !b.is_active) return -1;
+    if (!a.is_active && b.is_active) return 1;
+    return a.friendly_name.localeCompare(b.friendly_name);
+  });
+
+  return (
+    <>
+      <div className="page-header">
+        <h2><Users size={22} style={{ verticalAlign: "text-bottom", marginRight: 6 }} />Group Night</h2>
+        <p>Find something everyone will enjoy — picks scored against all selected users</p>
+      </div>
+      <div className="page-body">
+        {/* User Selector */}
+        <div className="group-selector">
+          <div className="group-selector-header">
+            <span className="group-selector-label">Who's watching?</span>
+            <span className="group-selector-count">{selectedUsers.length} selected</span>
+            <div className="group-selector-actions">
+              <button className="btn-text" onClick={selectAll}>All</button>
+              <button className="btn-text" onClick={selectNone}>Reset</button>
+            </div>
+          </div>
+          <div className="group-user-grid">
+            {sortedUsers.map(u => {
+              const selected = selectedUsers.includes(u.username);
+              const isSelf = u.username === user?.username;
+              return (
+                <div
+                  key={u.username}
+                  className={`group-user-chip ${selected ? "selected" : ""} ${isSelf ? "is-self" : ""}`}
+                  onClick={() => toggleUser(u.username)}
+                >
+                  {u.thumb ? (
+                    <img src={u.thumb} alt="" className="group-user-avatar" />
+                  ) : (
+                    <div className="group-user-avatar group-user-avatar-placeholder">
+                      {(u.friendly_name || u.username).charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="group-user-name">{u.friendly_name || u.username}</span>
+                  {isSelf && <span className="group-self-badge">you</span>}
+                  <div className={`group-check ${selected ? "checked" : ""}`}>
+                    {selected && <CheckCircle2 size={14} />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="group-controls">
+            <div className="filter-group" style={{ minWidth: 120 }}>
+              <label>Content</label>
+              <select value={domain} onChange={e => setDomain(e.target.value)}>
+                <option value="all">All</option>
+                <option value="movies">Movies</option>
+                <option value="tv">TV Shows</option>
+                <option value="anime">Anime</option>
+              </select>
+            </div>
+            <button
+              className="btn btn-primary group-go-btn"
+              onClick={findGroupPicks}
+              disabled={selectedUsers.length < 2 || loading}
+            >
+              {loading ? <><Loader2 size={15} className="spin" /> Analyzing tastes...</> :
+               selectedUsers.length < 2 ? "Select at least 2 people" :
+               <><Sparkles size={15} /> Find Group Picks</>}
+            </button>
+          </div>
+        </div>
+
+        {/* Results */}
+        {error && <ErrorState message={error} onRetry={findGroupPicks} />}
+        {!loading && items.length > 0 && (
+          <>
+            <div className="group-results-header">
+              <span className="group-results-count">{items.length} picks for {selectedUsers.length} people</span>
+              <span className="group-results-hint">Scored so nobody hates the pick — 70% worst-case, 30% average appeal</span>
+            </div>
+            <div className="card-grid">
+              {items.map((item, i) => (
+                <div key={`${item.tmdb_id}-${i}`} className="group-card-wrapper">
+                  <MediaCard item={item} onClick={onCardClick} />
+                  {item.explanation && (
+                    <div className="group-score-breakdown">
+                      {item.explanation.replace("Group fit: ", "").split(" / ").map((part, j) => {
+                        const [uname, pct] = part.split(":");
+                        const pctNum = parseFloat(pct);  // already percentage from backend
+                        const color = pctNum >= 70 ? "var(--green)" : pctNum >= 50 ? "var(--yellow, #eab308)" : "var(--red, #ef4444)";
+                        return (
+                          <div key={j} className="group-user-score">
+                            <span className="group-user-score-name">{uname}</span>
+                            <div className="group-user-score-bar">
+                              <div className="group-user-score-fill" style={{ width: `${Math.min(pctNum, 100)}%`, background: color }} />
+                            </div>
+                            <span className="group-user-score-pct" style={{ color }}>{pctNum.toFixed(0)}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        {!loading && !error && items.length === 0 && meta && (
+          <EmptyState icon={Users} title="No group picks found" message="Try selecting different users or changing the content filter." />
+        )}
+      </div>
+    </>
+  );
+}
+
 function CollectionsPage({ user, onCardClick }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -4619,6 +4979,7 @@ export default function Recommendarr() {
     { id: "trending", label: "Trending", icon: TrendingUp, section: "Discovery" },
     { id: "browse", label: "Browse & Search", icon: Search, section: "Discovery" },
     { id: "collections", label: "Collections", icon: Layers, section: "Discovery" },
+    { id: "group", label: "Group Night", icon: Users, section: "Discovery" },
     { id: "watchlist", label: "Watchlist", icon: Bookmark, section: "Discovery" },
     { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
     { id: "admin", label: "System Settings", icon: Settings, section: "Admin" },
@@ -4638,6 +4999,8 @@ export default function Recommendarr() {
         return <TrendingPage onCardClick={openDetail} subtab={hashSubtab} onSubtabChange={setSubtab} />;
       case "collections":
         return <CollectionsPage user={selectedUser} onCardClick={openDetail} />;
+      case "group":
+        return <GroupNightPage user={selectedUser} allUsers={allUsers} onCardClick={openDetail} />;
       case "browse":
         return <BrowsePage onCardClick={openDetail} />;
       case "watchlist":
