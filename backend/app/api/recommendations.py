@@ -784,10 +784,11 @@ async def get_collections(
 ):
     """Get partially completed movie collections for a user.
     
-    Scans library movies for franchise collections (TMDB),
-    cross-references with user's watch history, returns
-    collections sorted by completion percentage (most complete first).
+    Uses stale-while-revalidate: returns cached data instantly (even if stale),
+    triggers background refresh if data is older than TTL.
     """
+    import asyncio
+
     if user.username != username and not user.is_admin:
         raise HTTPException(403, "Cannot view other users' collections")
 
@@ -795,51 +796,71 @@ async def get_collections(
     if not stack.tmdb:
         raise HTTPException(503, "TMDB client not configured — set TMDB_API_KEY")
 
-    # Check collection cache first
+    # L1: In-memory cache (fastest)
     from app.services.cache import get_cache
     cache = get_cache()
     cached_colls = cache.get_collections(username)
     if cached_colls is not None:
         return {"username": username, "collections": cached_colls, "total": len(cached_colls), "cached": True}
 
-    # Lazy-init collection service (reuse across requests)
+    # Lazy-init collection service
     if not hasattr(stack, "_collection_svc") or stack._collection_svc is None:
         stack._collection_svc = CollectionService(stack.tmdb, stack.radarr, stack.tautulli)
 
-    collections = await stack._collection_svc.get_user_collections(username)
+    # L2: SQLite persistent cache (survives restarts)
+    sqlite_data, is_fresh = stack._collection_svc.get_cached_results(username)
 
+    if sqlite_data is not None:
+        # Promote to L1
+        cache.set_collections(username, sqlite_data)
+        if not is_fresh:
+            # Stale — serve immediately but refresh in background
+            asyncio.create_task(_refresh_collections_bg(username, stack, cache))
+        return {"username": username, "collections": sqlite_data, "total": len(sqlite_data), "cached": True, "stale": not is_fresh}
+
+    # L3: Full TMDB scan (cold start — only happens once per user ever)
+    collections = await stack._collection_svc.get_user_collections(username)
+    coll_list = _format_collections(collections)
+
+    # Persist to both L1 and L2
+    cache.set_collections(username, coll_list)
+    stack._collection_svc._persist_results(username, coll_list)
+
+    return {"username": username, "collections": coll_list, "total": len(coll_list)}
+
+
+def _format_collections(collections):
+    """Format UserCollection list into API response dicts."""
     def _fmt_part(p):
         return {
-            "tmdb_id": p.tmdb_id,
-            "title": p.title,
-            "year": p.year,
-            "poster_url": p.poster_url,
-            "vote_average": p.vote_average,
-            "in_library": p.in_library,
-            "watched": p.watched,
+            "tmdb_id": p.tmdb_id, "title": p.title, "year": p.year,
+            "poster_url": p.poster_url, "vote_average": p.vote_average,
+            "in_library": p.in_library, "watched": p.watched,
             "release_date": p.release_date,
         }
-
-    coll_list = [
+    return [
         {
-            "collection_id": c.collection_id,
-            "name": c.name,
-            "poster_url": c.poster_url,
-            "backdrop_url": c.backdrop_url,
-            "total_parts": c.total_parts,
-            "watched_count": c.watched_count,
-            "in_library_count": c.in_library_count,
-            "completion_pct": c.completion_pct,
+            "collection_id": c.collection_id, "name": c.name,
+            "poster_url": c.poster_url, "backdrop_url": c.backdrop_url,
+            "total_parts": c.total_parts, "watched_count": c.watched_count,
+            "in_library_count": c.in_library_count, "completion_pct": c.completion_pct,
             "parts": [_fmt_part(p) for p in c.parts],
             "missing": [_fmt_part(p) for p in c.missing_parts],
         }
         for c in collections
     ]
 
-    # Write-through cache so next navigation is instant
-    cache.set_collections(username, coll_list)
 
-    return {"username": username, "collections": coll_list, "total": len(coll_list)}
+async def _refresh_collections_bg(username: str, stack, cache):
+    """Background task: refresh stale collection data."""
+    try:
+        collections = await stack._collection_svc.get_user_collections(username)
+        coll_list = _format_collections(collections)
+        cache.set_collections(username, coll_list)
+        stack._collection_svc._persist_results(username, coll_list)
+        logger.info(f"Background collection refresh complete for {username}: {len(coll_list)} collections")
+    except Exception as e:
+        logger.warning(f"Background collection refresh failed for {username}: {e}")
 
 
 @router.get("/collection/for/{tmdb_id}")

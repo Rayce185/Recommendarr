@@ -189,6 +189,7 @@ async def _run_refresh(job_id: str, username: str):
                 for c in collections
             ]
             cache.set_collections(username, coll_list)
+            stack._collection_svc._persist_results(username, coll_list)
             logger.info(f"Refresh: collections pre-warmed — {len(coll_list)} collections")
         except Exception as e:
             logger.warning(f"Refresh: collections pre-warm failed: {e}")

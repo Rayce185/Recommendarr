@@ -215,6 +215,12 @@ async def lifespan(app: FastAPI):
                         s._collection_svc = CollectionService(s.tmdb, s.radarr, s.tautulli)
                     for username in active:
                         try:
+                            # Skip if SQLite already has fresh data
+                            sqlite_data, is_fresh = s._collection_svc.get_cached_results(username)
+                            if is_fresh:
+                                cache.set_collections(username, sqlite_data)
+                                logger.info(f"Collections: {username} — served from SQLite L2 (fresh, skipping TMDB scan)")
+                                continue
                             _start = _t2.monotonic()
                             colls = await s._collection_svc.get_user_collections(username)
                             # Cache the serialized response (same format as API)
@@ -239,6 +245,7 @@ async def lifespan(app: FastAPI):
                                                  "release_date": p.release_date} for p in c.missing_parts],
                                 })
                             cache.set_collections(username, coll_data)
+                            s._collection_svc._persist_results(username, coll_data)
                             logger.info(f"Collections warmed: {username} ({len(colls)} collections, {_t2.monotonic()-_start:.1f}s)")
                         except Exception as e:
                             logger.warning(f"Collection warming failed for {username}: {e}")
