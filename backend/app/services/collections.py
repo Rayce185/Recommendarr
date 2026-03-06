@@ -37,6 +37,8 @@ class UserCollection:
 class CollectionService:
     """Finds partially watched franchises for a user."""
 
+    DB_PATH = "/app/data/recommendarr.db"
+
     def __init__(self, tmdb, radarr, tautulli):
         self.tmdb = tmdb
         self.radarr = radarr
@@ -45,6 +47,41 @@ class CollectionService:
         self._movie_coll: dict[int, int | None] = {}
         # Cache: collection_id → full data
         self._coll_cache: dict[int, dict] = {}
+        # Load persisted collection membership from SQLite
+        self._init_persistent_cache()
+
+    def _init_persistent_cache(self):
+        """Load movie→collection mapping from SQLite to survive container restarts."""
+        import sqlite3
+        try:
+            conn = sqlite3.connect(self.DB_PATH)
+            c = conn.cursor()
+            c.execute("""CREATE TABLE IF NOT EXISTS movie_collection_map (
+                tmdb_id INTEGER PRIMARY KEY,
+                collection_id INTEGER
+            )""")
+            conn.commit()
+            c.execute("SELECT tmdb_id, collection_id FROM movie_collection_map")
+            for tid, cid in c.fetchall():
+                self._movie_coll[tid] = cid
+            conn.close()
+            if self._movie_coll:
+                logger.info(f"Loaded {len(self._movie_coll)} movie→collection mappings from SQLite")
+        except Exception as e:
+            logger.warning(f"Could not load collection cache from SQLite: {e}")
+
+    def _persist_movie_coll(self, tmdb_id: int, collection_id: int | None):
+        """Save a single movie→collection mapping to SQLite."""
+        import sqlite3
+        try:
+            conn = sqlite3.connect(self.DB_PATH)
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO movie_collection_map (tmdb_id, collection_id) VALUES (?, ?)",
+                      (tmdb_id, collection_id))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass  # Non-critical — in-memory cache still works
 
     async def get_user_collections(self, username: str) -> list[UserCollection]:
         """Get collections with completion status for a specific user."""
@@ -78,7 +115,9 @@ class CollectionService:
             async def check_one(tid):
                 async with sem:
                     result = await self.tmdb.get_movie_collection_id(tid)
-                    self._movie_coll[tid] = result["id"] if result else None
+                    cid = result["id"] if result else None
+                    self._movie_coll[tid] = cid
+                    self._persist_movie_coll(tid, cid)
 
             await asyncio.gather(*[check_one(tid) for tid in unchecked],
                                   return_exceptions=True)
