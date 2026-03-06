@@ -61,34 +61,60 @@ class PlexClient:
         except Exception:
             return False
 
-    async def build_tmdb_map(self, force: bool = False):
-        """Scan all library sections, extract tmdb GUIDs → ratingKey mapping."""
+    async def build_tmdb_map(self, force: bool = False, tvdb_to_tmdb: dict[int, int] | None = None):
+        """Scan all library sections, extract tmdb GUIDs → ratingKey mapping.
+
+        Args:
+            force: Rebuild even if cache is fresh.
+            tvdb_to_tmdb: Optional {tvdb_id: tmdb_id} bridge from Sonarr.
+                          Used to resolve anime items that only have tvdb:// GUIDs in Plex.
+        """
         if not force and self._tmdb_map and (time.time() - self._map_built_at) < self._map_ttl:
             return  # Cache still fresh
 
         new_map: dict[str, int] = {}
         new_section_map: dict[str, str] = {}
         new_watched_map: dict[str, int] = {}
+        tvdb_unresolved: list[tuple[int, int, str, str]] = []  # (tvdb_id, rating_key, media_label, section_title)
         sections_raw = await self._get_sections()
 
         self._sections = []
         for sec_key, sec_type, sec_title in sections_raw:
             self._sections.append({"key": sec_key, "title": sec_title, "type": sec_type})
             try:
-                items, watched = await self._get_section_guids(sec_key, sec_type)
+                items, watched, tvdb_only = await self._get_section_guids(sec_key, sec_type)
                 new_map.update(items)
                 new_watched_map.update(watched)
                 # Tag each item with its section name
                 for tmdb_key in items:
                     new_section_map[tmdb_key] = sec_title
+                # Collect tvdb-only items for bridge resolution
+                for tvdb_id, rating_key in tvdb_only.items():
+                    tvdb_unresolved.append((tvdb_id, rating_key, sec_type, sec_title))
             except Exception as e:
                 logger.warning(f"Failed to scan section {sec_key}: {e}")
+
+        # Resolve tvdb-only items via Sonarr bridge
+        bridge = tvdb_to_tmdb or {}
+        resolved_count = 0
+        for tvdb_id, rating_key, media_label, sec_title in tvdb_unresolved:
+            tmdb_id = bridge.get(tvdb_id)
+            if tmdb_id:
+                key = f"{media_label}:{tmdb_id}"
+                new_map[key] = rating_key
+                new_section_map[key] = sec_title
+                resolved_count += 1
 
         self._tmdb_map = new_map
         self._section_map = new_section_map
         self._watched_map = new_watched_map
         self._map_built_at = time.time()
-        logger.info(f"Plex TMDB map built: {len(new_map)} items across {len(self._sections)} sections")
+        tvdb_total = len(tvdb_unresolved)
+        if tvdb_total > 0:
+            logger.info(f"Plex TMDB map built: {len(new_map)} items across {len(self._sections)} sections "
+                        f"({resolved_count}/{tvdb_total} tvdb-only items resolved via Sonarr bridge)")
+        else:
+            logger.info(f"Plex TMDB map built: {len(new_map)} items across {len(self._sections)} sections")
 
     async def _get_sections(self) -> list[tuple[str, str, str]]:
         """Get library section keys, types, and titles."""
@@ -108,13 +134,18 @@ class PlexClient:
                 result.append((d.get("key"), stype, d.get("title", "")))
         return result
 
-    async def _get_section_guids(self, section_key: str, section_type: str) -> tuple[dict[str, int], dict[str, int]]:
-        """Scan one library section for TMDB GUIDs and watched status."""
+    async def _get_section_guids(self, section_key: str, section_type: str) -> tuple[dict[str, int], dict[str, int], dict[int, int]]:
+        """Scan one library section for TMDB GUIDs, watched status, and tvdb-only items.
+
+        Returns (tmdb_mapping, watched_mapping, tvdb_only_mapping).
+        tvdb_only_mapping: {tvdb_id: rating_key} for items that lack a tmdb:// GUID.
+        """
         plex_type = "1" if section_type == "movie" else "2"
         media_label = section_type  # "movie" or "show"
 
         mapping: dict[str, int] = {}
         watched: dict[str, int] = {}
+        tvdb_only: dict[int, int] = {}  # tvdb_id → ratingKey (no tmdb GUID)
         async with httpx.AsyncClient(timeout=60) as c:
             r = await c.get(
                 f"{self.url}/library/sections/{section_key}/all",
@@ -135,6 +166,8 @@ class PlexClient:
             if not rating_key:
                 continue
             view_count = int(item.get("viewCount", 0) or 0)
+            found_tmdb = False
+            tvdb_id_found = None
             for guid in item.findall(".//Guid"):
                 gid = guid.get("id", "")
                 m = re.match(r"tmdb://(\d+)", gid)
@@ -144,9 +177,16 @@ class PlexClient:
                     mapping[key] = int(rating_key)
                     if view_count > 0:
                         watched[key] = view_count
+                    found_tmdb = True
                     break
+                m_tvdb = re.match(r"tvdb://(\d+)", gid)
+                if m_tvdb:
+                    tvdb_id_found = int(m_tvdb.group(1))
+            # Items with only tvdb GUID — need Sonarr bridge to resolve tmdb ID
+            if not found_tmdb and tvdb_id_found is not None:
+                tvdb_only[tvdb_id_found] = int(rating_key)
 
-        return mapping, watched
+        return mapping, watched, tvdb_only
 
     def get_plex_url(self, tmdb_id: int, media_type: str) -> Optional[str]:
         """Get Plex web deep link for a TMDB ID. Returns None if not in library."""

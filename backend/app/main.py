@@ -94,7 +94,19 @@ async def lifespan(app: FastAPI):
                 if plex_ok:
                     if not stack.plex.machine_id:
                         await stack.plex.init()
-                    await stack.plex.build_tmdb_map()
+                    # Build tvdb→tmdb bridge from Sonarr for anime library exclusion
+                    tvdb_to_tmdb: dict[int, int] = {}
+                    for sonarr_name, sonarr_client in [("sonarr_tv", stack.sonarr_tv), ("sonarr_anime", stack.sonarr_anime)]:
+                        try:
+                            all_series = await sonarr_client.get_all_series()
+                            for s in all_series:
+                                if s.tvdb_id and s.tmdb_id:
+                                    tvdb_to_tmdb[s.tvdb_id] = s.tmdb_id
+                        except Exception as e:
+                            logger.warning(f"Could not build tvdb bridge from {sonarr_name}: {e}")
+                    if tvdb_to_tmdb:
+                        logger.info(f"Sonarr tvdb→tmdb bridge: {len(tvdb_to_tmdb)} mappings")
+                    await stack.plex.build_tmdb_map(tvdb_to_tmdb=tvdb_to_tmdb)
                     logger.info(f"Plex TMDB map: {stack.plex.map_size} items across {len(stack.plex.sections)} sections")
                     break
                 else:

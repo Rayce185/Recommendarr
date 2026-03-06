@@ -95,6 +95,43 @@ async def system_stats():
     return stats
 
 
+
+
+@router.get("/debug/section-map")
+async def debug_section_map():
+    """Debug: Show section map distribution and sample entries."""
+    stack = get_stack()
+    if not stack.plex:
+        return {"error": "Plex not configured"}
+
+    # Count items per section
+    section_counts = {}
+    for key, sec_name in stack.plex._section_map.items():
+        section_counts[sec_name] = section_counts.get(sec_name, 0) + 1
+
+    # Sample entries per section (first 3)
+    section_samples = {}
+    for key, sec_name in stack.plex._section_map.items():
+        if sec_name not in section_samples:
+            section_samples[sec_name] = []
+        if len(section_samples[sec_name]) < 3:
+            section_samples[sec_name].append(key)
+
+    # Test specific lookups
+    test_lookups = {}
+    test_ids = [1429, 100565, 67043]  # Attack on Titan, 86, 91 Days
+    for tid in test_ids:
+        section = stack.plex.get_section_name(tid, "tv")
+        test_lookups[f"show:{tid}"] = section
+
+    return {
+        "total_items": len(stack.plex._section_map),
+        "section_counts": section_counts,
+        "section_samples": section_samples,
+        "test_lookups": test_lookups,
+        "sections": stack.plex.sections,
+    }
+
 @router.get("/genres")
 async def get_genres():
     """All available genre lists from TMDB via Seerr."""

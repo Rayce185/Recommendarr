@@ -539,17 +539,38 @@ class RecommendationEngine:
 
     # ── Scoring Engine ───────────────────────────────────────────
 
+    # Section names whose exclusion implies genre exclusion.
+    # Anime sections are type=show only, so anime movies/TMDB items
+    # in other sections (e.g., "Movies") need genre-level filtering.
+    _SECTION_GENRE_MAP: dict[str, set[str]] = {
+        "anime":        {"anime"},
+        "anime-ecchi":  {"anime"},
+        "anime-hentai": {"anime"},
+    }
+
     def _apply_filters(self, candidates: list[dict], req) -> list[dict]:
         """Apply genre and library section filters to candidate list."""
         filtered = candidates
 
-        # Genre exclusion
-        if req.exclude_genres:
-            excl = {g.lower() for g in req.exclude_genres}
+        # Derive genre exclusions from library section exclusions.
+        # Anime library sections are show-type only — anime movies and
+        # non-library TMDB items live outside those sections, so section
+        # exclusion alone cannot catch them.  Auto-inject the matching
+        # genre exclusion so the filter works across all modes/types.
+        derived_genres: set[str] = set()
+        if req.exclude_libraries:
+            for lib in req.exclude_libraries:
+                extra = self._SECTION_GENRE_MAP.get(lib.lower(), set())
+                derived_genres |= extra
+
+        # Genre exclusion (explicit + derived from library exclusions)
+        excl_genres = {g.lower() for g in req.exclude_genres} if req.exclude_genres else set()
+        excl_genres |= derived_genres
+        if excl_genres:
             filtered = [
                 c for c in filtered
                 if not any(
-                    (g.lower() if isinstance(g, str) else g.get("name", "").lower()) in excl
+                    (g.lower() if isinstance(g, str) else g.get("name", "").lower()) in excl_genres
                     for g in c.get("genres", [])
                 )
             ]
