@@ -1,0 +1,143 @@
+// ─── API Client & Auth ───────────────────────────────────────────
+const API_BASE = "/api/v1";
+
+let _authToken = null;
+export function setApiToken(token) { _authToken = token; }
+export function authFetch(url, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (_authToken) headers["Authorization"] = `Bearer ${_authToken}`;
+  return fetch(url, { ...opts, headers });
+}
+
+const api = {
+  // Auth — backend only receives the final token (like Overseerr)
+  authPlex: (authToken) => fetch(`${API_BASE}/auth/plex`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ authToken }),
+  }).then(r => { if (!r.ok) return r.json().then(d => { throw new Error(d.detail || "Auth failed"); }); return r.json(); }),
+  authMe: (token) => fetch(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` } }).then(r => { if (!r.ok) throw new Error("Invalid token"); return r.json(); }),
+
+  // Data (all use authFetch for JWT)
+  health: () => authFetch(`${API_BASE}/health`).then(r => r.json()),
+  stats: () => authFetch(`${API_BASE}/stats`).then(r => r.json()),
+  users: () => authFetch(`${API_BASE}/users`).then(r => r.json()),
+  userProfile: (u) => authFetch(`${API_BASE}/users/${u}/profile`).then(r => r.json()),
+  userHistory: (u) => authFetch(`${API_BASE}/users/${u}/history`).then(r => r.json()),
+  recommend: (u, mode, opts = {}) => {
+    const params = new URLSearchParams({ mode, limit: opts.limit || 20 });
+    if (opts.domain && opts.domain !== "all") params.set("domain", opts.domain);
+    if (opts.mood) params.set("mood", opts.mood);
+    if (opts.refresh) params.set("refresh", "true");
+    if (opts.exclude_genres) params.set("exclude_genres", opts.exclude_genres);
+    if (opts.include_genres) params.set("include_genres", opts.include_genres);
+    if (opts.exclude_libraries) params.set("exclude_libraries", opts.exclude_libraries);
+    if (opts.watched_filter) params.set("watched_filter", opts.watched_filter);
+    return authFetch(`${API_BASE}/recommend/${u}?${params}`).then(r => r.json());
+  },
+  moodPresets: () => authFetch(`${API_BASE}/mood/presets`).then(r => r.json()),
+  moodParse: (q) => authFetch(`${API_BASE}/mood/parse?q=${encodeURIComponent(q)}`).then(r => r.json()),
+  detail: (id, mediaType = "movie") => authFetch(`${API_BASE}/detail/${id}?media_type=${mediaType}`).then(r => r.json()),
+  filterOptions: () => authFetch(`${API_BASE}/filters/options`).then(r => r.json()),
+  watchlistAdd: (tmdbId, mediaType) => authFetch(`${API_BASE}/watchlist/add/${tmdbId}?media_type=${mediaType}`, { method: "POST" }).then(r => r.json()),
+  watchlistRemove: (tmdbId, mediaType) => authFetch(`${API_BASE}/watchlist/remove/${tmdbId}?media_type=${mediaType}`, { method: "POST" }).then(r => r.json()),
+  trending: (limit = 20) => authFetch(`${API_BASE}/discover/trending?limit=${limit}`).then(r => r.json()),
+  trendingExpanded: (source, opts = {}) => {
+    const params = new URLSearchParams({ source });
+    if (opts.media_type) params.set("media_type", opts.media_type);
+    if (opts.region) params.set("region", opts.region);
+    if (opts.provider_id) params.set("provider_id", opts.provider_id);
+    if (opts.days) params.set("days", opts.days);
+    if (opts.page) params.set("page", opts.page);
+    return authFetch(`${API_BASE}/discover/trending?${params}`).then(r => r.json());
+  },
+  trendingCountries: () => authFetch(`${API_BASE}/discover/countries`).then(r => r.json()),
+  trendingProviders: (region = "CH") => authFetch(`${API_BASE}/discover/providers?country=${region}`).then(r => r.json()),
+  getSchedule: (u) => authFetch(`${API_BASE}/schedule/${u}`).then(r => r.json()),
+  suggestSchedule: (u) => authFetch(`${API_BASE}/schedule/${u}/suggest`).then(r => r.json()),
+  updateSchedule: (u, data) => authFetch(`${API_BASE}/schedule/${u}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  systemSettings: () => authFetch(`${API_BASE}/system/settings`).then(r => r.json()),
+  systemSettingsEdit: () => authFetch(`${API_BASE}/system/settings?edit=true`).then(r => r.json()),
+  updateSettings: (data) => authFetch(`${API_BASE}/system/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings: data }) }).then(r => r.json()),
+  aiConfig: (edit = false) => authFetch(`${API_BASE}/system/ai/config?edit=${edit}`).then(r => r.json()),
+  aiProviders: () => authFetch(`${API_BASE}/system/ai/providers`).then(r => r.json()),
+  aiUpdateConfig: (data) => authFetch(`${API_BASE}/system/ai/config`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  aiTest: (data) => authFetch(`${API_BASE}/system/ai/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  aiModels: (data) => authFetch(`${API_BASE}/system/ai/models`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  aiReset: () => authFetch(`${API_BASE}/system/ai/config/reset`, { method: "POST" }).then(r => r.json()),
+  testConnection: (service) => authFetch(`${API_BASE}/system/settings/test-connection?service=${service}`, { method: "POST" }).then(r => r.json()),
+  cacheDetailed: () => authFetch(`${API_BASE}/system/settings/cache`).then(r => r.json()),
+  collections: (u) => authFetch(`${API_BASE}/recommend/${u}/collections`).then(r => r.json()),
+  collectionFor: (tmdbId) => authFetch(`${API_BASE}/collection/for/${tmdbId}`).then(r => { if (r.status === 204) return null; return r.json(); }),
+  groupRecommend: (username, users, opts = {}) => {
+    const params = new URLSearchParams({ users: users.join(","), limit: opts.limit || 30 });
+    if (opts.domain && opts.domain !== "all") params.set("domain", opts.domain);
+    if (opts.watched_filter) params.set("watched_filter", opts.watched_filter);
+    return authFetch(`${API_BASE}/recommend/${username}/group?${params}`).then(r => r.json());
+  },
+  wrapped: (username, year = null) => {
+    const params = year ? `?year=${year}` : "";
+    return authFetch(`${API_BASE}/users/${username}/wrapped${params}`).then(r => r.json());
+  },
+  // Watchlist
+  watchlist: (sort = "addedAt:desc", type = null) => {
+    const params = new URLSearchParams({ sort });
+    if (type) params.set("type", type);
+    return authFetch(`${API_BASE}/watchlist?${params}`).then(r => r.json());
+  },
+  watchlistDelete: (tmdbId, mediaType = "movie") => authFetch(`${API_BASE}/watchlist/${tmdbId}?media_type=${mediaType}`, { method: "DELETE" }).then(r => r.json()),
+  addToLibrary: (tmdbId, mediaType, opts = {}) => authFetch(`${API_BASE}/library/add`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tmdb_id: tmdbId, media_type: mediaType, ...opts }),
+  }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Add failed"); return d; })),
+  routePreview: (tmdbId, mediaType) => authFetch(`${API_BASE}/library/route-preview?tmdb_id=${tmdbId}&media_type=${mediaType}`, { method: "POST" }).then(r => r.json()),
+  // Devices & Playback
+  devices: () => authFetch(`${API_BASE}/devices`).then(r => r.json()),
+  playOnDevice: (tmdbId, mediaType = "movie", deviceId = null) => {
+    const params = new URLSearchParams({ media_type: mediaType });
+    if (deviceId) params.set("device_id", deviceId);
+    return authFetch(`${API_BASE}/play/${tmdbId}?${params}`, { method: "POST" }).then(r => r.json());
+  },
+  // User Preferences
+  preferences: () => authFetch(`${API_BASE}/preferences`).then(r => r.json()),
+  updatePreferences: (data) => authFetch(`${API_BASE}/preferences`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  resetPreference: (key) => authFetch(`${API_BASE}/preferences/${key}`, { method: "DELETE" }).then(r => r.json()),
+  globalPreferences: () => authFetch(`${API_BASE}/preferences/global`).then(r => r.json()),
+  updateGlobalPreferences: (data) => authFetch(`${API_BASE}/preferences/global`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  cacheClear: (scope = "all") => authFetch(`${API_BASE}/system/settings/cache/clear?scope=${scope}`, { method: "POST" }).then(r => r.json()),
+  refreshStart: () => authFetch(`${API_BASE}/cache/refresh`, { method: "POST" }).then(r => r.json()),
+  refreshStatus: () => authFetch(`${API_BASE}/cache/refresh/status`).then(r => r.json()),
+  getOverrides: (u) => authFetch(`${API_BASE}/users/${u}/profile/overrides`).then(r => r.json()),
+  saveOverrides: (u, data) => authFetch(`${API_BASE}/users/${u}/profile/overrides`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+  }).then(r => r.json()),
+  similar: (id) => authFetch(`${API_BASE}/discover/similar/${id}?limit=6`).then(r => r.json()),
+  genres: () => authFetch(`${API_BASE}/genres`).then(r => r.json()),
+  request: (id, type) => authFetch(`${API_BASE}/request/${id}?media_type=${type || "movie"}`, {
+    method: "POST",
+  }).then(r => r.json()),
+  userPeers: (u) => authFetch(`${API_BASE}/users/${u}/peers`).then(r => r.json()),
+  submitFeedback: (u, data) => authFetch(`${API_BASE}/users/${u}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  }).then(r => r.json()),
+  removeFeedback: (u, tmdbId) => authFetch(`${API_BASE}/users/${u}/feedback/${tmdbId}`, { method: "DELETE" }).then(r => r.json()),
+  getFeedback: (u) => authFetch(`${API_BASE}/users/${u}/feedback`).then(r => r.json()),
+  // Browse/search
+  browseSearch: (q, page = 1) => authFetch(`${API_BASE}/browse/search?q=${encodeURIComponent(q)}&page=${page}`).then(r => r.json()),
+  browseDiscover: (opts = {}) => {
+    const p = new URLSearchParams();
+    if (opts.media_type) p.set("media_type", opts.media_type);
+    if (opts.genre_id) p.set("genre_id", opts.genre_id);
+    if (opts.year_min) p.set("year_min", opts.year_min);
+    if (opts.year_max) p.set("year_max", opts.year_max);
+    if (opts.sort_by) p.set("sort_by", opts.sort_by);
+    if (opts.page) p.set("page", opts.page);
+    return authFetch(`${API_BASE}/browse/discover?${p}`).then(r => r.json());
+  },
+  browseGenres: () => authFetch(`${API_BASE}/browse/genres`).then(r => r.json()),
+};
+
+export { api, API_BASE };
