@@ -351,8 +351,10 @@ app.include_router(library.router,               prefix="/api/v1", tags=["librar
 from app.api import schedule
 from app.api import browse
 from app.api import wrapped
+from app.api import social
 app.include_router(browse.router,               prefix="/api/v1", tags=["browse"])
 app.include_router(wrapped.router, prefix="/api/v1", tags=["wrapped"])
+app.include_router(social.router, prefix="/api/v1", tags=["social"])
 app.include_router(schedule.router,              prefix="/api/v1", tags=["schedule"])
 
 

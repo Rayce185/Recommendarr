@@ -1927,7 +1927,74 @@ const cssText = `
       grid-template-columns: 1fr !important;
     }
   }
-`;
 
+/* Social */
+  .social-server-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .social-overlap-list { display: flex; flex-direction: column; gap: 12px; }
+  .social-overlap-card {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+  }
+  .social-overlap-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .social-overlap-info { flex: 1; }
+  .social-overlap-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .social-overlap-bar-track {
+    height: 6px;
+    background: var(--surface);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .social-overlap-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s ease;
+  }
+  .social-overlap-pct {
+    font-size: 16px;
+    font-weight: 700;
+    flex-shrink: 0;
+    min-width: 48px;
+    text-align: right;
+  }
+  .social-overlap-genres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .social-genre-chip {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .social-genre-chip.shared {
+    background: rgba(99,102,241,0.15);
+    color: var(--accent);
+  }
+  .social-genre-chip.unique {
+    background: rgba(234,179,8,0.15);
+    color: var(--yellow, #eab308);
+  }
+`;
 
 export { cssText };

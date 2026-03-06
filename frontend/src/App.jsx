@@ -18,6 +18,7 @@ import CollectionsPage from "./pages/CollectionsPage.jsx";
 import WatchlistPage from "./pages/WatchlistPage.jsx";
 import BrowsePage from "./pages/BrowsePage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
+import SocialPage from "./pages/SocialPage.jsx";
 
 export default function Recommendarr() {
   // ── Hash-based routing ──────────────────────────────────────
@@ -352,6 +353,7 @@ export default function Recommendarr() {
     { id: "watchlist", label: "Watchlist", icon: Bookmark, section: "Discovery" },
     { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
     { id: "wrapped", label: "Plex Wrapped", icon: BarChart3, section: "Profile" },
+    { id: "social", label: "Social", icon: Users, section: "Profile" },
     { id: "admin", label: "System Settings", icon: Settings, section: "Admin" },
   ];
 
@@ -379,6 +381,8 @@ export default function Recommendarr() {
         return <TasteProfilePage user={selectedUser} />;
       case "wrapped":
         return <WrappedPage user={selectedUser} />;
+      case "social":
+        return <SocialPage user={selectedUser} />;
       case "admin":
         return <AdminPage subtab={hashSubtab} onSubtabChange={setSubtab} user={authUser?.username} />;
       default:
