@@ -972,3 +972,37 @@ async def get_world_cinema_map(
             import logging; logging.getLogger(__name__).warning(f"Could not build taste profile for world cinema: {e}")
 
     return _get_map(user_genres)
+
+
+# ── Talk of the Web (Reddit Buzz) ────────────────────────────────
+
+@router.get("/discover/buzz")
+async def get_reddit_buzz_endpoint(
+    subreddits: Optional[str] = Query(None, description="Comma-separated subreddit names"),
+    limit: int = Query(15, ge=5, le=30, description="Posts per subreddit"),
+    enrich: bool = Query(True, description="Cross-reference with TMDB"),
+):
+    """Talk of the Web — Reddit-powered film/TV buzz.
+
+    Fetches top posts from film/TV subreddits, extracts title mentions,
+    and optionally enriches with TMDB metadata.
+    """
+    from app.services.reddit_buzz import get_reddit_buzz, SOURCES
+
+    stack = get_stack()
+    sub_list = subreddits.split(",") if subreddits else None
+
+    items = await get_reddit_buzz(
+        seerr_client=stack.seerr,
+        subreddits=sub_list,
+        limit_per_sub=limit,
+        enrich_tmdb=enrich,
+    )
+
+    available_subs = [{"name": s["sub"], "label": s["label"], "category": s["category"]} for s in SOURCES]
+
+    return {
+        "results": items,
+        "total": len(items),
+        "sources": available_subs,
+    }

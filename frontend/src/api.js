@@ -53,6 +53,7 @@ const api = {
   },
   trendingCountries: () => authFetch(`${API_BASE}/discover/countries`).then(r => r.json()),
   trendingProviders: (region = "CH") => authFetch(`${API_BASE}/discover/providers?country=${region}`).then(r => r.json()),
+  buzz: (subs) => authFetch(`${API_BASE}/discover/buzz${subs ? '?subreddits=' + encodeURIComponent(subs) : ''}`).then(r => r.json()),
   worldCinemaMap: (username) => authFetch(`${API_BASE}/discover/world-cinema${username ? "?username=" + encodeURIComponent(username) : ""}`).then(r => r.json()),
   getSchedule: (u) => authFetch(`${API_BASE}/schedule/${u}`).then(r => r.json()),
   suggestSchedule: (u) => authFetch(`${API_BASE}/schedule/${u}/suggest`).then(r => r.json()),

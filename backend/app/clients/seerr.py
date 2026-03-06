@@ -202,7 +202,16 @@ class SeerrClient:
 
     async def search(self, query: str, page: int = 1) -> list[SeerrDiscoverResult]:
         """Search movies + TV by text query."""
-        d = await self._get("/search", {"query": query, "page": page, "language": "en"})
+        from urllib.parse import quote
+        # Seerr requires %20 encoding for spaces (rejects + encoding)
+        encoded_query = quote(query, safe='')
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                f"{self.url}/api/v1/search?query={encoded_query}&page={page}&language=en",
+                headers={"X-Api-Key": self.api_key},
+            )
+            resp.raise_for_status()
+            d = resp.json()
         return [
             self._parse_discover_result(r, r.get("mediaType", "movie"))
             for r in d.get("results", [])

@@ -2176,6 +2176,92 @@ const cssText = `
     }
   }
 
+
+  /* ── Talk of the Web (Buzz) ───────────────────────────────── */
+  .buzz-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .buzz-card {
+    display: flex;
+    gap: 12px;
+    padding: 14px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: background 0.15s;
+  }
+  .buzz-card:hover { background: rgba(255,255,255,0.05); }
+  .buzz-card.has-media { border-left: 3px solid var(--accent); }
+
+  .buzz-poster {
+    width: 60px;
+    height: 90px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .buzz-poster:hover { transform: scale(1.05); }
+
+  .buzz-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .buzz-source {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+  }
+  .buzz-sub {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .buzz-stats {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--text-secondary);
+  }
+  .buzz-title {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--text);
+  }
+  .buzz-match {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .buzz-match strong { color: var(--text); }
+  .buzz-rating {
+    color: #eab308;
+    margin-left: 6px;
+    font-weight: 600;
+  }
+  .buzz-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    margin-top: 2px;
+    width: fit-content;
+  }
+  .buzz-link:hover { color: var(--accent); }
+
+  @media (max-width: 768px) {
+    .buzz-poster { width: 48px; height: 72px; }
+  }
+
 `;
 
 export { cssText };
