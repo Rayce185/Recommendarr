@@ -176,8 +176,8 @@ class CollectionService:
         uid = resolve_user_id(username)
 
         # 1. Get user's watched movies
-        history = await self.tautulli.get_history(user_id=None, limit=10000)
-        user_movies = [e for e in history if e.user_id == uid and e.media_type == "movie"]
+        history = await self.tautulli.get_history(user_id=uid, limit=5000)
+        user_movies = [e for e in history if e.media_type == "movie"]
 
         # 2. Resolve TMDB IDs for entries missing them
         needs_resolve = [(e.item_key, e.media_type) for e in user_movies if not e.tmdb_id]

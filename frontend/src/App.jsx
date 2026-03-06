@@ -1567,10 +1567,10 @@ const cssText = `
   }
   .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .filter-chip {
-    padding: 4px 10px;
+    padding: 5px 12px;
     border-radius: 16px;
-    border: 1px solid var(--border);
-    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.04);
     color: var(--text-secondary);
     font-size: 12px;
     cursor: pointer;
@@ -1578,8 +1578,9 @@ const cssText = `
     align-items: center;
     gap: 4px;
     transition: all 0.15s;
+    font-weight: 500;
   }
-  .filter-chip:hover { border-color: var(--text-secondary); }
+  .filter-chip:hover { border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.08); }
   .filter-chip.chip-exclude {
     background: rgba(239, 68, 68, 0.15);
     border-color: rgba(239, 68, 68, 0.5);

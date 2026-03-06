@@ -290,8 +290,8 @@ class RecommendationEngine:
 
         # Source 3: Similar to user's top-rated watched titles
         # Get a few high-completion titles from history
-        history = await self.tautulli.get_history(user_id=None, limit=3000)
-        user_events = [e for e in history if e.user_id == req._uid and e.tmdb_id and e.completion_pct >= 85]
+        history = await self.tautulli.get_history(user_id=req._uid, limit=3000)
+        user_events = [e for e in history if e.tmdb_id and e.completion_pct >= 85]
         # Pick up to 3 random high-completion titles as similarity seeds
         seeds = random.sample(user_events, min(3, len(user_events))) if user_events else []
         for seed in seeds:
@@ -344,8 +344,8 @@ class RecommendationEngine:
     async def _rediscover(self, req: RecommendationRequest) -> list[Recommendation]:
         """Titles the user watched and liked, but haven't touched in a while."""
         cache = get_cache()
-        history = await self.tautulli.get_history(user_id=None, limit=10000)
-        user_events = [e for e in history if e.user_id == req._uid]
+        history = await self.tautulli.get_history(user_id=req._uid, limit=5000)
+        user_events = history
 
         # Group by item
         from collections import defaultdict
@@ -721,12 +721,14 @@ class RecommendationEngine:
                 if genre in mood.genre_block:
                     return 0.0, breakdown, ["Blocked by mood filter"]  # Hard filter
 
-            # Check keyword alignment
-            for kw in c_keywords:
-                if kw in mood.keyword_boost:
-                    mood_score += 0.3
-                if kw in mood.keyword_block:
-                    mood_score -= 0.5
+            # Check keyword alignment — keywords are the precision filter
+            kw_hits = sum(1 for kw in c_keywords if kw in mood.keyword_boost)
+            kw_blocks = sum(1 for kw in c_keywords if kw in mood.keyword_block)
+            mood_score += kw_hits * 0.4  # Strong boost per keyword hit
+            mood_score -= kw_blocks * 0.5
+            # Penalize items with ZERO keyword matches when mood has keyword requirements
+            if mood.keyword_boost and kw_hits == 0:
+                mood_score -= 0.4  # Significant penalty for missing all keywords
 
             # Runtime filter
             runtime = candidate.get("runtime") or 0
