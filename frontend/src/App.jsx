@@ -24,6 +24,7 @@ import SocialPage from "./pages/SocialPage.jsx";
 import ListImportPage from "./pages/ListImportPage.jsx";
 import PulsePage from "./pages/PulsePage.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
+import HistoryPage from "./pages/HistoryPage.jsx";
 import NotificationBell from "./components/NotificationBell.jsx";
 import ThemeToggle from "./components/ThemeToggle.jsx";
 import WorldCinemaPage from "./pages/WorldCinemaPage.jsx";
@@ -118,6 +119,8 @@ export default function Recommendarr() {
         return <WrappedPage user={selectedUser} />;
       case "social":
         return <SocialPage user={selectedUser} />;
+      case "history":
+        return <HistoryPage user={selectedUser} onCardClick={openDetail} />;
       case "pulse":
         return <PulsePage isAdmin={authUser?.is_admin} />;
       case "calendar":

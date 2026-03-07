@@ -1,7 +1,7 @@
 import {
   Play, Download, RefreshCw, Sparkles, TrendingUp, Search, Globe,
   Layers, Users, Bookmark, Upload, Activity, CalendarDays,
-  Heart, BarChart3, Settings,
+  Heart, BarChart3, Settings, History,
 } from "lucide-react";
 
 const navItems = [
@@ -21,6 +21,7 @@ const navItems = [
   { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
   { id: "wrapped", label: "Plex Wrapped", icon: BarChart3, section: "Profile" },
   { id: "social", label: "Social", icon: Users, section: "Profile" },
+  { id: "history", label: "Rec History", icon: History, section: "Profile" },
   { id: "admin", label: "System Settings", icon: Settings, section: "Admin" },
 ];
 

@@ -157,6 +157,16 @@ const api = {
   pulseUpdateSource: (id, data) => authFetch(`${API_BASE}/pulse/sources/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
   pulseDeleteSource: (id) => authFetch(`${API_BASE}/pulse/sources/${id}`, { method: "DELETE" }).then(r => r.json()),
   pulseDeactivateTheme: (id) => authFetch(`${API_BASE}/pulse/themes/${id}`, { method: "DELETE" }).then(r => r.json()),
+
+  // History
+  recHistory: (u, opts = {}) => {
+    const params = new URLSearchParams({ limit: opts.limit || 50, offset: opts.offset || 0 });
+    if (opts.mode) params.set("mode", opts.mode);
+    if (opts.media_type) params.set("media_type", opts.media_type);
+    return authFetch(`${API_BASE}/users/${u}/rec-history?${params}`).then(r => r.json());
+  },
+  recHistoryStats: (u) => authFetch(`${API_BASE}/users/${u}/rec-history/stats`).then(r => r.json()),
+  recHistoryInteraction: (u, tmdbId, interaction) => authFetch(`${API_BASE}/users/${u}/rec-history/${tmdbId}/interaction?interaction=${interaction}`, { method: "POST" }).then(r => r.json()),
 };
 
 export { api, API_BASE };

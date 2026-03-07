@@ -19,6 +19,7 @@ from app.services.ai_mood import parse_mood_ai
 from app.services.ai_explanations import generate_explanations, build_profile_summary
 from app.services.profile_overrides import get_override_store
 from app.services.feedback import get_feedback_store
+from app.services.rec_history import log_recommendations
 from app.services.cache import get_cache
 
 # Modular imports
@@ -120,6 +121,13 @@ class RecommendationEngine:
             results = [r for r in results if getattr(r, 'tmdb_id', None) not in dismissed]
             if before != len(results):
                 logger.info(f"Filtered {before - len(results)} dismissed items for {request.username}")
+        # Log recommendations to history DB (non-blocking best-effort)
+        if results:
+            try:
+                log_recommendations(request.username, results, request.mode)
+            except Exception as e:
+                logger.warning(f"rec_history logging failed: {e}")
+
         return results
 
     # ── Profile and cache management ─────────────────────────────
