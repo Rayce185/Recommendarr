@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, Star, Clock, Play, Download, ExternalLink, ThumbsUp, ThumbsDown, Bookmark,
-  CheckCircle2, XCircle, Film, Layers, ChevronDown, Loader2, Eye, Heart, MapPin } from "lucide-react";
+  CheckCircle2, XCircle, Film, Layers, ChevronDown, Loader2, Eye, Heart, MapPin, Sparkles } from "lucide-react";
 import { api, authFetch, API_BASE } from "../api.js";
 import { posterUrl, fixPosterUrl, scoreColor, scorePercent } from "../utils.js";
 import WatchProviders from "./WatchProviders.jsx";
+import WhyNotPanel from "./WhyNotPanel.jsx";
 
 function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest, requesting, requestResult, onFeedback, user }) {
   const d = detail || item;
@@ -207,6 +208,9 @@ function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest,
               </button>
             </div>
           )}
+
+          {/* Why Not? — negative transparency */}
+          {user && <WhyNotPanel tmdbId={d.tmdb_id || item.tmdb_id} mediaType={item.media_type || d.media_type || "movie"} user={user} />}
 
           <div className="modal-actions">
             {(item.in_library === true || d.in_library === true) && (item.plex_url || d.plex_url) && (

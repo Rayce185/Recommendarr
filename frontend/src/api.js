@@ -71,6 +71,7 @@ const api = {
   cacheDetailed: () => authFetch(`${API_BASE}/system/settings/cache`).then(r => r.json()),
   collections: (u) => authFetch(`${API_BASE}/recommend/${u}/collections`).then(r => r.json()),
   collectionFor: (tmdbId) => authFetch(`${API_BASE}/collection/for/${tmdbId}`).then(r => { if (r.status === 204) return null; return r.json(); }),
+  whyNot: (tmdbId, username, mediaType = "movie") => authFetch(`${API_BASE}/why-not/${tmdbId}?username=${encodeURIComponent(username)}&media_type=${mediaType}`).then(r => { if (!r.ok) throw new Error("Analysis failed"); return r.json(); }),
   groupRecommend: (username, users, opts = {}) => {
     const params = new URLSearchParams({ users: users.join(","), limit: opts.limit || 30 });
     if (opts.domain && opts.domain !== "all") params.set("domain", opts.domain);

@@ -59,11 +59,13 @@ from app.api import instances as instances_api
 from app.api import discovery, discovery_extras, media_requests, collections_routes
 from app.api import schedule, browse, wrapped, social, list_import, cultural_pulse
 from app.api import rec_mood
+from app.api import why_not
 
 app.include_router(health.router,                prefix="/api/v1", tags=["system"])
 app.include_router(users.router,                 prefix="/api/v1", tags=["users"])
 app.include_router(recommendations.router,       prefix="/api/v1", tags=["recommendations"])
 app.include_router(rec_mood.router,              prefix="/api/v1", tags=["recommendations"])
+app.include_router(why_not.router,               prefix="/api/v1", tags=["recommendations"])
 app.include_router(auth.router,                  prefix="/api/v1", tags=["auth"])
 app.include_router(refresh.router,               prefix="/api/v1", tags=["cache"])
 app.include_router(feedback.router,              prefix="/api/v1", tags=["feedback"])

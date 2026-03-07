@@ -122,6 +122,10 @@ class FeedbackStore:
                     counts[g] = counts.get(g, 0) + 1
         return counts
 
+    def get_genre_signals(self, username: str) -> tuple[dict[str, int], dict[str, int]]:
+        """Return (liked_genres, disliked_genres) for scoring adjustments."""
+        return self.get_liked_genres(username), self.get_disliked_genres(username)
+
     def get_stats(self, username: str) -> dict:
         entries = self._feedback.get(username, [])
         return {
