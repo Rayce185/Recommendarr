@@ -119,7 +119,7 @@ def fix_poster_urls(candidates: list[dict]) -> None:
 
     try:
         from app.database import get_db
-        from app.models.tables import TmdbCache
+        from app.models import TmdbCache
         from sqlalchemy import select
 
         tmdb_ids = [c["tmdb_id"] for c in needs_fix]

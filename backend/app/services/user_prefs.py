@@ -10,7 +10,7 @@ from typing import Any, Optional
 from sqlalchemy import select, and_
 
 from app.database import get_db
-from app.models.tables import UserPreference
+from app.models import UserPreference
 
 logger = logging.getLogger(__name__)
 

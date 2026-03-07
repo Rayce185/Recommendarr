@@ -12,7 +12,7 @@ from sqlalchemy import select, func, desc, and_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.tables import RecommendationLog, User, TmdbCache
+from app.models import RecommendationLog, User, TmdbCache
 
 logger = logging.getLogger(__name__)
 

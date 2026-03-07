@@ -132,7 +132,7 @@ async def ingest_history():
     from app.database import async_session, engine
     from app.clients.tautulli import TautulliClient
     from app.clients.plex import PlexClient
-    from app.models.tables import User, WatchHistory, UserLibraryAccess
+    from app.models import User, WatchHistory, UserLibraryAccess
     from sqlalchemy import select
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 

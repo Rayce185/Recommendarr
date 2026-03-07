@@ -17,7 +17,7 @@ from app.clients.tautulli import TautulliClient
 from app.clients.tmdb import TmdbClient
 from app.services.tmdb_sync import TmdbSyncService
 from app.services.embedding import EmbeddingService
-from app.models.tables import User, UserLibraryAccess, WatchHistory
+from app.models import User, UserLibraryAccess, WatchHistory
 
 def get_engine():
     return create_async_engine(settings.database_url, echo=False)

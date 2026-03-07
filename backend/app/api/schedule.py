@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from app.auth.jwt_handler import TokenPayload, get_current_user
 from app.database import get_db
-from app.models.tables import RefreshSchedule
+from app.models import RefreshSchedule
 
 logger = logging.getLogger(__name__)
 

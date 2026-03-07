@@ -19,7 +19,7 @@ def _log_request(username: str, tmdb_id: int, media_type: str, title: str,
     import json as _json
     try:
         from app.database import get_db
-        from app.models.tables import RequestLog
+        from app.models import RequestLog
         with get_db() as db:
             db.add(RequestLog(
                 username=username, tmdb_id=tmdb_id, media_type=media_type,

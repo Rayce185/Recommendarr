@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.clients.tmdb import TmdbClient
 from app.clients.plex import PlexClient
-from app.models.tables import TmdbCache
+from app.models import TmdbCache
 
 logger = logging.getLogger(__name__)
 

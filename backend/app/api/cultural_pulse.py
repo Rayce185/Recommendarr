@@ -9,7 +9,7 @@ from app.services.cultural_pulse import (
     refresh_pulse, get_active_events, get_all_sources,
 )
 from app.database import get_db
-from app.models.tables import PulseSource, ZeitgeistEvent, ZeitgeistMapping
+from app.models import PulseSource, ZeitgeistEvent, ZeitgeistMapping
 from sqlalchemy import select
 
 

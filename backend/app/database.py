@@ -59,6 +59,6 @@ def init_db():
     """Create all tables if they don't exist. Safe to call on every startup."""
     engine = get_engine()
     # Import models so Base.metadata knows about them
-    import app.models.tables  # noqa: F401
+    import app.models  # noqa: F401
     Base.metadata.create_all(engine)
     logger.info("Database tables initialized")

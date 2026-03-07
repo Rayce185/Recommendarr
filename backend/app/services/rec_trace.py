@@ -157,7 +157,7 @@ async def get_watched_titles_for_traces(
     """
     from sqlalchemy import select
     from app.database import get_db
-    from app.models.tables import TmdbCache
+    from app.models import TmdbCache
 
     try:
         db = get_db()

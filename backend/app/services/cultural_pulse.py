@@ -14,7 +14,7 @@ from typing import Optional
 from sqlalchemy import select, and_
 
 from app.database import get_db
-from app.models.tables import PulseSource, ZeitgeistEvent, ZeitgeistMapping
+from app.models import PulseSource, ZeitgeistEvent, ZeitgeistMapping
 from app.services.ai_client import llm_complete
 from app.services.ai_config import get_ai_config
 from app.services.rss_parser import fetch_rss

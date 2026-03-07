@@ -14,7 +14,7 @@ from sqlalchemy import select, func
 from app.clients.radarr import RadarrClient
 from app.clients.sonarr import SonarrClient
 from app.clients.servarr_models import ServarrMovie, ServarrSeries
-from app.models.tables import TmdbCache
+from app.models import TmdbCache
 
 logger = logging.getLogger(__name__)
 

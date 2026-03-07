@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy import select
 
 from app.database import get_db, DATA_DIR
-from app.models.tables import AiSetting
+from app.models import AiSetting
 
 logger = logging.getLogger(__name__)
 

@@ -56,7 +56,7 @@ async def enrich_items(
     cache_misses = []
     try:
         from app.database import get_db
-        from app.models.tables import TmdbCache
+        from app.models import TmdbCache
         from sqlalchemy import select, and_
 
         with get_db() as db:
@@ -154,7 +154,7 @@ def _persist_to_cache(
     """Write enrichment result back to SQLite TmdbCache. Non-fatal on failure."""
     try:
         from app.database import get_db
-        from app.models.tables import TmdbCache
+        from app.models import TmdbCache
         from sqlalchemy import select, and_
 
         with get_db() as db:

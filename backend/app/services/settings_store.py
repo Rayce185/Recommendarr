@@ -11,7 +11,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.database import get_db, DATA_DIR
-from app.models.tables import AppSetting
+from app.models import AppSetting
 
 logger = logging.getLogger(__name__)
 

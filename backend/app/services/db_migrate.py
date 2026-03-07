@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from sqlalchemy import select
 from app.database import get_db, DATA_DIR
-from app.models.tables import AppSetting, UserPreference, AiSetting
+from app.models import AppSetting, UserPreference, AiSetting
 
 logger = logging.getLogger(__name__)
 

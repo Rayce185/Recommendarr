@@ -21,7 +21,7 @@ from sqlalchemy import select
 
 from app.database import get_db
 from app.services.rec_library import get_library_candidates
-from app.models.tables import RefreshSchedule
+from app.models import RefreshSchedule
 
 logger = logging.getLogger(__name__)
 

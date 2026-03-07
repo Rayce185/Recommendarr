@@ -15,7 +15,7 @@ def read_cache(tmdb_id: int, media_type: str) -> dict | None:
     """Read from SQLite tmdb_cache table. Returns parsed detail dict or None."""
     try:
         from app.database import get_db
-        from app.models.tables import TmdbCache
+        from app.models import TmdbCache
         from sqlalchemy import select, and_
 
         with get_db() as db:
@@ -81,7 +81,7 @@ def write_cache(tmdb_id: int, media_type: str, data: dict) -> None:
     """Write to SQLite tmdb_cache table. Fire-and-forget, non-fatal."""
     try:
         from app.database import get_db
-        from app.models.tables import TmdbCache
+        from app.models import TmdbCache
         from sqlalchemy import select, and_
 
         cast_crew = {
