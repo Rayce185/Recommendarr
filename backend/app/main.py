@@ -62,6 +62,7 @@ from app.api import rec_mood
 from app.api import why_not
 from app.api import calendar
 from app.api import profile_transfer
+from app.api import notifications
 
 app.include_router(health.router,                prefix="/api/v1", tags=["system"])
 app.include_router(users.router,                 prefix="/api/v1", tags=["users"])
@@ -88,6 +89,7 @@ app.include_router(media_requests.router,        prefix="/api/v1", tags=["reques
 app.include_router(collections_routes.router,    prefix="/api/v1", tags=["collections"])
 app.include_router(calendar.router,              prefix="/api/v1", tags=["calendar"])
 app.include_router(profile_transfer.router, prefix="/api/v1", tags=["profile"])
+app.include_router(notifications.router,      prefix="/api/v1", tags=["notifications"])
 
 # ── Static files (frontend) ──────────────────────────────────────
 

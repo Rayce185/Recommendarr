@@ -25,6 +25,7 @@ import SocialPage from "./pages/SocialPage.jsx";
 import ListImportPage from "./pages/ListImportPage.jsx";
 import PulsePage from "./pages/PulsePage.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
+import NotificationBell from "./components/NotificationBell.jsx";
 import WorldCinemaPage from "./pages/WorldCinemaPage.jsx";
 
 export default function Recommendarr() {
@@ -163,6 +164,7 @@ export default function Recommendarr() {
           <div className="sidebar-brand">
             <div className="logo-icon"><Film size={16} /></div>
             <h1>Recommendarr</h1>
+            {authUser && <NotificationBell onNavigate={v => { setView(v); setMobileMenuOpen(false); }} />}
           </div>
           <div className="sidebar-user">
             {authLoading ? (
