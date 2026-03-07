@@ -42,7 +42,9 @@ function FilterPanel({ filters, onChange, onApply }) {
 
   const activeCount = (filters.excludeGenres?.length || 0)
     + (filters.includeGenres?.length || 0)
-    + (filters.excludeLibraries?.length || 0);
+    + (filters.excludeLibraries?.length || 0)
+    + (filters.minYear ? 1 : 0) + (filters.maxYear ? 1 : 0)
+    + (filters.minRating ? 1 : 0);
 
   const handleSavePreset = () => {
     if (!presetName.trim()) return;
@@ -64,7 +66,7 @@ function FilterPanel({ filters, onChange, onApply }) {
   };
 
   const handleClear = () => {
-    const empty = { excludeGenres: [], includeGenres: [], excludeLibraries: [] };
+    const empty = { excludeGenres: [], includeGenres: [], excludeLibraries: [], minYear: null, maxYear: null, minRating: null };
     onChange(empty);
     onApply(empty);
   };
@@ -190,6 +192,52 @@ function FilterPanel({ filters, onChange, onApply }) {
                   {opt.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Year Range */}
+          <div className="filter-section">
+            <div className="filter-section-title">Year Range</div>
+            <div className="filter-range-row">
+              <input
+                type="number"
+                className="filter-number-input"
+                placeholder="From"
+                min={1900}
+                max={2030}
+                value={filters.minYear || ""}
+                onChange={e => onChange({ ...filters, minYear: e.target.value ? parseInt(e.target.value) : null })}
+              />
+              <span style={{ color: "var(--text-muted)" }}>—</span>
+              <input
+                type="number"
+                className="filter-number-input"
+                placeholder="To"
+                min={1900}
+                max={2030}
+                value={filters.maxYear || ""}
+                onChange={e => onChange({ ...filters, maxYear: e.target.value ? parseInt(e.target.value) : null })}
+              />
+            </div>
+          </div>
+
+          {/* Minimum Rating */}
+          <div className="filter-section">
+            <div className="filter-section-title">Minimum Rating: {filters.minRating ? `${filters.minRating}/10` : "Any"}</div>
+            <input
+              type="range"
+              className="filter-slider"
+              min={0}
+              max={9}
+              step={0.5}
+              value={filters.minRating || 0}
+              onChange={e => {
+                const v = parseFloat(e.target.value);
+                onChange({ ...filters, minRating: v > 0 ? v : null });
+              }}
+            />
+            <div className="filter-range-labels">
+              <span>Any</span><span>5</span><span>9+</span>
             </div>
           </div>
 

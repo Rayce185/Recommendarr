@@ -67,6 +67,9 @@ class RecommendationRequest:
     include_genres: set[str] = field(default_factory=set)
     exclude_libraries: set[str] = field(default_factory=set)
     group_users: list[str] = field(default_factory=list)
+    min_year: Optional[int] = None
+    max_year: Optional[int] = None
+    min_rating: Optional[float] = None
     skip_explanations: bool = False
     _uid: Optional[str] = None
     _overrides: Optional[object] = None

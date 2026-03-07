@@ -32,6 +32,9 @@ function RecommendationsPage({ user, mode, onCardClick }) {
     if (f.includeGenres?.length) opts.include_genres = f.includeGenres.join(",");
     if (f.excludeLibraries?.length) opts.exclude_libraries = f.excludeLibraries.join(",");
     if (f.watchedFilter && f.watchedFilter !== 'all') opts.watched_filter = f.watchedFilter;
+    if (f.minYear) opts.min_year = f.minYear;
+    if (f.maxYear) opts.max_year = f.maxYear;
+    if (f.minRating) opts.min_rating = f.minRating;
     api.recommend(user, mode, opts)
       .then(data => {
         const recs = data.recommendations || [];

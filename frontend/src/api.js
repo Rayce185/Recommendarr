@@ -33,6 +33,9 @@ const api = {
     if (opts.include_genres) params.set("include_genres", opts.include_genres);
     if (opts.exclude_libraries) params.set("exclude_libraries", opts.exclude_libraries);
     if (opts.watched_filter) params.set("watched_filter", opts.watched_filter);
+    if (opts.min_year) params.set("min_year", opts.min_year);
+    if (opts.max_year) params.set("max_year", opts.max_year);
+    if (opts.min_rating) params.set("min_rating", opts.min_rating);
     return authFetch(`${API_BASE}/recommend/${u}?${params}`).then(r => r.json());
   },
   moodPresets: () => authFetch(`${API_BASE}/mood/presets`).then(r => r.json()),

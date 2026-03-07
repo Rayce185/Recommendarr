@@ -38,6 +38,9 @@ async def get_recommendations(
     include_genres: Optional[str] = Query(None, description="Comma-separated genre names to include"),
     exclude_libraries: Optional[str] = Query(None, description="Comma-separated Plex library names to exclude"),
     watched_filter: str = Query("all", pattern="^(all|unseen|seen)$", description="Filter by watched status"),
+    min_year: Optional[int] = Query(None, description="Minimum release year"),
+    max_year: Optional[int] = Query(None, description="Maximum release year"),
+    min_rating: Optional[float] = Query(None, ge=0, le=10, description="Minimum TMDB rating (0-10)"),
     refresh: bool = Query(False, description="Force cache refresh"),
 ):
     """Get personalized recommendations.
@@ -76,6 +79,9 @@ async def get_recommendations(
         exclude_genres=excl_genres,
         include_genres=incl_genres,
         exclude_libraries=excl_libs,
+        min_year=min_year,
+        max_year=max_year,
+        min_rating=min_rating,
     )
 
     # Group mode: extract usernames
@@ -86,7 +92,7 @@ async def get_recommendations(
 
     # Check cache first (unless force refresh or dynamic params)
     cache = get_cache()
-    has_filters = exclude or exclude_genres or include_genres or exclude_libraries
+    has_filters = exclude or exclude_genres or include_genres or exclude_libraries or min_year or max_year or min_rating
     cache_eligible = mode not in ("mood", "group") and not has_filters and not mood
     cached_response = None
     if cache_eligible and not refresh:

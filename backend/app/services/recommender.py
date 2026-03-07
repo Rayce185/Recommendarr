@@ -121,6 +121,18 @@ class RecommendationEngine:
             results = [r for r in results if getattr(r, 'tmdb_id', None) not in dismissed]
             if before != len(results):
                 logger.info(f"Filtered {before - len(results)} dismissed items for {request.username}")
+        # Apply year and rating filters
+        if request.min_year or request.max_year or request.min_rating:
+            before = len(results)
+            if request.min_year:
+                results = [r for r in results if r.year and r.year >= request.min_year]
+            if request.max_year:
+                results = [r for r in results if r.year and r.year <= request.max_year]
+            if request.min_rating:
+                results = [r for r in results if r.vote_average and r.vote_average >= request.min_rating]
+            if before != len(results):
+                logger.info(f"Year/rating filters removed {before - len(results)} items for {request.username}")
+
         # Log recommendations to history DB (non-blocking best-effort)
         if results:
             try:
