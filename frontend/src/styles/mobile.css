@@ -72,6 +72,60 @@
     .profile-grid, .stat-grid {
       grid-template-columns: 1fr !important;
     }
+
+    /* Mood page responsive */
+    .mood-search-bar {
+      flex-direction: column;
+    }
+    .mood-search-bar button {
+      width: 100%;
+      padding: 12px;
+    }
+    .mood-explanation {
+      font-size: 12px;
+      padding: 12px;
+    }
+
+    /* History page responsive */
+    .history-filters {
+      flex-direction: column;
+    }
+    .history-filters .filter-select {
+      width: 100%;
+    }
+
+    /* Social responsive */
+    .social-server-row {
+      grid-template-columns: 1fr;
+    }
+
+    /* Filter bar responsive */
+    .filter-bar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+  }
+
+  /* ── Extra-small screens ── */
+  @media (max-width: 480px) {
+    .card-grid {
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 8px;
+    }
+    .page-header h1 {
+      font-size: 1.2rem;
+    }
+    .page-body {
+      padding: 12px 8px 24px;
+    }
+    .preset-chip {
+      padding: 5px 10px;
+      font-size: 11px;
+    }
+    .modal-overlay .modal-content {
+      width: 98vw;
+      margin: 2vh auto;
+    }
   }
 
 /* Social */
