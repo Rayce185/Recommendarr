@@ -54,8 +54,8 @@ def _merge_and_dedupe(tmdb_items: list[dict], arr_items: list[dict]) -> list[dic
 @router.get("/calendar")
 async def get_calendar(
     days: int = Query(90, ge=7, le=365, description="Days ahead to look"),
-    media_type: str = Query("all", regex="^(all|movie|tv)$"),
-    source: str = Query("all", regex="^(all|tmdb|monitored)$"),
+    media_type: str = Query("all", pattern="^(all|movie|tv)$"),
+    source: str = Query("all", pattern="^(all|tmdb|monitored)$"),
     page: int = Query(1, ge=1, le=20),
 ):
     """Coming Soon calendar — combines TMDB upcoming with Radarr/Sonarr monitored items."""
