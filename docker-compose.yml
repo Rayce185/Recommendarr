@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: recommendarr
+    container_name: Recommendarr
     restart: unless-stopped
     ports:
       - "${RECOMMENDARR_PORT:-5055}:5055"
