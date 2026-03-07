@@ -105,7 +105,7 @@ function BrowsePage({ onCardClick }) {
       </div>
 
       {/* Search bar */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <div className="browse-search-row" style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <div style={{ flex: 1, position: "relative" }}>
           <input
             ref={searchInputRef}

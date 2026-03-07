@@ -25,6 +25,13 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* ── Pulse Activity Grid (base) ── */
+  .pulse-activity-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  }
+
   /* ── Mobile Responsive ── */
   @media (max-width: 768px) {
     .mobile-menu-btn { display: block; }
@@ -104,6 +111,46 @@
       flex-direction: column;
       align-items: stretch;
     }
+
+    /* Admin settings tabs — scrollable on mobile */
+    .settings-tabs {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .settings-tabs::-webkit-scrollbar { display: none; }
+    .settings-tab {
+      white-space: nowrap;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    /* Pulse page — single column */
+    .pulse-activity-grid {
+      grid-template-columns: 1fr;
+    }
+
+    /* Browse search row */
+    .browse-search-row {
+      flex-direction: column;
+    }
+
+    /* Calendar filters — tighter on mobile */
+    .calendar-filters {
+      gap: 10px;
+    }
+    .calendar-filters .filter-group {
+      min-width: 0;
+    }
+    .calendar-filters select {
+      width: 100%;
+    }
+
+    /* List import compact */
+    .admin-card textarea,
+    .admin-card input[type="text"] {
+      font-size: 14px;
+    }
   }
 
   /* ── Extra-small screens ── */
@@ -125,6 +172,27 @@
     .modal-overlay .modal-content {
       width: 98vw;
       margin: 2vh auto;
+    }
+
+    /* Wrapped hero — single column on small phones */
+    .wrapped-hero {
+      grid-template-columns: 1fr;
+    }
+    .wrapped-stat-card.hero {
+      grid-column: span 1;
+    }
+
+    /* Admin tabs even smaller */
+    .settings-tab {
+      padding: 5px 8px;
+      font-size: 11px;
+      gap: 4px;
+    }
+    .settings-tab svg { width: 12px; height: 12px; }
+
+    /* Pulse cards — full width, smaller padding */
+    .pulse-activity-grid > div {
+      padding: 10px;
     }
   }
 

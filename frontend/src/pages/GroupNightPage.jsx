@@ -94,7 +94,7 @@ function GroupNightPage({ user, allUsers, onCardClick }) {
             })}
           </div>
           <div className="group-controls">
-            <div className="filter-group" style={{ minWidth: 120 }}>
+            <div className="filter-group">
               <label>Content</label>
               <select value={domain} onChange={e => setDomain(e.target.value)}>
                 <option value="all">All</option>
