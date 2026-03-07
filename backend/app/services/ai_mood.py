@@ -39,7 +39,9 @@ Respond ONLY with a JSON object (no markdown, no explanation). Fields (all optio
   "confidence": 0.0-1.0                  // how well you understood the request
 }
 
-Valid TMDB genres: Action, Adventure, Animation, Comedy, Crime, Documentary, Drama, Family, Fantasy, History, Horror, Music, Mystery, Romance, Science Fiction, TV Movie, Thriller, War, Western.
+Valid genres: Action, Adventure, Anime, Animation, Comedy, Crime, Documentary, Drama, Family, Fantasy, History, Horror, Music, Mystery, Romance, Science Fiction, TV Movie, Thriller, War, Western.
+
+IMPORTANT: To block anime content, use "Anime" not "Animation". "Animation" covers non-anime cartoons only.
 
 Be generous with genre weights. A request like "something fun" should boost Comedy (0.7), Adventure (0.4), Animation (0.3).
 A request like "I just got dumped" should boost Comedy (0.5), Romance (0.3), Drama (0.4) — comfort viewing.
@@ -110,6 +112,12 @@ def _parse_llm_response(response: str, original_text: str) -> Optional[MoodVecto
             vector.min_runtime = int(data["min_runtime"])
         if "year_range" in data and data["year_range"] and len(data["year_range"]) == 2:
             vector.year_range = tuple(data["year_range"])
+
+        # Normalize genre blocks: Animation ↔ Anime mapping
+        if "Animation" in vector.genre_block and "Anime" not in vector.genre_block:
+            vector.genre_block.append("Anime")
+        if "Anime" in vector.genre_block and "Animation" not in vector.genre_block:
+            vector.genre_block.append("Animation")
 
         # Remove blocked genres from boost
         for blocked in vector.genre_block:

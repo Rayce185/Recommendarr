@@ -1,96 +1,32 @@
-"""Recommendation API v2 — API-first, no DB dependency for core flow.
+"""Recommendation API — core endpoints and sub-router aggregation.
 
-All endpoints use the service stack (Tautulli + Seerr + Radarr/Sonarr)
-through the RecommendationEngine orchestrator.
+Core recommendation and mood endpoints live here.
+Discovery, actions, collections, and extras are in sub-modules.
 """
 
-from fastapi import APIRouter, Query, HTTPException, Depends
+from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 
 from app.services.factory import get_stack
 from app.services.profile_overrides import get_override_store
 from app.services.feedback import get_feedback_store
-from app.auth.jwt_handler import TokenPayload, get_current_user
-from app.config import settings
 from app.services.cache import get_cache
-from app.services.recommender import RecommendationRequest, Recommendation
+from app.services.recommender import RecommendationRequest
 from app.services.mood_mapper import parse_mood, mood_to_explanation, MOOD_PRESETS
 from app.services.ai_mood import parse_mood_ai
-from app.clients.tmdb import TMDBClient, COUNTRY_OPTIONS
+from app.api.rec_helpers import rec_to_dict
 
-from app.utils.genres import normalize_genres
-from app.services.collections import CollectionService
+# Sub-routers
+from app.api.rec_discovery import router as discovery_router
+from app.api.rec_actions import router as actions_router
+from app.api.rec_collections import router as collections_router
+from app.api.rec_extras import router as extras_router
 
 router = APIRouter()
-
-# Module-level TMDB genre cache (populated on first use)
-_tmdb_genre_cache: dict[int, str] = {}
-
-async def _ensure_genre_cache():
-    global _tmdb_genre_cache
-    if _tmdb_genre_cache:
-        return
-    stack = get_stack()
-    if stack.tmdb:
-        try:
-            for g in await stack.tmdb.get_movie_genres():
-                _tmdb_genre_cache[g["id"]] = g["name"]
-            for g in await stack.tmdb.get_tv_genres():
-                _tmdb_genre_cache[g["id"]] = g["name"]
-        except Exception:
-            pass
-
-def _resolve_genres(genre_ids: list[int]) -> list[str]:
-    return [_tmdb_genre_cache[gid] for gid in genre_ids if gid in _tmdb_genre_cache]
-
-
-def _img_url(path: str | None, size: str = "w342") -> str | None:
-    """Build TMDB image URL, handling both relative paths and absolute URLs."""
-    if not path:
-        return None
-    if path.startswith("http"):
-        return path  # Already a full URL (Radarr/Sonarr/TVDB)
-    return f"https://image.tmdb.org/t/p/{size}{path}"
-
-
-def _rec_to_dict(r: Recommendation, plex=None) -> dict:
-    """Serialize a Recommendation to API response format."""
-    # Build action URLs
-    plex_url = None
-    seerr_url = None
-    if r.in_library and plex:
-        plex_url = plex.get_plex_url(r.tmdb_id, r.media_type)
-    if not r.in_library and settings.seerr_url:
-        seerr_url = f"{settings.seerr_url}/{r.media_type}/{r.tmdb_id}"
-
-    return {
-        "tmdb_id": r.tmdb_id,
-        "media_type": r.media_type,
-        "title": r.title,
-        "year": r.year,
-        "poster_url": _img_url(r.poster_path, "w342"),
-        "backdrop_url": _img_url(r.backdrop_path, "w1280"),
-        "trailer_url": f"https://www.youtube-nocookie.com/embed/{r.trailer_key}" if r.trailer_key else None,
-        "genres": r.genres,
-        "keywords": r.keywords,
-        "overview": r.overview,
-        "vote_average": r.vote_average,
-        "runtime": r.runtime,
-        "original_language": r.original_language,
-        "score": round(r.score, 4),
-        "score_breakdown": r.score_breakdown,
-        "explanation": r.explanation,
-        "explanation_signals": r.explanation_signals,
-        "mode": r.mode,
-        "in_library": r.in_library,
-        "quality": r.quality,
-        "source": r.source,
-        "directors": r.directors,
-        "cast": r.cast[:5],
-        "plex_url": plex_url,
-        "seerr_url": seerr_url,
-        "is_watched": r.is_watched,
-    }
+router.include_router(discovery_router)
+router.include_router(actions_router)
+router.include_router(collections_router)
+router.include_router(extras_router)
 
 
 # ── Core recommendation endpoints ────────────────────────────────
@@ -107,26 +43,12 @@ async def get_recommendations(
     exclude_genres: Optional[str] = Query(None, description="Comma-separated genre names to exclude"),
     include_genres: Optional[str] = Query(None, description="Comma-separated genre names to include"),
     exclude_libraries: Optional[str] = Query(None, description="Comma-separated Plex library names to exclude"),
-    watched_filter: str = Query("all", pattern="^(all|unseen|seen)$", description="Filter by watched status: all/unseen/seen"),
+    watched_filter: str = Query("all", pattern="^(all|unseen|seen)$"),
     refresh: bool = Query(False, description="Force cache refresh"),
 ):
     """Get personalized recommendations.
 
-    Modes:
-    - tonight: In-library, unwatched, scored by taste
-    - grab: Not in library, discover via TMDB trending/similar
-    - rediscover: Previously watched + liked, stale for 6+ months
-    - mood: Natural language input parsed into genre/keyword weights
-    - group: Multi-user intersection (pass comma-separated usernames)
-
-    Args:
-        username: Plex/Tautulli username
-        mode: Recommendation mode
-        domain: Filter by media domain (movies/tv/anime/all)
-        limit: Max results (1-50)
-        genre: Filter to specific genre name
-        mood: Natural language mood string (used with mode=mood or as overlay)
-        exclude: Comma-separated TMDB IDs to exclude
+    Modes: tonight, grab, rediscover, mood, group.
     """
     stack = get_stack()
 
@@ -137,39 +59,28 @@ async def get_recommendations(
         except ValueError:
             raise HTTPException(400, "exclude must be comma-separated TMDB IDs")
 
-    # Parse mood if provided
     mood_vector = None
     if mood:
         mood_vector = await parse_mood_ai(mood)
 
-    # Parse filter params
     excl_genres = {g.strip() for g in exclude_genres.split(",") if g.strip()} if exclude_genres else set()
     incl_genres = {g.strip() for g in include_genres.split(",") if g.strip()} if include_genres else set()
     excl_libs = {l.strip() for l in exclude_libraries.split(",") if l.strip()} if exclude_libraries else set()
 
-    # Build request
     req = RecommendationRequest(
-        username=username,
-        mode=mode,
-        domain=domain,
-        limit=limit,
-        genre_filter=genre,
-        mood_vector=mood_vector,
+        username=username, mode=mode, domain=domain, limit=limit,
+        genre_filter=genre, mood_vector=mood_vector,
         mood_text=mood if mode == "mood" else None,
-        exclude_tmdb_ids=exclude_ids,
-        exclude_genres=excl_genres,
-        include_genres=incl_genres,
-        exclude_libraries=excl_libs,
+        exclude_tmdb_ids=exclude_ids, exclude_genres=excl_genres,
+        include_genres=incl_genres, exclude_libraries=excl_libs,
     )
 
-    # Group mode: extract usernames
     if mode == "group" and mood:
-        # Overload: for group mode, pass usernames in 'mood' param as comma-separated
         req.group_users = [u.strip() for u in mood.split(",") if u.strip()]
         req.mood_vector = None
         req.mood_text = None
 
-    # Check cache first (unless force refresh or mood/group/exclude which are dynamic)
+    # Cache check (skip for mood/group/filtered requests)
     cache = get_cache()
     has_filters = exclude or exclude_genres or include_genres or exclude_libraries
     cache_eligible = mode not in ("mood", "group") and not has_filters and not mood
@@ -178,12 +89,10 @@ async def get_recommendations(
         cached_response = cache.get_recs(username, mode, domain)
 
     if cached_response is not None:
-        # Add cache flag + age to meta
         cached_response["meta"]["cached"] = True
         cache_age = cache.get_recs_age(username, mode, domain)
         cached_response["meta"]["cache_age_seconds"] = round(cache_age, 1) if cache_age is not None else None
         cached_response["meta"]["profile_modified_at"] = get_override_store().get_updated_at(username)
-        # Refresh feedback state (may have changed since cache)
         fb_store = get_feedback_store()
         for rec in cached_response.get("recommendations", []):
             rec["user_feedback"] = fb_store.get_action(username, rec.get("tmdb_id"))
@@ -196,38 +105,32 @@ async def get_recommendations(
 
     response = {
         "recommendations": [
-                _rec_to_dict(r, plex=stack.plex)
-                for r in recs
-                if (watched_filter == "all" or (watched_filter == "unseen" and not r.is_watched) or (watched_filter == "seen" and r.is_watched))
-            ],
+            rec_to_dict(r, plex=stack.plex)
+            for r in recs
+            if (watched_filter == "all"
+                or (watched_filter == "unseen" and not r.is_watched)
+                or (watched_filter == "seen" and r.is_watched))
+        ],
         "meta": {
-            "username": username,
-            "mode": mode,
-            "domain": domain,
-            "count": len(recs),
-            "cached": False,
-            "genre_filter": genre,
+            "username": username, "mode": mode, "domain": domain,
+            "count": len(recs), "cached": False, "genre_filter": genre,
             "profile_modified_at": get_override_store().get_updated_at(username),
         },
     }
 
-    # Include mood parse info if mood was provided
     if mood_vector:
         response["meta"]["mood"] = {
-            "input": mood,
-            "parsed": mood_to_explanation(mood_vector),
+            "input": mood, "parsed": mood_to_explanation(mood_vector),
             "confidence": mood_vector.confidence,
             "genre_boost": mood_vector.genre_boost,
             "genre_block": mood_vector.genre_block,
             "keyword_boost": mood_vector.keyword_boost[:10],
         }
 
-    # Inject user feedback state into each rec
     fb_store = get_feedback_store()
     for rec in response["recommendations"]:
         rec["user_feedback"] = fb_store.get_action(username, rec["tmdb_id"])
 
-    # Cache result for future requests
     if cache_eligible:
         cache.set_recs(username, mode, domain, response)
 
@@ -237,41 +140,32 @@ async def get_recommendations(
 @router.get("/recommend/{username}/group")
 async def get_group_recommendations(
     username: str,
-    users: str = Query(..., description="Comma-separated usernames including requesting user"),
+    users: str = Query(..., description="Comma-separated usernames"),
     domain: str = Query("all", pattern="^(all|movies|tv|anime)$"),
     limit: int = Query(20, ge=1, le=50),
     genre: Optional[str] = None,
-    watched_filter: str = Query("all", pattern="^(all|unseen|seen)$", description="Filter by watched status: all/unseen/seen"),
+    watched_filter: str = Query("all", pattern="^(all|unseen|seen)$"),
 ):
-    """Group Night — find titles matching taste intersection of multiple users."""
+    """Group Night — taste intersection of multiple users."""
     stack = get_stack()
-
     user_list = [u.strip() for u in users.split(",") if u.strip()]
     if len(user_list) < 2:
         raise HTTPException(400, "Group mode requires at least 2 usernames")
 
     req = RecommendationRequest(
-        username=username,
-        mode="group",
-        domain=domain,
-        limit=limit,
-        genre_filter=genre,
-        group_users=user_list,
+        username=username, mode="group", domain=domain,
+        limit=limit, genre_filter=genre, group_users=user_list,
     )
-
     recs = await stack.engine.recommend(req)
-
     return {
         "recommendations": [
-                _rec_to_dict(r, plex=stack.plex)
-                for r in recs
-                if (watched_filter == "all" or (watched_filter == "unseen" and not r.is_watched) or (watched_filter == "seen" and r.is_watched))
-            ],
-        "meta": {
-            "mode": "group",
-            "group_users": user_list,
-            "count": len(recs),
-        },
+            rec_to_dict(r, plex=stack.plex)
+            for r in recs
+            if (watched_filter == "all"
+                or (watched_filter == "unseen" and not r.is_watched)
+                or (watched_filter == "seen" and r.is_watched))
+        ],
+        "meta": {"mode": "group", "group_users": user_list, "count": len(recs)},
     }
 
 
@@ -279,25 +173,16 @@ async def get_group_recommendations(
 
 @router.get("/mood/parse")
 async def parse_mood_text(text: str = Query(..., min_length=2, max_length=200)):
-    """Parse a mood string and return the interpreted vector.
-
-    Useful for UI preview — show users how their mood text is interpreted
-    before running the full recommendation.
-    """
+    """Parse a mood string and return the interpreted vector."""
     vector = await parse_mood_ai(text)
     return {
-        "input": text,
-        "explanation": mood_to_explanation(vector),
+        "input": text, "explanation": mood_to_explanation(vector),
         "confidence": vector.confidence,
-        "genre_boost": vector.genre_boost,
-        "genre_block": vector.genre_block,
-        "keyword_boost": vector.keyword_boost,
-        "keyword_block": vector.keyword_block,
-        "domain_filter": vector.domain_filter,
-        "year_range": vector.year_range,
+        "genre_boost": vector.genre_boost, "genre_block": vector.genre_block,
+        "keyword_boost": vector.keyword_boost, "keyword_block": vector.keyword_block,
+        "domain_filter": vector.domain_filter, "year_range": vector.year_range,
         "min_rating": vector.min_rating,
-        "max_runtime": vector.max_runtime,
-        "min_runtime": vector.min_runtime,
+        "max_runtime": vector.max_runtime, "min_runtime": vector.min_runtime,
         "unparsed_tokens": vector.unparsed_tokens,
     }
 
@@ -309,700 +194,8 @@ async def get_mood_presets():
     for name, query in MOOD_PRESETS.items():
         vector = parse_mood(query)
         presets.append({
-            "name": name,
-            "query": query,
+            "name": name, "query": query,
             "explanation": mood_to_explanation(vector),
             "top_genres": sorted(vector.genre_boost.items(), key=lambda x: x[1], reverse=True)[:3],
         })
     return {"presets": presets}
-
-
-# ── Discovery endpoints (Seerr proxy) ───────────────────────────
-
-@router.get("/discover/trending")
-async def get_trending(
-    source: str = Query("global", pattern="^(global|country|provider|new_releases)$"),
-    media_type: str = Query("all", pattern="^(all|movie|tv|anime)$"),
-    region: str = Query("CH", max_length=2),
-    provider_id: Optional[int] = Query(None, description="Streaming provider ID from /discover/providers"),
-    days: int = Query(90, ge=7, le=365, description="New releases window in days"),
-    page: int = Query(1, ge=1),
-):
-    """Expanded trending with multiple sources.
-
-    Sources:
-    - global: TMDB global trending (movies + TV)
-    - country: Popular content by country/region
-    - provider: Popular on a specific streaming provider
-    - new_releases: Recently released, sorted by popularity
-    """
-    stack = get_stack()
-
-    await _ensure_genre_cache()
-
-    def _fmt(t) -> dict:
-        """Format a TMDB result for API response."""
-        poster = None
-        if t.poster_path:
-            poster = f"https://image.tmdb.org/t/p/w342{t.poster_path}" if not t.poster_path.startswith("http") else t.poster_path
-        genres = []
-        if hasattr(t, "genre_ids") and t.genre_ids:
-            genres = [_tmdb_genre_cache.get(gid, f"Genre:{gid}") for gid in t.genre_ids if gid in _tmdb_genre_cache]
-        return {
-            "tmdb_id": t.tmdb_id,
-            "media_type": t.media_type,
-            "title": t.title,
-            "year": t.year,
-            "poster_url": poster,
-            "vote_average": t.vote_average,
-            "genres": normalize_genres(genres, original_language=t.original_language if hasattr(t, 'original_language') else None),
-            "popularity": getattr(t, "popularity", 0),
-            "original_language": getattr(t, "original_language", None),
-            "release_date": getattr(t, "release_date", None),
-        }
-
-    # Use direct TMDB client if available, fall back to Seerr
-    if stack.tmdb:
-        if source == "global":
-            if media_type == "anime":
-                # Global trending anime: discover/tv with animation genre + Japanese
-                d = await stack.tmdb._get("/discover/tv", {
-                    "sort_by": "popularity.desc",
-                    "with_genres": "16",
-                    "with_original_language": "ja",
-                    "page": page,
-                    "vote_count.gte": 5,
-                })
-                results = [stack.tmdb._parse_result(r, "tv") for r in d.get("results", [])]
-                total_pages = d.get("total_pages", 1)
-            else:
-                mt = media_type if media_type != "all" else "all"
-                results, total_pages = await stack.tmdb.get_trending(mt, "week", page)
-        elif source == "country":
-            mt = media_type if media_type != "all" else "movie"
-            results, total_pages = await stack.tmdb.discover_by_country(region, mt, page)
-        elif source == "provider":
-            if not provider_id:
-                raise HTTPException(400, "provider_id required for source=provider")
-            mt = media_type if media_type != "all" else "movie"
-            results, total_pages = await stack.tmdb.discover_by_provider(provider_id, region, mt, page)
-        elif source == "new_releases":
-            mt = media_type if media_type != "all" else "movie"
-            results, total_pages = await stack.tmdb.discover_new_releases(days, mt, page)
-        else:
-            results, total_pages = [], 0
-
-        # Anime filter: re-query as TV with animation genre + Japanese language
-        if media_type == "anime" and source != "global":
-            from datetime import datetime, timedelta
-            anime_params = {
-                "sort_by": "popularity.desc",
-                "with_genres": "16",
-                "with_original_language": "ja",
-                "page": page,
-                "vote_count.gte": 5,
-            }
-            if source == "country":
-                anime_params["watch_region"] = region
-            elif source == "provider" and provider_id:
-                anime_params["watch_region"] = region
-                anime_params["with_watch_providers"] = str(provider_id)
-            elif source == "new_releases":
-                now = __import__("datetime").datetime.utcnow()
-                anime_params["first_air_date.gte"] = (now - __import__("datetime").timedelta(days=days)).strftime("%Y-%m-%d")
-                anime_params["first_air_date.lte"] = now.strftime("%Y-%m-%d")
-            d = await stack.tmdb._get("/discover/tv", anime_params)
-            results = [stack.tmdb._parse_result(r, "tv") for r in d.get("results", [])]
-            total_pages = d.get("total_pages", 1)
-
-        return {
-            "results": [_fmt(r) for r in results],
-            "source": source,
-            "region": region,
-            "media_type": media_type,
-            "page": page,
-            "total_pages": min(total_pages, 20),  # Cap at 20 pages
-        }
-    else:
-        # Fallback: Seerr trending (global only)
-        trending = await stack.seerr.get_trending(page=page)
-        return {
-            "results": [_fmt(t) for t in trending],
-            "source": "global",
-            "page": page,
-            "total_pages": 1,
-        }
-
-
-@router.get("/discover/providers")
-async def get_streaming_providers(
-    region: str = Query("CH", max_length=2),
-    media_type: str = Query("movie", pattern="^(movie|tv)$"),
-):
-    """Get available streaming providers for a region (featured/major only)."""
-    stack = get_stack()
-    if not stack.tmdb:
-        raise HTTPException(503, "TMDB not configured — set TMDB_API_KEY")
-    providers = await stack.tmdb.get_providers(region, media_type)
-    return {
-        "providers": [
-            {
-                "id": p.provider_id,
-                "name": p.provider_name,
-                "logo_url": f"https://image.tmdb.org/t/p/w92{p.logo_path}" if p.logo_path else None,
-            }
-            for p in providers
-        ],
-        "region": region,
-    }
-
-
-@router.get("/discover/countries")
-async def get_country_options():
-    """Get available country options for regional trending."""
-    return {"countries": COUNTRY_OPTIONS}
-
-
-@router.get("/discover/similar/{tmdb_id}")
-async def get_similar(
-    tmdb_id: int,
-    media_type: str = Query("movie", pattern="^(movie|tv)$"),
-    page: int = Query(1, ge=1),
-):
-    """Get similar titles to a specific movie/show via TMDB."""
-    stack = get_stack()
-    await _ensure_genre_cache()
-    if stack.tmdb:
-        similar = await stack.tmdb.get_similar(tmdb_id, media_type, page)
-    else:
-        similar = await stack.seerr.get_similar(tmdb_id, media_type, page)
-    return {
-        "results": [
-            {
-                "tmdb_id": s.tmdb_id,
-                "media_type": s.media_type,
-                "title": s.title,
-                "year": s.year,
-                "poster_url": f"https://image.tmdb.org/t/p/w342{s.poster_path}" if s.poster_path else None,
-                "vote_average": s.vote_average,
-                "genres": normalize_genres([_tmdb_genre_cache.get(gid) for gid in (s.genre_ids if hasattr(s, "genre_ids") else []) if gid in _tmdb_genre_cache], original_language=getattr(s, "original_language", None)) if hasattr(s, "genre_ids") else [],
-            }
-            for s in similar
-        ],
-        "seed_tmdb_id": tmdb_id,
-        "page": page,
-    }
-
-
-@router.get("/detail/{tmdb_id}")
-async def get_detail(
-    tmdb_id: int,
-    media_type: str = Query("movie", pattern="^(movie|tv)$"),
-):
-    """Full metadata for a title — keywords, cast, crew, trailers, ratings."""
-    stack = get_stack()
-    try:
-        if stack.tmdb:
-            d = await stack.tmdb.get_detail(tmdb_id, media_type)
-            # Check library status from Plex map
-            label = "movie" if media_type == "movie" else "show"
-            in_library = bool(stack.plex._tmdb_map.get(f"{label}:{tmdb_id}")) if stack.plex else False
-            # Fetch watch providers (region-specific, not cached in detail)
-            wp = await stack.tmdb.get_watch_providers(tmdb_id, media_type, region="CH")
-            # Build trailer URLs from video keys
-            trailers_raw = d.get("trailers", [])
-            trailer_url = f"https://www.youtube.com/embed/{trailers_raw[0]['key']}" if trailers_raw else None
-            return {
-                "tmdb_id": d["tmdb_id"],
-                "media_type": d["media_type"],
-                "title": d["title"],
-                "original_title": d.get("original_title", ""),
-                "year": d.get("year"),
-                "overview": d.get("overview", ""),
-                "tagline": d.get("tagline", ""),
-                "poster_url": f"https://image.tmdb.org/t/p/w500{d['poster_path']}" if d.get("poster_path") else None,
-                "backdrop_url": f"https://image.tmdb.org/t/p/w1280{d['backdrop_path']}" if d.get("backdrop_path") else None,
-                "genres": normalize_genres(d.get("genres", []), original_language=d.get("original_language")),
-                "keywords": d.get("keywords", []),
-                "vote_average": d.get("vote_average", 0),
-                "vote_count": d.get("vote_count", 0),
-                "runtime": d.get("runtime"),
-                "episode_runtime": d.get("episode_runtime"),
-                "status": d.get("status"),
-                "original_language": d.get("original_language"),
-                "imdb_id": d.get("imdb_id"),
-                "tvdb_id": d.get("tvdb_id"),
-                "release_date": d.get("release_date", ""),
-                "last_air_date": d.get("last_air_date", ""),
-                "number_of_seasons": d.get("number_of_seasons"),
-                "number_of_episodes": d.get("number_of_episodes"),
-                "production_companies": d.get("production_companies", []),
-                "networks": d.get("networks", []),
-                "cast": d.get("cast", [])[:10],
-                "directors": [c["name"] for c in d.get("crew", []) if c.get("job") == "Director"],
-                "writers": [c["name"] for c in d.get("crew", []) if c.get("job") in ("Writer", "Screenplay")],
-                "creators": [c["name"] for c in d.get("crew", []) if c.get("job") == "Creator"],
-                "trailer_url": trailer_url,
-                "trailers": [{"key": t["key"], "name": t["name"]} for t in trailers_raw],
-                "watch_providers": wp.get("providers", {}),
-                "watch_providers_link": wp.get("link", ""),
-                "content_rating": d.get("content_rating", ""),
-                "writers": [c["name"] for c in d.get("crew", []) if c.get("job") in ("Writer", "Screenplay")],
-                "creators": [c["name"] for c in d.get("crew", []) if c.get("job") == "Creator"],
-                "in_library": in_library,
-                "media_status": None,
-            }
-        else:
-            detail = await stack.seerr.get_detail(tmdb_id, media_type)
-            return {
-                "tmdb_id": detail.tmdb_id,
-                "media_type": detail.media_type,
-                "title": detail.title,
-                "original_title": detail.original_title,
-                "year": detail.year,
-                "overview": detail.overview,
-                "poster_url": f"https://image.tmdb.org/t/p/w500{detail.poster_path}" if detail.poster_path else None,
-                "backdrop_url": f"https://image.tmdb.org/t/p/w1280{detail.backdrop_path}" if detail.backdrop_path else None,
-                "genres": normalize_genres(detail.genres, original_language=getattr(detail, "original_language", None)),
-                "keywords": detail.keywords,
-                "vote_average": detail.vote_average,
-                "vote_count": detail.vote_count,
-                "runtime": detail.runtime,
-                "status": detail.status,
-                "original_language": detail.original_language,
-                "imdb_id": detail.imdb_id,
-                "cast": detail.cast[:10],
-                "directors": detail.directors,
-                "writers": detail.writers,
-                "trailers": detail.trailers,
-                "in_library": detail.in_library,
-                "media_status": detail.media_status,
-            }
-    except Exception as e:
-        raise HTTPException(404, f"Title not found: {e}")
-
-
-# ── Request (Seerr → Radarr/Sonarr) ─────────────────────────────
-
-@router.post("/request/{tmdb_id}")
-async def request_media(
-    tmdb_id: int,
-    media_type: str = Query("movie", pattern="^(movie|tv)$"),
-    seasons: Optional[str] = None,
-):
-    """Submit a media request through Seerr → Radarr/Sonarr."""
-    stack = get_stack()
-    try:
-        if media_type == "movie":
-            result = await stack.seerr.request_movie(tmdb_id)
-        else:
-            season_list = None
-            if seasons:
-                season_list = [int(s.strip()) for s in seasons.split(",")]
-            result = await stack.seerr.request_tv(tmdb_id, season_list)
-    except Exception as e:
-        raise HTTPException(400, f"Request failed: {e}")
-
-    return {
-        "request_id": result.request_id,
-        "tmdb_id": result.tmdb_id,
-        "media_type": result.media_type,
-        "status": result.status,
-        "requested_by": result.requested_by,
-    }
-
-
-@router.post("/watchlist/add/{tmdb_id}")
-async def add_to_watchlist(
-    tmdb_id: int,
-    media_type: str = Query("movie", pattern="^(movie|tv)$"),
-    user: TokenPayload = Depends(get_current_user),
-):
-    """Add a title to the authenticated user's Plex watchlist."""
-    stack = get_stack()
-    if not stack.plex:
-        raise HTTPException(503, "Plex not configured")
-
-    # Resolve TMDB ID → Plex discover GUID (uses admin token for lookup)
-    plex_guid = await stack.plex.resolve_plex_guid(tmdb_id, media_type)
-    if not plex_guid:
-        raise HTTPException(404, f"Could not resolve TMDB {tmdb_id} to Plex metadata")
-
-    # Use the authenticated user's own Plex token for watchlist operation
-    success = await stack.plex.add_to_watchlist(plex_guid, token_override=user.plex_token)
-    if not success:
-        raise HTTPException(500, "Failed to add to Plex watchlist")
-
-    return {"success": True, "tmdb_id": tmdb_id, "plex_guid": plex_guid, "user": user.username}
-
-
-@router.post("/watchlist/remove/{tmdb_id}")
-async def remove_from_watchlist(
-    tmdb_id: int,
-    media_type: str = Query("movie", pattern="^(movie|tv)$"),
-    user: TokenPayload = Depends(get_current_user),
-):
-    """Remove a title from the authenticated user's Plex watchlist."""
-    stack = get_stack()
-    if not stack.plex:
-        raise HTTPException(503, "Plex not configured")
-
-    plex_guid = await stack.plex.resolve_plex_guid(tmdb_id, media_type)
-    if not plex_guid:
-        raise HTTPException(404, f"Could not resolve TMDB {tmdb_id} to Plex metadata")
-
-    success = await stack.plex.remove_from_watchlist(plex_guid, token_override=user.plex_token)
-    if not success:
-        raise HTTPException(500, "Failed to remove from Plex watchlist")
-
-    return {"success": True, "tmdb_id": tmdb_id, "user": user.username}
-
-
-@router.get("/filters/options")
-async def get_filter_options():
-    """Available filter options: genres + Plex library sections."""
-    stack = get_stack()
-
-    # Genres from TMDB (preferred) or Seerr
-    all_genres = set()
-    try:
-        src = stack.tmdb or stack.seerr
-        for g in await src.get_movie_genres():
-            all_genres.add(g.get("name", "") if isinstance(g, dict) else str(g))
-        for g in await src.get_tv_genres():
-            all_genres.add(g.get("name", "") if isinstance(g, dict) else str(g))
-    except Exception:
-        pass
-
-    # Plex library sections
-    libraries = []
-    if stack.plex and stack.plex.sections:
-        libraries = [
-            {"key": s["key"], "title": s["title"], "type": s["type"]}
-            for s in stack.plex.sections
-        ]
-
-    return {
-        "genres": sorted((all_genres | {"Anime"}) - {""}),
-        "libraries": libraries,
-    }
-
-
-@router.get("/cache/stats")
-async def cache_stats():
-    """Cache statistics for monitoring."""
-    cache = get_cache()
-    return cache.get_stats()
-
-
-@router.post("/cache/invalidate")
-async def invalidate_cache(username: Optional[str] = None):
-    """Invalidate cached recommendations.
-
-    - No username: clears all caches
-    - With username: clears only that user's caches
-    """
-    cache = get_cache()
-    if username:
-        cache.invalidate_user(username)
-        return {"status": "ok", "invalidated": username}
-    else:
-        cache.invalidate_all()
-        return {"status": "ok", "invalidated": "all"}
-
-
-
-@router.post("/recommend/{username}/explain")
-async def lazy_explain(
-    username: str,
-    user: TokenPayload = Depends(get_current_user),
-    mode: str = Query("tonight"),
-    domain: str = Query("all"),
-):
-    """Backfill AI explanations for cached recommendations.
-
-    Call after page load to fill in explanations without blocking initial render.
-    Updates the cached response in-place and returns the explanations.
-    """
-    if user.username != username and not user.is_admin:
-        raise HTTPException(403, "Cannot explain other users' recommendations")
-
-    cache = get_cache()
-    cached = cache.get_recs(username, mode, domain)
-    if not cached:
-        raise HTTPException(404, "No cached recommendations to explain")
-
-    recs_data = cached.get("recommendations", [])
-    # Check if explanations already exist
-    has_explanations = any(r.get("explanation") and not r["explanation"].startswith(" ") for r in recs_data[:3])
-    if has_explanations:
-        return {"status": "already_explained", "count": len(recs_data)}
-
-    # Build lightweight Recommendation objects for the AI explainer
-    from app.services.recommender import Recommendation
-    from app.services.ai_explanations import generate_explanations, build_profile_summary
-
-    stack = get_stack()
-    profile = await stack.profiler.build_profile(username=username, domain=domain, enrich_keywords=True, max_enrich=100)
-    cache.set_profile(username, domain, profile)
-    profile_summary = build_profile_summary(profile)
-
-    recs = []
-    for r in recs_data:
-        recs.append(Recommendation(
-            tmdb_id=r.get("tmdb_id", 0),
-            media_type=r.get("media_type", "movie"),
-            title=r.get("title", ""),
-            year=r.get("year"),
-            genres=r.get("genres", []),
-            keywords=r.get("keywords", []),
-            overview=r.get("overview"),
-            vote_average=r.get("vote_average", 0),
-            score=r.get("score", 0),
-            score_breakdown=r.get("score_breakdown", {}),
-            explanation_signals=r.get("explanation_signals", []),
-            mode=mode,
-            in_library=r.get("in_library", False),
-        ))
-
-    try:
-        explanations = await generate_explanations(recs, profile_summary)
-        for rec_data, expl in zip(recs_data, explanations):
-            rec_data["explanation"] = expl
-        # Update cache with explanations
-        cache.set_recs(username, mode, domain, cached)
-        return {"status": "explained", "count": len(explanations)}
-    except Exception as e:
-        logger.warning(f"Lazy explanation failed: {e}")
-        raise HTTPException(500, f"Explanation generation failed: {e}")
-
-
-@router.get("/recommend/{username}/collections")
-async def get_collections(
-    username: str,
-    user: TokenPayload = Depends(get_current_user),
-):
-    """Get partially completed movie collections for a user.
-    
-    Uses stale-while-revalidate: returns cached data instantly (even if stale),
-    triggers background refresh if data is older than TTL.
-    """
-    import asyncio
-
-    if user.username != username and not user.is_admin:
-        raise HTTPException(403, "Cannot view other users' collections")
-
-    stack = get_stack()
-    if not stack.tmdb:
-        raise HTTPException(503, "TMDB client not configured — set TMDB_API_KEY")
-
-    # L1: In-memory cache (fastest)
-    from app.services.cache import get_cache
-    cache = get_cache()
-    cached_colls = cache.get_collections(username)
-    if cached_colls is not None:
-        return {"username": username, "collections": cached_colls, "total": len(cached_colls), "cached": True}
-
-    # Lazy-init collection service
-    if not hasattr(stack, "_collection_svc") or stack._collection_svc is None:
-        stack._collection_svc = CollectionService(stack.tmdb, stack.radarr, stack.tautulli)
-
-    # L2: SQLite persistent cache (survives restarts)
-    sqlite_data, is_fresh = stack._collection_svc.get_cached_results(username)
-
-    if sqlite_data is not None:
-        # Promote to L1
-        cache.set_collections(username, sqlite_data)
-        if not is_fresh:
-            # Stale — serve immediately but refresh in background
-            asyncio.create_task(_refresh_collections_bg(username, stack, cache))
-        return {"username": username, "collections": sqlite_data, "total": len(sqlite_data), "cached": True, "stale": not is_fresh}
-
-    # L3: Full TMDB scan (cold start — only happens once per user ever)
-    collections = await stack._collection_svc.get_user_collections(username)
-    coll_list = _format_collections(collections)
-
-    # Persist to both L1 and L2
-    cache.set_collections(username, coll_list)
-    stack._collection_svc._persist_results(username, coll_list)
-
-    return {"username": username, "collections": coll_list, "total": len(coll_list)}
-
-
-def _format_collections(collections):
-    """Format UserCollection list into API response dicts."""
-    def _fmt_part(p):
-        return {
-            "tmdb_id": p.tmdb_id, "title": p.title, "year": p.year,
-            "poster_url": p.poster_url, "vote_average": p.vote_average,
-            "in_library": p.in_library, "watched": p.watched,
-            "release_date": p.release_date,
-        }
-    return [
-        {
-            "collection_id": c.collection_id, "name": c.name,
-            "poster_url": c.poster_url, "backdrop_url": c.backdrop_url,
-            "total_parts": c.total_parts, "watched_count": c.watched_count,
-            "in_library_count": c.in_library_count, "completion_pct": c.completion_pct,
-            "parts": [_fmt_part(p) for p in c.parts],
-            "missing": [_fmt_part(p) for p in c.missing_parts],
-        }
-        for c in collections
-    ]
-
-
-async def _refresh_collections_bg(username: str, stack, cache):
-    """Background task: refresh stale collection data."""
-    try:
-        collections = await stack._collection_svc.get_user_collections(username)
-        coll_list = _format_collections(collections)
-        cache.set_collections(username, coll_list)
-        stack._collection_svc._persist_results(username, coll_list)
-        logger.info(f"Background collection refresh complete for {username}: {len(coll_list)} collections")
-    except Exception as e:
-        logger.warning(f"Background collection refresh failed for {username}: {e}")
-
-
-@router.get("/collection/for/{tmdb_id}")
-async def get_collection_for_movie(
-    tmdb_id: int,
-    user: TokenPayload = Depends(get_current_user),
-):
-    """Check if a movie belongs to a collection and return completion status.
-
-    Returns collection info with per-part watched/library status for the
-    authenticated user. Used by the detail modal to show collection badges.
-    Returns 204 (no content) if the movie is not part of a collection.
-    """
-    stack = get_stack()
-    if not stack.tmdb:
-        raise HTTPException(503, "TMDB not configured")
-
-    # 1. Check collection membership
-    coll_info = await stack.tmdb.get_movie_collection_id(tmdb_id)
-    if not coll_info:
-        from fastapi.responses import Response
-        return Response(status_code=204)
-
-    # 2. Fetch full collection
-    coll = await stack.tmdb.get_collection(coll_info["id"])
-    if not coll:
-        from fastapi.responses import Response
-        return Response(status_code=204)
-
-    # 3. Cross-reference with library + watch status
-    movies = await stack.radarr.get_all_movies()
-    library_tmdb = {m.tmdb_id for m in movies if m.tmdb_id}
-
-    # Get user watch history
-    from app.services.factory import resolve_user_id
-    uid = resolve_user_id(user.username)
-    history = await stack.tautulli.get_history(user_id=None, limit=10000)
-    user_watched = {e.tmdb_id for e in history if e.user_id == uid and e.media_type == "movie" and e.tmdb_id}
-
-    parts = []
-    watched_count = 0
-    in_lib_count = 0
-    missing = []
-
-    for p in coll["parts"]:
-        in_lib = p["tmdb_id"] in library_tmdb
-        watched = p["tmdb_id"] in user_watched
-
-        poster = f"https://image.tmdb.org/t/p/w342{p['poster_path']}" if p.get("poster_path") else None
-        part = {
-            "tmdb_id": p["tmdb_id"],
-            "title": p["title"],
-            "year": p.get("year"),
-            "poster_url": poster,
-            "vote_average": p.get("vote_average", 0),
-            "in_library": in_lib,
-            "watched": watched,
-            "release_date": p.get("release_date"),
-        }
-        parts.append(part)
-        if watched:
-            watched_count += 1
-        if in_lib:
-            in_lib_count += 1
-        if not in_lib:
-            missing.append(part)
-
-    total = len(parts)
-    poster_url = f"https://image.tmdb.org/t/p/w342{coll['poster_path']}" if coll.get("poster_path") else None
-
-    return {
-        "collection_id": coll["collection_id"],
-        "name": coll["name"],
-        "poster_url": poster_url,
-        "total_parts": total,
-        "watched_count": watched_count,
-        "in_library_count": in_lib_count,
-        "completion_pct": round((watched_count / total) * 100, 1) if total else 0,
-        "current_tmdb_id": tmdb_id,
-        "parts": parts,
-        "missing": missing,
-    }
-
-
-# ── World Cinema Map ─────────────────────────────────────────────
-
-@router.get("/discover/world-cinema")
-async def get_world_cinema_map(
-    username: Optional[str] = Query(None, description="Username for taste matching"),
-):
-    """World cinema map with per-country taste match scores.
-
-    Returns all featured countries grouped by region. If username is provided,
-    each country gets a taste_match score (0-1) based on genre affinity.
-    """
-    from app.services.world_cinema import get_world_cinema_map as _get_map
-
-    user_genres = None
-    if username:
-        try:
-            stack = get_stack()
-            cache = get_cache()
-            profile = cache.get_profile(username, "all")
-            if not profile:
-                profile = await stack.profiler.build_profile(username=username, domain="all", enrich_keywords=False)
-                cache.set_profile(username, "all", profile)
-            user_genres = {g.genre: g.score for g in profile.genres}
-        except Exception as e:
-            import logging; logging.getLogger(__name__).warning(f"Could not build taste profile for world cinema: {e}")
-
-    return _get_map(user_genres)
-
-
-# ── Talk of the Web (Reddit Buzz) ────────────────────────────────
-
-@router.get("/discover/buzz")
-async def get_reddit_buzz_endpoint(
-    subreddits: Optional[str] = Query(None, description="Comma-separated subreddit names"),
-    limit: int = Query(15, ge=5, le=30, description="Posts per subreddit"),
-    enrich: bool = Query(True, description="Cross-reference with TMDB"),
-):
-    """Talk of the Web — Reddit-powered film/TV buzz.
-
-    Fetches top posts from film/TV subreddits, extracts title mentions,
-    and optionally enriches with TMDB metadata.
-    """
-    from app.services.reddit_buzz import get_reddit_buzz, SOURCES
-
-    stack = get_stack()
-    sub_list = subreddits.split(",") if subreddits else None
-
-    items = await get_reddit_buzz(
-        seerr_client=stack.seerr,
-        subreddits=sub_list,
-        limit_per_sub=limit,
-        enrich_tmdb=enrich,
-    )
-
-    available_subs = [{"name": s["sub"], "label": s["label"], "category": s["category"]} for s in SOURCES]
-
-    return {
-        "results": items,
-        "total": len(items),
-        "sources": available_subs,
-    }

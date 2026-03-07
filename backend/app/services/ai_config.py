@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 from sqlalchemy import select
@@ -112,17 +113,32 @@ def get_ai_config() -> AIConfig:
         cfg.features.ai_mood = _db_get("features_ai_mood", True)
         cfg.features.ai_explanations = _db_get("features_ai_explanations", True)
     else:
-        # JSON fallback
-        flat = _json_fallback()
-        if flat:
-            cfg.llm.provider = flat.get("llm_provider", "")
-            cfg.llm.endpoint = flat.get("llm_endpoint", "")
-            cfg.llm.api_key = flat.get("llm_api_key", "")
-            cfg.llm.model = flat.get("llm_model", "")
-            cfg.llm.temperature = float(flat.get("llm_temperature", 0.7))
-            cfg.llm.max_tokens = int(flat.get("llm_max_tokens", 500))
-            cfg.features.ai_mood = flat.get("features_ai_mood", True)
-            cfg.features.ai_explanations = flat.get("features_ai_explanations", True)
+        # Env var fallback (survive rebuilds), then JSON fallback
+        env_provider = os.environ.get("AI_LLM_PROVIDER", "")
+        if env_provider:
+            cfg.llm.provider = env_provider
+            cfg.llm.endpoint = os.environ.get("AI_LLM_ENDPOINT", "")
+            cfg.llm.api_key = os.environ.get("AI_LLM_API_KEY", "")
+            cfg.llm.model = os.environ.get("AI_LLM_MODEL", "")
+            cfg.llm.temperature = float(os.environ.get("AI_LLM_TEMPERATURE", "0.7"))
+            cfg.llm.max_tokens = int(os.environ.get("AI_LLM_MAX_TOKENS", "500"))
+            cfg.features.ai_mood = os.environ.get("AI_FEATURES_MOOD", "true").lower() == "true"
+            cfg.features.ai_explanations = os.environ.get("AI_FEATURES_EXPLANATIONS", "true").lower() == "true"
+            # Persist env defaults to DB so subsequent reads use DB path
+            logger.info("AI config loaded from env vars — persisting to DB")
+            save_ai_config(cfg)
+        else:
+            # JSON fallback
+            flat = _json_fallback()
+            if flat:
+                cfg.llm.provider = flat.get("llm_provider", "")
+                cfg.llm.endpoint = flat.get("llm_endpoint", "")
+                cfg.llm.api_key = flat.get("llm_api_key", "")
+                cfg.llm.model = flat.get("llm_model", "")
+                cfg.llm.temperature = float(flat.get("llm_temperature", 0.7))
+                cfg.llm.max_tokens = int(flat.get("llm_max_tokens", 500))
+                cfg.features.ai_mood = flat.get("features_ai_mood", True)
+                cfg.features.ai_explanations = flat.get("features_ai_explanations", True)
 
     return cfg
 
