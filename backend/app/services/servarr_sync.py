@@ -1,93 +1,82 @@
-"""Servarr-first metadata sync — replaces TMDB bulk pull.
+"""Servarr-first metadata sync — pulls from all registered instances.
 
-Pulls from Radarr/Sonarr (instant, local, no rate limits),
-caches in tmdb_cache table, embeds into ChromaDB.
-TMDB API only used for enrichment (cast/crew, keywords) on demand.
+Syncs from Radarr/Sonarr (instant, local, no rate limits) into the
+tmdb_cache table. Uses the instance registry to iterate all configured
+instances dynamically — no hardcoded instance names.
 """
 
-import asyncio
 import logging
 import time
 from datetime import datetime, timezone
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy import select, func
 
-from app.clients.servarr import RadarrClient, SonarrClient, ServarrMovie, ServarrSeries
+from app.clients.radarr import RadarrClient
+from app.clients.sonarr import SonarrClient
+from app.clients.servarr_models import ServarrMovie, ServarrSeries
 from app.models.tables import TmdbCache
 
 logger = logging.getLogger(__name__)
 
 
 class ServarrSyncService:
-    """Syncs metadata from Radarr/Sonarr into local cache."""
+    """Syncs metadata from all registered Radarr/Sonarr instances."""
 
-    def __init__(self, radarr: RadarrClient, sonarr_tv: SonarrClient = None,
-                 sonarr_anime: SonarrClient = None):
-        self.radarr = radarr
-        self.sonarr_tv = sonarr_tv
-        self.sonarr_anime = sonarr_anime
+    def __init__(self, registry):
+        """Args: registry — InstanceRegistry from factory."""
+        self.registry = registry
 
-    async def sync_movies(self, db: AsyncSession, progress_callback=None) -> dict:
-        """Pull all movies from Radarr into tmdb_cache."""
-        movies = await self.radarr.get_all_movies()
+    async def sync_movies(self, db, instance_name: str, client: RadarrClient,
+                          progress_callback=None) -> dict:
+        """Pull all movies from a single Radarr instance into tmdb_cache."""
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+        movies = await client.get_all_movies()
         inserted = 0
-        updated = 0
-        skipped = 0
 
         for i, m in enumerate(movies):
-            genres_dict = {g: g for g in m.genres} if m.genres else {}
+            genres_str = str(m.genres) if m.genres else "[]"
+            try:
+                existing = db.execute(
+                    select(TmdbCache).where(
+                        TmdbCache.tmdb_id == m.tmdb_id,
+                        TmdbCache.media_type == "movie",
+                    )
+                ).scalar_one_or_none()
+                if existing:
+                    existing.title = m.title
+                    existing.original_title = m.original_title
+                    existing.year = m.year
+                    existing.overview = m.overview
+                    existing.vote_average = m.vote_average
+                    existing.popularity = m.popularity
+                    existing.poster_path = m.poster_path
+                    existing.runtime_minutes = m.runtime_minutes
+                    existing.original_language = m.original_language
+                else:
+                    db.add(TmdbCache(
+                        tmdb_id=m.tmdb_id, media_type="movie",
+                        title=m.title, original_title=m.original_title,
+                        year=m.year, overview=m.overview,
+                        vote_average=m.vote_average, popularity=m.popularity,
+                        poster_path=m.poster_path,
+                        runtime_minutes=m.runtime_minutes,
+                        original_language=m.original_language,
+                    ))
+                inserted += 1
 
-            stmt = pg_insert(TmdbCache).values(
-                tmdb_id=m.tmdb_id,
-                media_type="movie",
-                title=m.title,
-                original_title=m.original_title,
-                year=m.year,
-                genres=genres_dict,
-                overview=m.overview,
-                vote_average=m.vote_average,
-                popularity=m.popularity,
-                poster_path=m.poster_path,
-                runtime_minutes=m.runtime_minutes,
-                original_language=m.original_language,
-                fetched_at=datetime.now(timezone.utc),
-            ).on_conflict_do_update(
-                index_elements=["tmdb_id", "media_type"],
-                set_={
-                    "title": m.title,
-                    "original_title": m.original_title,
-                    "year": m.year,
-                    "genres": genres_dict,
-                    "overview": m.overview,
-                    "vote_average": m.vote_average,
-                    "popularity": m.popularity,
-                    "poster_path": m.poster_path,
-                    "runtime_minutes": m.runtime_minutes,
-                    "original_language": m.original_language,
-                    "fetched_at": datetime.now(timezone.utc),
-                },
-            )
-            await db.execute(stmt)
+                if (i + 1) % 500 == 0:
+                    db.commit()
+                    if progress_callback:
+                        await progress_callback(i + 1, len(movies), m.title)
+            except Exception as e:
+                logger.debug(f"Sync skip movie {m.tmdb_id}: {e}")
 
-            if (i + 1) % 500 == 0:
-                await db.commit()
-                if progress_callback:
-                    await progress_callback(i + 1, len(movies), m.title)
+        db.commit()
+        return {"inserted": inserted, "total": len(movies), "source": instance_name}
 
-            inserted += 1
-
-        await db.commit()
-        return {"inserted": inserted, "total": len(movies), "source": "radarr"}
-
-    async def sync_series(self, db: AsyncSession, source: str = "tv",
+    async def sync_series(self, db, instance_name: str, client: SonarrClient,
                           progress_callback=None) -> dict:
-        """Pull all series from Sonarr into tmdb_cache."""
-        client = self.sonarr_tv if source == "tv" else self.sonarr_anime
-        if not client:
-            return {"inserted": 0, "total": 0, "source": f"sonarr-{source}", "error": "no client"}
-
+        """Pull all series from a single Sonarr instance into tmdb_cache."""
         series_list = await client.get_all_series()
         inserted = 0
         skipped = 0
@@ -97,58 +86,77 @@ class ServarrSyncService:
                 skipped += 1
                 continue
 
-            genres_dict = {g: g for g in s.genres} if s.genres else {}
+            try:
+                existing = db.execute(
+                    select(TmdbCache).where(
+                        TmdbCache.tmdb_id == s.tmdb_id,
+                        TmdbCache.media_type == "show",
+                    )
+                ).scalar_one_or_none()
+                if existing:
+                    existing.title = s.title
+                    existing.year = s.year
+                    existing.overview = s.overview
+                    existing.vote_average = s.vote_average
+                    existing.runtime_minutes = s.runtime_minutes
+                    existing.original_language = s.original_language
+                    existing.poster_path = s.poster_path
+                else:
+                    db.add(TmdbCache(
+                        tmdb_id=s.tmdb_id, media_type="show",
+                        title=s.title, year=s.year,
+                        overview=s.overview, vote_average=s.vote_average,
+                        runtime_minutes=s.runtime_minutes,
+                        original_language=s.original_language,
+                        poster_path=s.poster_path,
+                    ))
+                inserted += 1
 
-            stmt = pg_insert(TmdbCache).values(
-                tmdb_id=s.tmdb_id,
-                media_type="show",
-                title=s.title,
-                year=s.year,
-                genres=genres_dict,
-                overview=s.overview,
-                vote_average=s.vote_average,
-                runtime_minutes=s.runtime_minutes,
-                original_language=s.original_language,
-                poster_path=s.poster_path,
-                fetched_at=datetime.now(timezone.utc),
-            ).on_conflict_do_update(
-                index_elements=["tmdb_id", "media_type"],
-                set_={
-                    "title": s.title,
-                    "year": s.year,
-                    "genres": genres_dict,
-                    "overview": s.overview,
-                    "vote_average": s.vote_average,
-                    "runtime_minutes": s.runtime_minutes,
-                    "original_language": s.original_language,
-                    "poster_path": s.poster_path,
-                    "fetched_at": datetime.now(timezone.utc),
-                },
-            )
-            await db.execute(stmt)
-            inserted += 1
+                if (i + 1) % 200 == 0:
+                    db.commit()
+                    if progress_callback:
+                        await progress_callback(i + 1, len(series_list), s.title)
+            except Exception as e:
+                logger.debug(f"Sync skip series {s.tmdb_id}: {e}")
 
-            if (i + 1) % 200 == 0:
-                await db.commit()
-                if progress_callback:
-                    await progress_callback(i + 1, len(series_list), s.title)
-
-        await db.commit()
+        db.commit()
         return {"inserted": inserted, "skipped": skipped,
-                "total": len(series_list), "source": f"sonarr-{source}"}
+                "total": len(series_list), "source": instance_name}
 
-    async def sync_all(self, db: AsyncSession, progress_callback=None) -> dict:
-        """Sync everything: Radarr movies + both Sonarr instances."""
+    async def sync_all(self, db, progress_callback=None) -> dict:
+        """Sync from ALL registered instances — Radarr and Sonarr."""
         results = {}
-
         t0 = time.time()
-        results["movies"] = await self.sync_movies(db, progress_callback)
-        results["tv"] = await self.sync_series(db, "tv", progress_callback)
-        results["anime"] = await self.sync_series(db, "anime", progress_callback)
+
+        # Sync all Radarr instances
+        for name, client in self.registry.get_by_type("radarr"):
+            try:
+                results[name] = await self.sync_movies(
+                    db, name, client, progress_callback)
+            except Exception as e:
+                results[name] = {"error": str(e), "source": name}
+                logger.error(f"Sync failed for {name}: {e}")
+
+        # Sync all Sonarr instances
+        for name, client in self.registry.get_by_type("sonarr"):
+            try:
+                results[name] = await self.sync_series(
+                    db, name, client, progress_callback)
+            except Exception as e:
+                results[name] = {"error": str(e), "source": name}
+                logger.error(f"Sync failed for {name}: {e}")
+
         results["elapsed_seconds"] = round(time.time() - t0, 1)
 
-        # Get total in DB
-        count = await db.execute(select(func.count(TmdbCache.tmdb_id)))
-        results["total_cached"] = count.scalar()
+        # Total in DB
+        from app.database import get_db
+        try:
+            with get_db() as session:
+                count = session.execute(
+                    select(func.count()).select_from(TmdbCache)
+                ).scalar()
+                results["total_cached"] = count
+        except Exception:
+            pass
 
         return results

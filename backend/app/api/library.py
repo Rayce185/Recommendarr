@@ -99,7 +99,11 @@ async def add_to_library(req: AddMediaRequest, user: TokenPayload = Depends(get_
 
     try:
         if req.media_type == "movie":
-            radarr = stack.radarr
+            radarr = stack.registry.get(instance_name)
+            if not radarr:
+                radarr = stack.registry.get_default_for("movie")
+            if not radarr:
+                raise HTTPException(422, f"No Radarr instance '{instance_name}' configured")
             if await radarr.movie_exists(req.tmdb_id):
                 return AddMediaResponse(success=True, message=f"'{title}' already in library",
                     tmdb_id=req.tmdb_id, title=title, instance=instance_name,
@@ -112,7 +116,11 @@ async def add_to_library(req: AddMediaRequest, user: TokenPayload = Depends(get_
                 instance=instance_name, root_folder=root_folder)
 
         elif req.media_type == "tv":
-            sonarr = stack.sonarr_anime if instance_name in ("sonarr_anime", "sonarr-anime") else stack.sonarr_tv
+            sonarr = stack.registry.get(instance_name)
+            if not sonarr:
+                sonarr = stack.registry.get_default_for("tv")
+            if not sonarr:
+                raise HTTPException(422, f"No Sonarr instance '{instance_name}' configured")
             tvdb_id = detail.get("tvdb_id")
             if tvdb_id and await sonarr.series_exists(tvdb_id=tvdb_id):
                 return AddMediaResponse(success=True, message=f"'{title}' already in library",
@@ -210,16 +218,20 @@ async def get_instance_info(user: TokenPayload = Depends(get_current_user)):
     """Get all *arr instances with quality profiles, root folders, tags."""
     stack = get_stack()
     instances = {}
-    for name, client in [("radarr", stack.radarr), ("sonarr_tv", stack.sonarr_tv), ("sonarr_anime", stack.sonarr_anime)]:
+    for cfg in stack.registry.configs:
+        name = cfg.name
+        client = stack.registry.get(name)
+        if not client:
+            continue
         try:
             profiles = await client.get_quality_profiles()
             folders = await client.get_root_folders()
             tags = await client.get_tag_map()
-            inst_type = "radarr" if name == "radarr" else "sonarr"
+            inst_type = cfg.type
             instances[name] = {"type": inst_type, "url": client.url, "connected": True,
                 "quality_profiles": profiles, "root_folders": folders,
                 "tags": [{"id": k, "label": v} for k, v in tags.items()]}
         except Exception as e:
-            instances[name] = {"type": "radarr" if name == "radarr" else "sonarr",
+            instances[name] = {"type": cfg.type,
                 "connected": False, "error": str(e)}
     return instances
