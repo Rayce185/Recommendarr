@@ -75,7 +75,9 @@ async def generate_explanations(
     prompt += "\n".join(items)
 
     try:
-        raw = await llm_complete(prompt, system=SYSTEM_PROMPT)
+        # Scale tokens: ~40 tokens per explanation × batch size, plus JSON overhead
+        tokens_needed = min(len(batch) * 50 + 100, 2000)
+        raw = await llm_complete(prompt, system=SYSTEM_PROMPT, max_tokens=tokens_needed)
         if not raw:
             return originals
 

@@ -16,24 +16,28 @@ logger = logging.getLogger(__name__)
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
-async def llm_complete(prompt: str, system: str = "", config: Optional[AIConfig] = None) -> Optional[str]:
+async def llm_complete(prompt: str, system: str = "", config: Optional[AIConfig] = None, max_tokens: Optional[int] = None) -> Optional[str]:
     """Send a prompt to the configured LLM provider. Returns text or None on failure.
 
     This is the single entry point for all LLM calls in Recommendarr.
     Falls back gracefully — callers should always have a non-AI fallback.
+
+    Args:
+        max_tokens: Override config max_tokens for this call (e.g. batch explanations need more).
     """
     cfg = config or get_ai_config()
     if not cfg.is_llm_enabled:
         return None
 
     llm = cfg.llm
+    effective_tokens = max_tokens or llm.max_tokens
     try:
         if llm.provider == "ollama":
-            return await _ollama_complete(llm, prompt, system)
+            return await _ollama_complete(llm, prompt, system, effective_tokens)
         elif llm.provider in ("openai_compatible", "openai"):
-            return await _openai_complete(llm, prompt, system)
+            return await _openai_complete(llm, prompt, system, effective_tokens)
         elif llm.provider == "anthropic":
-            return await _anthropic_complete(llm, prompt, system)
+            return await _anthropic_complete(llm, prompt, system, effective_tokens)
         else:
             logger.warning(f"Unknown LLM provider: {llm.provider}")
             return None
@@ -42,14 +46,15 @@ async def llm_complete(prompt: str, system: str = "", config: Optional[AIConfig]
         return None
 
 
-async def _ollama_complete(llm: LLMConfig, prompt: str, system: str) -> Optional[str]:
+async def _ollama_complete(llm: LLMConfig, prompt: str, system: str, max_tokens: int = 500) -> Optional[str]:
     """Ollama /api/generate endpoint."""
     url = f"{llm.endpoint.rstrip('/')}/api/generate"
     payload = {
         "model": llm.model,
         "prompt": prompt,
         "stream": False,
-        "options": {"temperature": llm.temperature, "num_predict": llm.max_tokens},
+        "options": {"temperature": llm.temperature, "num_predict": max_tokens},
+        "think": False,  # Prevent Qwen3 reasoning mode
     }
     if system:
         payload["system"] = system
@@ -59,7 +64,7 @@ async def _ollama_complete(llm: LLMConfig, prompt: str, system: str) -> Optional
         return resp.json().get("response", "").strip()
 
 
-async def _openai_complete(llm: LLMConfig, prompt: str, system: str) -> Optional[str]:
+async def _openai_complete(llm: LLMConfig, prompt: str, system: str, max_tokens: int = 500) -> Optional[str]:
     """OpenAI / OpenAI-compatible chat completions endpoint."""
     endpoint = llm.endpoint.rstrip("/") if llm.endpoint else "https://api.openai.com/v1"
     url = f"{endpoint}/chat/completions"
@@ -76,7 +81,7 @@ async def _openai_complete(llm: LLMConfig, prompt: str, system: str) -> Optional
         "model": llm.model,
         "messages": messages,
         "temperature": llm.temperature,
-        "max_tokens": llm.max_tokens,
+        "max_tokens": max_tokens,
     }
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         resp = await client.post(url, json=payload, headers=headers)
@@ -85,7 +90,7 @@ async def _openai_complete(llm: LLMConfig, prompt: str, system: str) -> Optional
         return data["choices"][0]["message"]["content"].strip()
 
 
-async def _anthropic_complete(llm: LLMConfig, prompt: str, system: str) -> Optional[str]:
+async def _anthropic_complete(llm: LLMConfig, prompt: str, system: str, max_tokens: int = 500) -> Optional[str]:
     """Anthropic Messages API."""
     url = "https://api.anthropic.com/v1/messages"
     headers = {
@@ -95,7 +100,7 @@ async def _anthropic_complete(llm: LLMConfig, prompt: str, system: str) -> Optio
     }
     payload = {
         "model": llm.model,
-        "max_tokens": llm.max_tokens,
+        "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": prompt}],
     }
     if system:
