@@ -73,6 +73,8 @@ const api = {
   collectionFor: (tmdbId) => authFetch(`${API_BASE}/collection/for/${tmdbId}`).then(r => { if (r.status === 204) return null; return r.json(); }),
   whyNot: (tmdbId, username, mediaType = "movie") => authFetch(`${API_BASE}/why-not/${tmdbId}?username=${encodeURIComponent(username)}&media_type=${mediaType}`).then(r => { if (!r.ok) throw new Error("Analysis failed"); return r.json(); }),
   calendar: (days = 90, mediaType = "all", source = "all") => authFetch(`${API_BASE}/calendar?days=${days}&media_type=${mediaType}&source=${source}`).then(r => r.json()),
+  exportProfile: (username) => authFetch(`${API_BASE}/users/${encodeURIComponent(username)}/profile/export`).then(r => r.json()),
+  importProfile: (username, data, mode = "merge") => authFetch(`${API_BASE}/users/${encodeURIComponent(username)}/profile/import`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ data, mode }) }).then(r => r.json()),
   groupRecommend: (username, users, opts = {}) => {
     const params = new URLSearchParams({ users: users.join(","), limit: opts.limit || 30 });
     if (opts.domain && opts.domain !== "all") params.set("domain", opts.domain);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { Heart, Star, Film, Tv, BarChart3, Save, Loader2 } from "lucide-react";
+import { Heart, Star, Film, Tv, BarChart3, Save, Loader2, Download, Upload } from "lucide-react";
 import { api } from "../api.js";
+import ProfileDataTab from "../components/ProfileDataTab.jsx";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
 import { formatHours } from "../utils.js";
 
@@ -84,7 +85,7 @@ function TasteProfilePage({ user }) {
       </div>
       <div className="page-body">
         <div className="profile-tabs">
-          {[["overview", "Overview"], ["genres", "Genre Tuning"], ["keywords", "Keywords"]].map(([id, label]) => (
+          {[["overview", "Overview"], ["genres", "Genre Tuning"], ["keywords", "Keywords"], ["data", "Import/Export"]].map(([id, label]) => (
             <button key={id} className={`profile-tab ${tab === id ? "active" : ""}`} onClick={() => setTab(id)}>{label}</button>
           ))}
         </div>
@@ -215,10 +216,14 @@ function TasteProfilePage({ user }) {
             )}
           </>
         )}
+
+        {tab === "data" && <ProfileDataTab user={user} />}
       </div>
     </>
   );
 }
+
+
 
 
 
