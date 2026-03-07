@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Film, Tv, Heart, BarChart3, Settings, Play, Download, TrendingUp,
   Sparkles, X, Loader2, RefreshCw, Users, Menu, Bookmark, LogIn, LogOut,
-  Search, Globe, Layers, Eye, Upload, Activity} from "lucide-react";
+  Search, Globe, Layers, Eye, Upload, Activity, CalendarDays} from "lucide-react";
 import { api, API_BASE } from "./api.js";
 import { posterUrl } from "./utils.js";
 import "./styles/index.css";
@@ -24,6 +24,7 @@ import AdminPage from "./pages/AdminPage.jsx";
 import SocialPage from "./pages/SocialPage.jsx";
 import ListImportPage from "./pages/ListImportPage.jsx";
 import PulsePage from "./pages/PulsePage.jsx";
+import CalendarPage from "./pages/CalendarPage.jsx";
 import WorldCinemaPage from "./pages/WorldCinemaPage.jsx";
 
 export default function Recommendarr() {
@@ -99,6 +100,7 @@ export default function Recommendarr() {
     { id: "watchlist", label: "Watchlist", icon: Bookmark, section: "Discovery" },
     { id: "import", label: "List Import", icon: Upload, section: "Discovery" },
     { id: "pulse", label: "Cultural Pulse", icon: Activity, section: "Discovery" },
+    { id: "calendar", label: "Coming Soon", icon: CalendarDays, section: "Discovery" },
     { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
     { id: "wrapped", label: "Plex Wrapped", icon: BarChart3, section: "Profile" },
     { id: "social", label: "Social", icon: Users, section: "Profile" },
@@ -135,6 +137,8 @@ export default function Recommendarr() {
         return <SocialPage user={selectedUser} />;
       case "pulse":
         return <PulsePage isAdmin={authUser?.is_admin} />;
+      case "calendar":
+        return <CalendarPage onCardClick={openDetail} />;
       case "import":
         return <ListImportPage onCardClick={openDetail} />;
       case "admin":

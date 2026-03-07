@@ -142,3 +142,46 @@ class SonarrClient:
                 if tmdb_id and s.get("tmdbId") == tmdb_id:
                     return True
             return False
+
+    async def get_calendar(self, days_ahead: int = 90) -> list[dict]:
+        """Get upcoming episodes from Sonarr calendar."""
+        from datetime import datetime, timedelta
+        start = datetime.utcnow().strftime("%Y-%m-%d")
+        end = (datetime.utcnow() + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                r = await c.get(
+                    f"{self.url}/api/v3/calendar",
+                    headers=self.headers,
+                    params={"start": start, "end": end, "unmonitored": "false"},
+                )
+                r.raise_for_status()
+                items = r.json()
+                results = []
+                for ep in items:
+                    series = ep.get("series", {})
+                    images = series.get("images", [])
+                    poster = None
+                    for img in images:
+                        if img.get("coverType") == "poster" and img.get("remoteUrl"):
+                            poster = img["remoteUrl"]
+                            break
+                    results.append({
+                        "title": series.get("title", "Unknown"),
+                        "episode_title": ep.get("title", ""),
+                        "season": ep.get("seasonNumber"),
+                        "episode": ep.get("episodeNumber"),
+                        "tmdb_id": series.get("tmdbId"),
+                        "tvdb_id": series.get("tvdbId"),
+                        "release_date": ep.get("airDateUtc", ep.get("airDate")),
+                        "media_type": "tv",
+                        "poster": poster,
+                        "source": "sonarr",
+                        "monitored": True,
+                        "has_file": ep.get("hasFile", False),
+                        "overview": ep.get("overview") or series.get("overview", ""),
+                    })
+                return results
+        except Exception as e:
+            logger.warning("Sonarr calendar failed: %s", e)
+            return []

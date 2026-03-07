@@ -122,3 +122,43 @@ class RadarrClient:
             resp.raise_for_status()
             data = resp.json()
             return len(data) > 0 if isinstance(data, list) else bool(data)
+
+    async def get_calendar(self, days_ahead: int = 90) -> list[dict]:
+        """Get upcoming movies from Radarr calendar (monitored items with future releases)."""
+        from datetime import datetime, timedelta
+        start = datetime.utcnow().strftime("%Y-%m-%d")
+        end = (datetime.utcnow() + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                r = await c.get(
+                    f"{self.url}/api/v3/calendar",
+                    headers=self.headers,
+                    params={"start": start, "end": end, "unmonitored": "false"},
+                )
+                r.raise_for_status()
+                items = r.json()
+                return [
+                    {
+                        "title": m.get("title", "Unknown"),
+                        "tmdb_id": m.get("tmdbId"),
+                        "release_date": (
+                            m.get("digitalRelease")
+                            or m.get("physicalRelease")
+                            or m.get("inCinemas")
+                        ),
+                        "media_type": "movie",
+                        "poster": f"https://image.tmdb.org/t/p/w300{m['images'][0]['remoteUrl'].split('/t/p/')[1]}"
+                            if m.get("images") and m["images"][0].get("remoteUrl") and "/t/p/" in m["images"][0].get("remoteUrl", "")
+                            else None,
+                        "source": "radarr",
+                        "status": m.get("status", ""),
+                        "monitored": True,
+                        "has_file": m.get("hasFile", False),
+                        "year": m.get("year"),
+                        "overview": m.get("overview", ""),
+                    }
+                    for m in items
+                ]
+        except Exception as e:
+            logger.warning("Radarr calendar failed: %s", e)
+            return []

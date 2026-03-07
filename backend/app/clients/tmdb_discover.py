@@ -134,3 +134,34 @@ async def discover_by_genre(
         "page": page, "vote_count.gte": 10,
     })
     return [parse_discover_result(r, media_type) for r in d.get("results", [])]
+
+
+async def discover_upcoming(
+    get_fn: GetFn,
+    media_type: str = "movie",
+    days_ahead: int = 90,
+    page: int = 1,
+) -> tuple[list[TMDBDiscoverResult], int]:
+    """Upcoming releases — movies and TV premiering in the next N days."""
+    now = datetime.utcnow()
+    date_from = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    date_to = (now + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+    if media_type == "movie":
+        d = await get_fn("/discover/movie", {
+            "sort_by": "primary_release_date.asc",
+            "primary_release_date.gte": date_from,
+            "primary_release_date.lte": date_to,
+            "page": page,
+            "vote_count.gte": 0,
+            "with_release_type": "2|3",  # theatrical + digital
+        })
+    else:
+        d = await get_fn("/discover/tv", {
+            "sort_by": "first_air_date.asc",
+            "first_air_date.gte": date_from,
+            "first_air_date.lte": date_to,
+            "page": page,
+            "vote_count.gte": 0,
+        })
+    results = [parse_discover_result(r, media_type) for r in d.get("results", [])]
+    return results, d.get("total_pages", 1)

@@ -268,3 +268,6 @@ class TMDBClient:
     @staticmethod
     def get_country_options():
         return COUNTRY_OPTIONS
+
+    async def discover_upcoming(self, media_type="movie", days_ahead=90, page=1):
+        return await tmdb_discover.discover_upcoming(self._get, media_type, days_ahead, page)
