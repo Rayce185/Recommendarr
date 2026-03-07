@@ -205,12 +205,13 @@ class ExplanationEngine:
         if not affinities:
             return None
 
-        # Check genres from TMDB cache (we don't have cast_crew on Recommendation directly)
-        # This requires a DB lookup in practice — for now, use genre as proxy
-        # TODO: enrich Recommendation with cast_crew from TmdbCache
-        for name, score in affinities.items():
-            if score > 0.4:
-                return {"name": name, "type": "director", "affinity": score, "count": "several"}
+        # Check actual directors/cast on the Recommendation (populated via E4 TmdbCache enrichment)
+        for director in (rec.directors or []):
+            if director in affinities and affinities[director] > 0.3:
+                return {"name": director, "type": "director", "affinity": affinities[director], "count": "several"}
+        for actor in (rec.cast or []):
+            if actor in affinities and affinities[actor] > 0.3:
+                return {"name": actor, "type": "actor", "affinity": affinities[actor], "count": "several"}
 
         return None
 
