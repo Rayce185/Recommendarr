@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from fastapi import APIRouter, Query
 from app.services.factory import get_stack
+from app.services.cache import get_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -58,6 +59,12 @@ async def get_calendar(
     page: int = Query(1, ge=1, le=20),
 ):
     """Coming Soon calendar — combines TMDB upcoming with Radarr/Sonarr monitored items."""
+    cache = get_cache()
+    cache_key = f"calendar:{days}:{media_type}:{source}:{page}"
+    cached = cache.get_generic(cache_key)
+    if cached:
+        return cached
+
     stack = get_stack()
     tmdb_movies, tmdb_tv, arr_movies, arr_tv = [], [], [], []
 
@@ -150,7 +157,7 @@ async def get_calendar(
             week_key = "unknown"
         weeks.setdefault(week_key, []).append(item)
 
-    return {
+    result = {
         "total": len(combined),
         "days_ahead": days,
         "media_type": media_type,
@@ -158,3 +165,5 @@ async def get_calendar(
         "weeks": weeks,
         "items": combined,
     }
+    cache.set_generic(cache_key, result, ttl=cache.CALENDAR_TTL)
+    return result

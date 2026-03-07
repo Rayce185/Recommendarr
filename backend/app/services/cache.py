@@ -44,6 +44,7 @@ class RecommendationCache:
         self._library: dict[str, CacheEntry] = {}
         self._tmdb_ids: dict[str, CacheEntry] = {}
         self._profiles: dict[str, CacheEntry] = {}
+        self._generic: dict[str, CacheEntry] = {}
         self._stats = {"hits": 0, "misses": 0}
         self._last_refresh_ms: int = 0
         self._last_refresh_at: str = ""
@@ -120,6 +121,40 @@ class RecommendationCache:
         self._recs[key] = CacheEntry(value=data, created_at=time.time(), ttl_seconds=self.COLLECTIONS_TTL)
         logger.debug(f"Cache SET collections:{username} ({len(data)} collections)")
 
+    # ── Generic TTL cache ─────────────────────────────────────────
+    # Use for any endpoint that needs simple key → value caching
+
+    CALENDAR_TTL = 300       # 5 min for calendar data
+    NOTIFICATIONS_TTL = 60   # 1 min for notification aggregation
+    GENERIC_TTL = 300        # 5 min default
+
+    def get_generic(self, key: str) -> Optional[Any]:
+        entry = self._generic.get(key)
+        if entry and entry.is_fresh:
+            self._stats["hits"] += 1
+            logger.debug(f"Cache HIT generic:{key} (age={entry.age_seconds:.0f}s)")
+            return entry.value
+        self._stats["misses"] += 1
+        return None
+
+    def set_generic(self, key: str, value: Any, ttl: float = None):
+        self._generic[key] = CacheEntry(
+            value=value, created_at=time.time(),
+            ttl_seconds=ttl or self.GENERIC_TTL,
+        )
+        logger.debug(f"Cache SET generic:{key} (TTL={ttl or self.GENERIC_TTL}s)")
+
+    def invalidate_generic(self, prefix: str = ""):
+        """Invalidate generic cache entries, optionally filtered by key prefix."""
+        if prefix:
+            keys = [k for k in self._generic if k.startswith(prefix)]
+            for k in keys:
+                del self._generic[k]
+            logger.debug(f"Invalidated {len(keys)} generic entries with prefix={prefix}")
+        else:
+            self._generic.clear()
+            logger.debug("Cleared all generic cache entries")
+
     # ── Maintenance ──────────────────────────────────────────────
 
     def invalidate_user(self, username: str):
@@ -134,7 +169,7 @@ class RecommendationCache:
 
     def invalidate_all(self):
         """Full cache clear."""
-        for cache in (self._recs, self._library, self._profiles):
+        for cache in (self._recs, self._library, self._profiles, self._generic):
             cache.clear()
         # Keep TMDB IDs — those don't change
         logger.info("Cache fully invalidated (TMDB IDs retained)")
@@ -151,6 +186,7 @@ class RecommendationCache:
             "cached_tmdb_ids": len(self._tmdb_ids),
             "cached_profiles": len(self._profiles),
             "fresh_recs": sum(1 for e in self._recs.values() if e.is_fresh),
+            "cached_generic": len(self._generic),
         }
 
     # ── Refresh tracking ─────────────────────────────────────────
@@ -193,7 +229,7 @@ class RecommendationCache:
     def cleanup_stale(self):
         """Remove expired entries (call periodically)."""
         removed = 0
-        for cache in (self._recs, self._library, self._tmdb_ids, self._profiles):
+        for cache in (self._recs, self._library, self._tmdb_ids, self._profiles, self._generic):
             stale = [k for k, v in cache.items() if not v.is_fresh]
             for k in stale:
                 del cache[k]

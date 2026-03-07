@@ -128,6 +128,12 @@ async def get_notifications(
     user: TokenPayload = Depends(get_current_user),
 ):
     """Compute and return all active notifications for the current user."""
+    cache = get_cache()
+    cache_key = f"notif:{user.username}"
+    cached = cache.get_generic(cache_key)
+    if cached:
+        return cached
+
     stack = get_stack()
     username = user.username
 
@@ -183,7 +189,7 @@ async def get_notifications(
     priority_order = {"high": 0, "normal": 1, "low": 2}
     all_notifs.sort(key=lambda x: priority_order.get(x.get("priority", "low"), 9))
 
-    return {
+    result = {
         "notifications": all_notifs,
         "counts": {
             "total": len(all_notifs),
@@ -193,3 +199,5 @@ async def get_notifications(
             "high_priority": sum(1 for n in all_notifs if n.get("priority") == "high"),
         },
     }
+    cache.set_generic(cache_key, result, ttl=cache.NOTIFICATIONS_TTL)
+    return result
