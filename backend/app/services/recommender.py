@@ -20,7 +20,6 @@ from app.services.ai_explanations import generate_explanations, build_profile_su
 from app.services.profile_overrides import get_override_store
 from app.services.feedback import get_feedback_store
 from app.services.cache import get_cache
-from app.services.cultural_pulse import get_active_events
 
 # Modular imports
 from app.services.rec_types import (
@@ -82,13 +81,6 @@ class RecommendationEngine:
         request._dismissed_ids = feedback_store.get_dismissed_ids(request.username)
         request._overrides._feedback_liked_genres = feedback_store.get_liked_genres(request.username)
         request._overrides._feedback_disliked_genres = feedback_store.get_disliked_genres(request.username)
-
-        # Load active Cultural Pulse events for scoring
-        try:
-            request._pulse_events = get_active_events(limit=10)
-        except Exception as e:
-            logger.debug(f"Cultural Pulse load skipped: {e}")
-            request._pulse_events = []
 
         # Dispatch to mode
         mode_map = {

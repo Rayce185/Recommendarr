@@ -1,20 +1,25 @@
 """Shared helpers for recommendation API routes.
 
-Provides TMDB genre cache, image URL builder, and Recommendation serializer
-used across all recommendation sub-modules.
+Genre cache, image URL builder, recommendation serializer.
+Used by recommendations, discovery, collections, media_requests, refresh, scheduler.
 """
 
-from app.services.recommender import Recommendation
-from app.services.factory import get_stack
+import logging
+from typing import Optional
+
 from app.config import settings
+from app.services.factory import get_stack
+from app.services.recommender import Recommendation
 from app.utils.genres import normalize_genres
 
+logger = logging.getLogger(__name__)
 
 # Module-level TMDB genre cache (populated on first use)
 _tmdb_genre_cache: dict[int, str] = {}
 
 
 async def ensure_genre_cache():
+    """Populate the TMDB genre ID → name cache (idempotent)."""
     global _tmdb_genre_cache
     if _tmdb_genre_cache:
         return
@@ -30,10 +35,12 @@ async def ensure_genre_cache():
 
 
 def get_genre_cache() -> dict[int, str]:
+    """Access the genre cache dict (read-only reference)."""
     return _tmdb_genre_cache
 
 
 def resolve_genres(genre_ids: list[int]) -> list[str]:
+    """Resolve TMDB genre IDs to names using the cached map."""
     return [_tmdb_genre_cache[gid] for gid in genre_ids if gid in _tmdb_genre_cache]
 
 
@@ -42,7 +49,7 @@ def img_url(path: str | None, size: str = "w342") -> str | None:
     if not path:
         return None
     if path.startswith("http"):
-        return path
+        return path  # Already a full URL (Radarr/Sonarr/TVDB)
     return f"https://image.tmdb.org/t/p/{size}{path}"
 
 

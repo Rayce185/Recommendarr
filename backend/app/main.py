@@ -348,6 +348,7 @@ app.include_router(ai_settings.router,          prefix="/api/v1/system", tags=["
 app.include_router(watchlist.router,             prefix="/api/v1", tags=["watchlist"])
 app.include_router(library.router,               prefix="/api/v1", tags=["library"])
 
+from app.api import discovery, media_requests, collections_routes
 from app.api import schedule
 from app.api import browse
 from app.api import wrapped
@@ -360,6 +361,9 @@ app.include_router(social.router, prefix="/api/v1", tags=["social"])
 app.include_router(schedule.router,              prefix="/api/v1", tags=["schedule"])
 app.include_router(list_import.router,          prefix="/api/v1", tags=["import"])
 app.include_router(cultural_pulse.router,    prefix="/api/v1", tags=["pulse"])
+app.include_router(discovery.router,            prefix="/api/v1", tags=["discovery"])
+app.include_router(media_requests.router,       prefix="/api/v1", tags=["requests"])
+app.include_router(collections_routes.router,   prefix="/api/v1", tags=["collections"])
 
 
 # ── Static files (frontend) ───────────────────────────────────────

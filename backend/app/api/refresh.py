@@ -66,7 +66,7 @@ async def _run_refresh(job_id: str, username: str):
 
     # Import here to avoid circular
     from app.services.recommender import RecommendationRequest
-    from app.api.recommendations import _rec_to_dict, _img_url
+    from app.api.rec_helpers import rec_to_dict, img_url
     from app.services.feedback import get_feedback_store
 
     steps = [
@@ -87,7 +87,7 @@ async def _run_refresh(job_id: str, username: str):
         """Format + cache recommendation results (same format as API endpoint)."""
         fb_store = get_feedback_store()
         response = {
-            "recommendations": [_rec_to_dict(r, plex=stack.plex) for r in recs],
+            "recommendations": [rec_to_dict(r, plex=stack.plex) for r in recs],
             "meta": {"username": username, "mode": mode, "domain": "all",
                      "count": len(recs), "cached": False},
         }

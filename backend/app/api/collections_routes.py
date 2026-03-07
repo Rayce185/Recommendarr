@@ -1,20 +1,68 @@
-"""Collection API routes — partially completed movie collections.
+"""Collection gap detection API routes.
 
-Uses stale-while-revalidate caching with 3-tier strategy:
-L1 (in-memory) -> L2 (SQLite persistent) -> L3 (full TMDB scan).
+Identifies partially completed movie collections and shows missing parts.
+Uses stale-while-revalidate caching for responsive UX.
 """
 
 import asyncio
 import logging
-from fastapi import APIRouter, Query, HTTPException, Depends
+from typing import Optional
 
-from app.services.factory import get_stack
-from app.auth.jwt_handler import TokenPayload, get_current_user
+from fastapi import APIRouter, HTTPException, Depends
+
+from app.services.factory import get_stack, resolve_user_id
 from app.services.cache import get_cache
 from app.services.collections import CollectionService
+from app.auth.jwt_handler import TokenPayload, get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+@router.get("/recommend/{username}/collections")
+async def get_collections(
+    username: str,
+    user: TokenPayload = Depends(get_current_user),
+):
+    """Get partially completed movie collections for a user.
+
+    Uses stale-while-revalidate: returns cached data instantly (even if stale),
+    triggers background refresh if data is older than TTL.
+    """
+    if user.username != username and not user.is_admin:
+        raise HTTPException(403, "Cannot view other users' collections")
+
+    stack = get_stack()
+    if not stack.tmdb:
+        raise HTTPException(503, "TMDB client not configured — set TMDB_API_KEY")
+
+    # L1: In-memory cache (fastest)
+    cache = get_cache()
+    cached_colls = cache.get_collections(username)
+    if cached_colls is not None:
+        return {"username": username, "collections": cached_colls, "total": len(cached_colls), "cached": True}
+
+    # Lazy-init collection service
+    if not hasattr(stack, "_collection_svc") or stack._collection_svc is None:
+        stack._collection_svc = CollectionService(stack.tmdb, stack.radarr, stack.tautulli)
+
+    # L2: SQLite persistent cache (survives restarts)
+    sqlite_data, is_fresh = stack._collection_svc.get_cached_results(username)
+
+    if sqlite_data is not None:
+        cache.set_collections(username, sqlite_data)
+        if not is_fresh:
+            asyncio.create_task(_refresh_collections_bg(username, stack, cache))
+        return {"username": username, "collections": sqlite_data, "total": len(sqlite_data), "cached": True, "stale": not is_fresh}
+
+    # L3: Full TMDB scan (cold start — only happens once per user ever)
+    collections = await stack._collection_svc.get_user_collections(username)
+    coll_list = _format_collections(collections)
+
+    cache.set_collections(username, coll_list)
+    stack._collection_svc._persist_results(username, coll_list)
+
+    return {"username": username, "collections": coll_list, "total": len(coll_list)}
 
 
 def _format_collections(collections):
@@ -46,51 +94,9 @@ async def _refresh_collections_bg(username: str, stack, cache):
         coll_list = _format_collections(collections)
         cache.set_collections(username, coll_list)
         stack._collection_svc._persist_results(username, coll_list)
-        logger.info(f"Background collection refresh for {username}: {len(coll_list)} collections")
+        logger.info(f"Background collection refresh complete for {username}: {len(coll_list)} collections")
     except Exception as e:
         logger.warning(f"Background collection refresh failed for {username}: {e}")
-
-
-@router.get("/recommend/{username}/collections")
-async def get_collections(
-    username: str,
-    user: TokenPayload = Depends(get_current_user),
-):
-    """Get partially completed movie collections for a user."""
-    if user.username != username and not user.is_admin:
-        raise HTTPException(403, "Cannot view other users' collections")
-
-    stack = get_stack()
-    if not stack.tmdb:
-        raise HTTPException(503, "TMDB client not configured — set TMDB_API_KEY")
-
-    # L1: In-memory cache
-    cache = get_cache()
-    cached_colls = cache.get_collections(username)
-    if cached_colls is not None:
-        return {"username": username, "collections": cached_colls, "total": len(cached_colls), "cached": True}
-
-    # Lazy-init collection service
-    if not hasattr(stack, "_collection_svc") or stack._collection_svc is None:
-        stack._collection_svc = CollectionService(stack.tmdb, stack.radarr, stack.tautulli)
-
-    # L2: SQLite persistent cache
-    sqlite_data, is_fresh = stack._collection_svc.get_cached_results(username)
-    if sqlite_data is not None:
-        cache.set_collections(username, sqlite_data)
-        if not is_fresh:
-            asyncio.create_task(_refresh_collections_bg(username, stack, cache))
-        return {
-            "username": username, "collections": sqlite_data,
-            "total": len(sqlite_data), "cached": True, "stale": not is_fresh,
-        }
-
-    # L3: Full TMDB scan (cold start)
-    collections = await stack._collection_svc.get_user_collections(username)
-    coll_list = _format_collections(collections)
-    cache.set_collections(username, coll_list)
-    stack._collection_svc._persist_results(username, coll_list)
-    return {"username": username, "collections": coll_list, "total": len(coll_list)}
 
 
 @router.get("/collection/for/{tmdb_id}")
@@ -98,7 +104,11 @@ async def get_collection_for_movie(
     tmdb_id: int,
     user: TokenPayload = Depends(get_current_user),
 ):
-    """Check if a movie belongs to a collection and return completion status."""
+    """Check if a movie belongs to a collection and return completion status.
+
+    Returns collection info with per-part watched/library status.
+    Returns 204 (no content) if the movie is not part of a collection.
+    """
     stack = get_stack()
     if not stack.tmdb:
         raise HTTPException(503, "TMDB not configured")
@@ -113,10 +123,10 @@ async def get_collection_for_movie(
         from fastapi.responses import Response
         return Response(status_code=204)
 
+    # Cross-reference with library + watch status
     movies = await stack.radarr.get_all_movies()
     library_tmdb = {m.tmdb_id for m in movies if m.tmdb_id}
 
-    from app.services.factory import resolve_user_id
     uid = resolve_user_id(user.username)
     history = await stack.tautulli.get_history(user_id=None, limit=10000)
     user_watched = {e.tmdb_id for e in history if e.user_id == uid and e.media_type == "movie" and e.tmdb_id}
@@ -129,11 +139,17 @@ async def get_collection_for_movie(
     for p in coll["parts"]:
         in_lib = p["tmdb_id"] in library_tmdb
         watched = p["tmdb_id"] in user_watched
+
         poster = f"https://image.tmdb.org/t/p/w342{p['poster_path']}" if p.get("poster_path") else None
         part = {
-            "tmdb_id": p["tmdb_id"], "title": p["title"], "year": p.get("year"),
-            "poster_url": poster, "vote_average": p.get("vote_average", 0),
-            "in_library": in_lib, "watched": watched, "release_date": p.get("release_date"),
+            "tmdb_id": p["tmdb_id"],
+            "title": p["title"],
+            "year": p.get("year"),
+            "poster_url": poster,
+            "vote_average": p.get("vote_average", 0),
+            "in_library": in_lib,
+            "watched": watched,
+            "release_date": p.get("release_date"),
         }
         parts.append(part)
         if watched:
@@ -145,10 +161,16 @@ async def get_collection_for_movie(
 
     total = len(parts)
     poster_url = f"https://image.tmdb.org/t/p/w342{coll['poster_path']}" if coll.get("poster_path") else None
+
     return {
-        "collection_id": coll["collection_id"], "name": coll["name"],
-        "poster_url": poster_url, "total_parts": total,
-        "watched_count": watched_count, "in_library_count": in_lib_count,
+        "collection_id": coll["collection_id"],
+        "name": coll["name"],
+        "poster_url": poster_url,
+        "total_parts": total,
+        "watched_count": watched_count,
+        "in_library_count": in_lib_count,
         "completion_pct": round((watched_count / total) * 100, 1) if total else 0,
-        "current_tmdb_id": tmdb_id, "parts": parts, "missing": missing,
+        "current_tmdb_id": tmdb_id,
+        "parts": parts,
+        "missing": missing,
     }

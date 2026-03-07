@@ -10,14 +10,14 @@ from typing import Optional
 # ── Scoring weights ──────────────────────────────────────────────
 
 SCORE_WEIGHTS = {
-    "genre_match": 0.30,
-    "keyword_match": 0.20,
-    "rating_quality": 0.15,
+    "genre_match": 0.28,
+    "keyword_match": 0.18,
+    "rating_quality": 0.14,
     "personnel_match": 0.10,
     "collaborative": 0.10,
     "popularity": 0.05,
     "mood_alignment": 0.10,
-    "pulse_alignment": 0.10,
+    "cultural_pulse": 0.05,
 }
 
 
@@ -71,4 +71,3 @@ class RecommendationRequest:
     _uid: Optional[str] = None
     _overrides: Optional[object] = None
     _dismissed_ids: set = field(default_factory=set)
-    _pulse_events: list = field(default_factory=list)

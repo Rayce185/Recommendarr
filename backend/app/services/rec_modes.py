@@ -13,6 +13,7 @@ from typing import Optional
 from app.services.cache import get_cache
 from app.services.rec_types import Recommendation, RecommendationRequest
 from app.services.rec_scoring import score_candidate, apply_filters
+from app.services.cultural_pulse import get_active_events
 from app.services.rec_library import (
     get_library_candidates, get_library_tmdb_ids,
     get_detail, discover_to_candidate, candidate_to_recommendation,
@@ -22,6 +23,14 @@ from app.services.mood_mapper import mood_to_explanation
 from app.utils.genres import normalize_genres
 
 logger = logging.getLogger(__name__)
+
+
+def _fetch_pulse() -> list[dict]:
+    """Fetch active cultural pulse events for scoring injection."""
+    try:
+        return get_active_events(limit=10)
+    except Exception:
+        return []
 
 
 async def mode_tonight(engine, req: RecommendationRequest) -> list[Recommendation]:
@@ -43,6 +52,7 @@ async def mode_tonight(engine, req: RecommendationRequest) -> list[Recommendatio
             if sec:
                 user_section_counts[sec] = user_section_counts.get(sec, 0) + vc
 
+    pulse = _fetch_pulse()
     scored = []
     for candidate in candidates:
         tmdb_id = candidate.get("tmdb_id", 0)
@@ -54,7 +64,7 @@ async def mode_tonight(engine, req: RecommendationRequest) -> list[Recommendatio
 
         score, breakdown, signals = score_candidate(
             candidate, profile, req.mood_vector, getattr(req, '_overrides', None),
-            pulse_events=getattr(req, '_pulse_events', None),
+            pulse_events=pulse,
         )
 
         if plex and user_section_counts:
@@ -161,11 +171,12 @@ async def mode_worth_grabbing(engine, req: RecommendationRequest) -> list[Recomm
         except Exception as e:
             logger.debug(f"Enrich failed for {c.get('tmdb_id')}: {e}")
 
+    pulse = _fetch_pulse()
     scored = []
     for candidate in candidates:
         score, breakdown, signals = score_candidate(
             candidate, profile, req.mood_vector, getattr(req, '_overrides', None),
-            pulse_events=getattr(req, '_pulse_events', None),
+            pulse_events=pulse,
         )
         scored.append(candidate_to_recommendation(candidate, score, breakdown, signals, "grab"))
 
@@ -288,12 +299,13 @@ async def mode_group_night(engine, req: RecommendationRequest) -> list[Recommend
     candidates = apply_filters(candidates, req)
 
     scored = []
+    pulse = _fetch_pulse()
     for candidate in candidates:
         if candidate.get("tmdb_id", 0) in req.exclude_tmdb_ids:
             continue
         scores_per_user = {}
         for user, profile in profiles.items():
-            s, bd, sig = score_candidate(candidate, profile, req.mood_vector, getattr(req, '_overrides', None), pulse_events=getattr(req, '_pulse_events', None))
+            s, bd, sig = score_candidate(candidate, profile, req.mood_vector, getattr(req, '_overrides', None), pulse_events=pulse)
             scores_per_user[user] = s
 
         group_score = min(scores_per_user.values()) if scores_per_user else 0
@@ -316,13 +328,14 @@ async def mode_mood_match(engine, req: RecommendationRequest) -> list[Recommenda
     )
     candidates = apply_filters(candidates, req)
 
+    pulse = _fetch_pulse()
     scored = []
     for candidate in candidates:
         if candidate.get("tmdb_id", 0) in req.exclude_tmdb_ids:
             continue
         score, breakdown, signals = score_candidate(
             candidate, profile, req.mood_vector, getattr(req, '_overrides', None),
-            pulse_events=getattr(req, '_pulse_events', None),
+            pulse_events=pulse,
         )
         scored.append(candidate_to_recommendation(candidate, score, breakdown, signals, "mood"))
 

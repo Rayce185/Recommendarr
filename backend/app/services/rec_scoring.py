@@ -103,7 +103,7 @@ def score_candidate(
     overrides: Optional[ProfileOverrides] = None,
     pulse_events: Optional[list[dict]] = None,
 ) -> tuple[float, dict, list[str]]:
-    """Score a single candidate against a taste profile, optional mood, pulse events, and user overrides.
+    """Score a single candidate against a taste profile, optional mood, and user overrides.
 
     Returns (total_score, breakdown_dict, explanation_signals).
     """
@@ -234,29 +234,45 @@ def score_candidate(
     # 7. Cultural Pulse alignment
     pulse_score = 0.0
     if pulse_events:
-        c_genre_lower = {(g.lower() if isinstance(g, str) else g.get("name", "").lower()) for g in c_genres}
-        c_kw_lower = {k.lower() for k in c_keywords}
-        best_boost = 0.0
-        best_theme = ""
+        tmdb_id = candidate.get("tmdb_id", 0)
+        c_genre_set = {(g.lower() if isinstance(g, str) else g.get("name", "").lower()) for g in c_genres}
+        c_kw_set = {k.lower() for k in c_keywords}
+
+        best_event_score = 0.0
+        best_event_title = ""
         for event in pulse_events:
-            mapping = event.get("mapping")
-            if not mapping:
-                continue
-            event_genres = {g.lower() for g in (mapping.get("genres") or [])}
-            event_keywords = {k.lower() for k in (mapping.get("keywords") or [])}
-            genre_overlap = len(c_genre_lower & event_genres)
-            kw_overlap = len(c_kw_lower & event_keywords)
-            if genre_overlap > 0 or kw_overlap > 0:
-                hit_strength = min(1.0, genre_overlap * 0.4 + kw_overlap * 0.2)
-                if hit_strength > best_boost:
-                    best_boost = hit_strength
-                    best_theme = event.get("title", "")
-        if best_boost > 0:
-            pulse_score = best_boost
-            if best_theme:
-                label = best_theme if best_theme.startswith("Trending") else f"Trending: {best_theme}"
-                signals.append(label)
-    breakdown["pulse"] = pulse_score
+            mapping = event.get("mapping") or {}
+            ev_score = 0.0
+
+            # Direct TMDB ID match = max boost
+            if tmdb_id and tmdb_id in (mapping.get("tmdb_ids") or []):
+                ev_score = 1.0
+            else:
+                # Genre overlap
+                ev_genres = {g.lower() for g in (mapping.get("genres") or [])}
+                genre_overlap = len(c_genre_set & ev_genres)
+                if ev_genres:
+                    ev_score += 0.5 * (genre_overlap / len(ev_genres))
+
+                # Keyword overlap
+                ev_keywords = {k.lower() for k in (mapping.get("keywords") or [])}
+                kw_overlap = len(c_kw_set & ev_keywords)
+                if ev_keywords:
+                    ev_score += 0.5 * (kw_overlap / len(ev_keywords))
+
+            # Priority boost
+            if event.get("priority") == "high":
+                ev_score *= 1.3
+
+            if ev_score > best_event_score:
+                best_event_score = ev_score
+                best_event_title = event.get("title", "")
+
+        pulse_score = min(1.0, best_event_score)
+        if pulse_score > 0.3 and best_event_title:
+            signals.append(f"Pulse: {best_event_title}")
+
+    breakdown["cultural_pulse"] = pulse_score
 
     # Weighted total
     total = (
@@ -266,7 +282,7 @@ def score_candidate(
         + breakdown.get("personnel", 0) * SCORE_WEIGHTS["personnel_match"]
         + breakdown.get("popularity", 0) * SCORE_WEIGHTS["popularity"]
         + breakdown.get("mood", 0.5) * SCORE_WEIGHTS["mood_alignment"]
-        + breakdown.get("pulse", 0) * SCORE_WEIGHTS["pulse_alignment"]
+        + breakdown.get("cultural_pulse", 0) * SCORE_WEIGHTS["cultural_pulse"]
     )
 
     return round(total, 4), breakdown, signals

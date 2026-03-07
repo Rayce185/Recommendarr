@@ -126,7 +126,7 @@ class RefreshScheduler:
         from app.services.factory import get_stack
         from app.services.cache import get_cache
         from app.services.recommender import RecommendationRequest
-        from app.api.recommendations import _rec_to_dict
+        from app.api.rec_helpers import rec_to_dict
         from app.services.feedback import get_feedback_store
 
         username = sched.username
@@ -158,7 +158,7 @@ class RefreshScheduler:
                     # Cache formatted results
                     fb_store = get_feedback_store()
                     response = {
-                        "recommendations": [_rec_to_dict(r, plex=stack.plex) for r in recs],
+                        "recommendations": [rec_to_dict(r, plex=stack.plex) for r in recs],
                         "meta": {"username": username, "mode": mode, "domain": "all",
                                  "count": len(recs), "cached": False},
                     }
