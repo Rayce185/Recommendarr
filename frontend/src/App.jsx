@@ -25,6 +25,7 @@ import ListImportPage from "./pages/ListImportPage.jsx";
 import PulsePage from "./pages/PulsePage.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import NotificationBell from "./components/NotificationBell.jsx";
+import ThemeToggle from "./components/ThemeToggle.jsx";
 import WorldCinemaPage from "./pages/WorldCinemaPage.jsx";
 
 export default function Recommendarr() {
@@ -231,7 +232,8 @@ export default function Recommendarr() {
             </div>
           )}
           <div className="sidebar-footer">
-            Recommendarr v0.5.0
+            <span>Recommendarr v0.5.0</span>
+            <ThemeToggle />
           </div>
         </nav>
 

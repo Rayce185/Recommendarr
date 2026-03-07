@@ -52,3 +52,42 @@
     display: flex;
     min-height: 100vh;
   }
+
+  /* ── Light theme ──────────────────────────────────────────── */
+  [data-theme="light"] {
+    color-scheme: light;
+    --bg-deep: #f0f1f5;
+    --bg-primary: #f8f9fc;
+    --bg-surface: #ffffff;
+    --bg-elevated: #ffffff;
+    --bg-hover: #e8eaf0;
+    --bg-card: #ffffff;
+    --border: #d1d5e0;
+    --border-subtle: #e5e7ef;
+    --text-primary: #1a1c2e;
+    --text-secondary: #555873;
+    --text-muted: #8b8fa3;
+    --accent: #d49200;
+    --accent-hover: #c08200;
+    --accent-dim: rgba(212,146,0,0.10);
+    --accent-glow: rgba(212,146,0,0.20);
+    --green: #16a34a;
+    --green-dim: rgba(22,163,74,0.10);
+    --red: #dc2626;
+    --red-dim: rgba(220,38,38,0.10);
+    --blue: #2563eb;
+    --blue-dim: rgba(37,99,235,0.10);
+    --yellow: #ca8a04;
+    --yellow-dim: rgba(202,138,4,0.10);
+    --purple: #9333ea;
+    --purple-dim: rgba(147,51,234,0.10);
+    --shadow-card: 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-modal: 0 24px 60px rgba(0,0,0,0.15);
+  }
+
+  [data-theme="light"] select,
+  [data-theme="light"] select option {
+    color-scheme: light;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+  }
