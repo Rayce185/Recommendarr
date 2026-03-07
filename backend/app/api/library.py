@@ -235,3 +235,19 @@ async def get_instance_info(user: TokenPayload = Depends(get_current_user)):
             instances[name] = {"type": cfg.type,
                 "connected": False, "error": str(e)}
     return instances
+
+
+@router.post("/system/routing/auto-detect")
+async def auto_detect_routing(admin: TokenPayload = Depends(get_current_user)):
+    """Auto-detect routing rules from instance tags and root folders.
+
+    Analyzes all registered *arr instances, then generates rules using
+    AI (if configured) or deterministic heuristics as fallback.
+    Returns suggested rules for preview — does NOT auto-apply.
+    """
+    if not admin.is_admin:
+        raise HTTPException(403, "Admin only")
+    stack = get_stack()
+    from app.services.routing_autodetect import auto_detect_rules
+    result = await auto_detect_rules(stack.registry)
+    return result
