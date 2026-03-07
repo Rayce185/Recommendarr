@@ -1,9 +1,8 @@
 # Recommendarr — unified deployment
-# Single container: FastAPI backend + React frontend
-version: "3.8"
-
+# Pull from Docker Hub or build locally
 services:
   recommendarr:
+    image: rayce185/recommendarr:latest
     build:
       context: .
       dockerfile: Dockerfile

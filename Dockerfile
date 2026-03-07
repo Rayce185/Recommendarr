@@ -17,7 +17,8 @@ FROM python:3.12-slim
 
 LABEL maintainer="Ray DiRenzo <ray@mydirenzo.ch>"
 LABEL description="Recommendarr — personal media recommendation engine"
-LABEL version="0.5.0"
+ARG VERSION=dev
+LABEL version="${VERSION}"
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends nginx supervisor curl && \

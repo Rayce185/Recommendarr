@@ -4,6 +4,12 @@
 
 <h1 align="center">Recommendarr</h1>
 
+<p align="center">
+  <a href="https://github.com/Rayce185/Recommendarr/releases"><img src="https://img.shields.io/github/v/release/Rayce185/Recommendarr?style=flat-square" alt="Release"></a>
+  <a href="https://hub.docker.com/r/rayce185/recommendarr"><img src="https://img.shields.io/docker/pulls/rayce185/recommendarr?style=flat-square" alt="Docker Pulls"></a>
+  <a href="https://github.com/Rayce185/Recommendarr/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Rayce185/Recommendarr?style=flat-square" alt="License"></a>
+</p>
+
 A self-hosted media recommendation engine for Plex. Learns from viewing behavior across all server users to generate personalized, explainable recommendations.
 
 ## Features
@@ -13,6 +19,17 @@ A self-hosted media recommendation engine for Plex. Learns from viewing behavior
 - **Smart Mood Matching**: Natural language mood input ("just got dumped, distract me, no romcoms") parsed into genre/keyword weights — with LLM enhancement when configured
 - **Multi-Source Trending**: Global TMDB, by country, by streaming provider, new releases, anime
 - **Collection Tracking**: Detects partially watched franchises (John Wick, MCU, etc.) with completion progress and one-click requests for missing parts
+- **Group Night**: Multi-user taste intersection — find what everyone will enjoy
+- **Plex Wrapped**: Per-user viewing statistics and insights
+- **Social Layer**: Taste overlap scores and server-wide trending
+- **World Cinema Map**: Geographic discovery with taste matching
+- **Cultural Pulse**: RSS-powered trending theme detection
+- **Coming Soon Calendar**: TMDB + Radarr/Sonarr release tracking
+- **Notification Center**: New recommendations, trending, and collection updates
+- **Recommendation History**: Full logging with stats and mode breakdown
+- **"Because You Watched X"**: Explicit attribution showing which library items drove each recommendation
+- **Why Not?**: Negative transparency — explains why titles aren't recommended
+- **Advanced Filters**: Year range and rating threshold on recommendation pages
 - **Plex OAuth Authentication**: Secure login via Plex account with server access verification
 - **Taste Profiles**: Auto-generated from watch history with manual genre/keyword tuning
 - **Feedback Loop**: Thumbs up/down/dismiss — adjusts future recommendations
@@ -20,7 +37,49 @@ A self-hosted media recommendation engine for Plex. Learns from viewing behavior
 - **Seerr Request Integration**: Request media not yet in your library
 - **Admin User Switcher**: Preview any user's recommendations
 - **Editable Settings**: Runtime configuration via UI — no restart needed
+- **Dark/Light Theme**: OS preference detection with manual override
 - **Mobile Responsive**: Works on phones, tablets, and desktops
+
+## Quick Start
+
+### Docker (recommended)
+
+```bash
+docker run -d \
+  --name recommendarr \
+  --restart unless-stopped \
+  -p 5055:5055 \
+  -v /path/to/data:/app/data \
+  -e PLEX_URL=http://your-plex:32400 \
+  -e PLEX_TOKEN=your-plex-token \
+  -e TAUTULLI_URL=http://your-tautulli:8181 \
+  -e TAUTULLI_API_KEY=your-tautulli-key \
+  -e TMDB_API_KEY=your-tmdb-key \
+  -e RADARR_URL=http://your-radarr:7878 \
+  -e RADARR_API_KEY=your-radarr-key \
+  -e SONARR_URL=http://your-sonarr:8989 \
+  -e SONARR_API_KEY=your-sonarr-key \
+  -e SEERR_URL=http://your-seerr:5055 \
+  -e SEERR_API_KEY=your-seerr-key \
+  -e TZ=America/New_York \
+  rayce185/recommendarr:latest
+```
+
+Open `http://your-server:5055` and log in with your Plex account.
+
+### Docker Compose
+
+```bash
+git clone https://github.com/Rayce185/Recommendarr.git
+cd Recommendarr
+cp .env.example .env
+# Edit .env with your API keys (see .env.example for full docs)
+docker compose up -d
+```
+
+### unRAID
+
+Install via Community Applications — search for "Recommendarr". Or use the Docker template manually from this repo.
 
 ## Stack
 
@@ -29,30 +88,14 @@ A self-hosted media recommendation engine for Plex. Learns from viewing behavior
 - **Services**: Plex, Tautulli, Radarr, Sonarr, Seerr, TMDB
 - **Optional AI**: Ollama, OpenAI-compatible, OpenAI, or Anthropic for enhanced features
 
-## Quick Start
-
-```bash
-# Clone and configure
-git clone https://github.com/Rayce185/Recommendarr.git
-cd Recommendarr
-cp .env.example .env
-# Edit .env with your API keys (see .env.example for docs)
-
-# Run
-docker compose up -d
-```
-
-- **Frontend**: http://localhost:30801
-- **Backend API**: http://localhost:30800/api/docs
-
 ## Requirements
 
-- Docker + Docker Compose
+- Docker
 - Plex Media Server (with admin token)
 - Tautulli (for watch history)
 - At least one of: Radarr, Sonarr (for library data)
 - Seerr/Overseerr (for TMDB discovery + request proxy)
-- TMDB API key (free at themoviedb.org)
+- TMDB API key (free at [themoviedb.org](https://www.themoviedb.org/settings/api))
 
 ## Optional: AI Integration
 
@@ -69,6 +112,10 @@ Tested with **Ollama + gemma3:4b** (runs on any modern GPU with 4GB+ VRAM).
 
 46+ REST endpoints. Interactive docs at `/api/docs` when running.
 
+## Contributing
+
+Pull requests welcome. Please open an issue first to discuss significant changes.
+
 ## License
 
-MIT
+[MIT](LICENSE)
