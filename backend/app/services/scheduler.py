@@ -20,6 +20,7 @@ from typing import Optional
 from sqlalchemy import select
 
 from app.database import get_db
+from app.services.rec_library import get_library_candidates
 from app.models.tables import RefreshSchedule
 
 logger = logging.getLogger(__name__)
@@ -146,7 +147,7 @@ class RefreshScheduler:
 
             # 3. Refresh library candidates (shared cache, only if stale)
             if cache.get_library("all") is None:
-                await stack.engine._get_library_candidates("all")
+                await get_library_candidates(stack.radarr, stack.sonarr_tv, stack.sonarr_anime, "all")
 
             # 4. Run all modes in parallel, skip AI explanations
             async def _run_mode(mode):

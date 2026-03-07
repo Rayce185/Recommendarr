@@ -13,6 +13,7 @@ from fastapi import FastAPI
 
 from app.config import settings
 from app.services.factory import build_stack, init_user_map, get_stack
+from app.services.rec_library import get_library_candidates
 from app.services.cache import get_cache
 
 logger = logging.getLogger("recommendarr")
@@ -108,7 +109,7 @@ async def _warm_profiles():
         # Warm library candidates
         try:
             _start = time.monotonic()
-            await s.engine._get_library_candidates("all")
+            await get_library_candidates(s.radarr, s.sonarr_tv, s.sonarr_anime, "all")
             logger.info(f"Library cache warmed ({time.monotonic()-_start:.1f}s)")
         except Exception as e:
             logger.debug(f"Library warming skipped: {e}")

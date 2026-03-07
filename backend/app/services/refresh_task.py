@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import time
+from app.services.rec_library import get_library_candidates
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -107,7 +108,7 @@ async def run_refresh(job_id: str, username: str):
         # Step 2: Pre-warm library candidates
         step_start = time.time()
         await _send(2, "Loading libraries")
-        await stack.engine._get_library_candidates("all")
+        await get_library_candidates(stack.radarr, stack.sonarr_tv, stack.sonarr_anime, "all")
         cache.set_step_duration("libraries", int((time.time() - step_start) * 1000))
         logger.info(f"Refresh: libraries loaded in {time.time() - step_start:.1f}s")
 
