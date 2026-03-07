@@ -160,51 +160,6 @@ class TautulliClient(IWatchHistoryProvider):
     # ── Webhook payload parsing ──────────────────────────────────
 
     @staticmethod
-    def parse_webhook_payload(body: dict) -> Optional[WatchEvent]:
-        """Parse a Tautulli webhook payload into a WatchEvent.
-
-        Expected webhook JSON format (configured in Tautulli notification agent):
-        {
-            "event_type": "watched" | "play" | "stop" | "pause" | "resume",
-            "user_id": "12345",
-            "username": "Ray",
-            "rating_key": "56789",
-            "title": "Oppenheimer",
-            "year": 2023,
-            "media_type": "movie",
-            "duration": 10800,
-            "view_offset": 9500,
-            "progress_percent": 88,
-            "tmdb_id": "872585",
-        }
-        """
-        event_type = body.get("event_type", "")
-        if event_type not in ("watched", "play", "stop", "pause", "resume"):
-            return None
-
-        duration = int(body.get("duration", 0))
-        view_offset = int(body.get("view_offset", 0))
-        progress = float(body.get("progress_percent", 0))
-
-        tmdb_id = None
-        if body.get("tmdb_id"):
-            try:
-                tmdb_id = int(body["tmdb_id"])
-            except (ValueError, TypeError):
-                pass
-
-        return WatchEvent(
-            user_id=str(body.get("user_id", "")),
-            item_key=str(body.get("rating_key", "")),
-            tmdb_id=tmdb_id,
-            media_type=body.get("media_type", "movie"),
-            started_at=datetime.now(timezone.utc),
-            duration_seconds=view_offset,
-            total_duration_seconds=duration,
-            completion_pct=progress,
-            watch_count=1,
-        )
-
     async def resolve_tmdb_id(self, rating_key: str, media_type: str = "movie") -> int | None:
         """Resolve a Plex rating_key to a TMDB ID via Tautulli's get_metadata.
 
@@ -257,51 +212,13 @@ class TautulliClient(IWatchHistoryProvider):
                 results[r[0]] = r[1]
         return results
 
-    # ── Internal helpers ─────────────────────────────────────────
+    @staticmethod
+    def parse_webhook_payload(body: dict):
+        """Parse a Tautulli webhook payload into a WatchEvent."""
+        from app.clients.tautulli_parsers import parse_webhook_payload
+        return parse_webhook_payload(body)
 
-    def _parse_history_record(self, r: dict) -> WatchEvent:
+    def _parse_history_record(self, r: dict):
         """Parse a single Tautulli history record."""
-        duration = int(r.get("duration", 0) or r.get("play_duration", 0))
-        # Tautulli provides percent_complete directly — use it instead of
-        # calculating from full_duration (which is often null in history)
-        completion = float(r.get("percent_complete", 0))
-
-        # Extract TMDB ID from GUIDs if available
-        tmdb_id = None
-        guids = r.get("guids", [])
-        if isinstance(guids, list):
-            for g in guids:
-                if isinstance(g, str) and g.startswith("tmdb://"):
-                    try:
-                        tmdb_id = int(g.replace("tmdb://", ""))
-                    except ValueError:
-                        pass
-
-        # For episodes, group by show (grandparent) rather than individual episode
-        media_type = r.get("media_type", "movie")
-        rating_key = str(r.get("rating_key", ""))
-        if media_type == "episode":
-            # Use grandparent_rating_key (the show) so episodes group together
-            grandparent_key = r.get("grandparent_rating_key")
-            if grandparent_key:
-                rating_key = str(grandparent_key)
-
-        started = None
-        if r.get("started"):
-            try:
-                started = datetime.fromtimestamp(int(r["started"]), tz=timezone.utc)
-            except (ValueError, TypeError):
-                pass
-
-        return WatchEvent(
-            user_id=str(r.get("user_id", "")),
-            item_key=rating_key,
-            tmdb_id=tmdb_id,
-            media_type=media_type,
-            started_at=started,
-            duration_seconds=duration,
-            total_duration_seconds=duration,  # Tautulli history lacks full_duration
-            completion_pct=round(completion, 1),
-            watch_count=1,  # Each history record is one watch
-            user_rating=None,
-        )
+        from app.clients.tautulli_parsers import parse_history_record
+        return parse_history_record(r)

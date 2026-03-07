@@ -8,10 +8,7 @@ import httpx
 import logging
 from typing import Optional
 
-from sqlalchemy import select, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tables import TmdbCache
 
 logger = logging.getLogger(__name__)
 
@@ -169,125 +166,14 @@ class EmbeddingService:
 
     async def embed_library(
         self,
-        db: AsyncSession,
+        db: "AsyncSession",
         media_type: str = "movie",
         batch_size: int = 20,
         progress_callback=None,
     ) -> dict:
-        """Embed all cached TMDB items that don't have embeddings yet.
-
-        Reads from tmdb_cache, generates embeddings, stores in ChromaDB,
-        updates embedding_id back in tmdb_cache.
-
-        Args:
-            db: Database session
-            media_type: "movie" or "show"
-            batch_size: Items per embedding batch (Ollama call)
-            progress_callback: async fn(current, total, title)
-
-        Returns:
-            {"embedded": N, "skipped": N, "failed": N, "total": N}
-        """
-        from app.services.tmdb_sync import TmdbSyncService
-
-        # Get all items needing embedding
-        result = await db.execute(
-            select(TmdbCache).where(
-                and_(
-                    TmdbCache.media_type == media_type,
-                    TmdbCache.embedding_id.is_(None),
-                )
-            )
-        )
-        items = list(result.scalars().all())
-        total = len(items)
-
-        if total == 0:
-            # Check if any items exist at all
-            all_result = await db.execute(
-                select(TmdbCache).where(TmdbCache.media_type == media_type)
-            )
-            all_count = len(list(all_result.scalars().all()))
-            return {"embedded": 0, "skipped": all_count, "failed": 0, "total": all_count}
-
-        embedded = 0
-        failed = 0
-        sync = TmdbSyncService.__new__(TmdbSyncService)  # Just need build_embedding_text
-
-        # Process in batches
-        for batch_start in range(0, total, batch_size):
-            batch = items[batch_start:batch_start + batch_size]
-
-            # Build texts
-            texts = []
-            valid_items = []
-            for item in batch:
-                text = sync.build_embedding_text(item)
-                if text.strip():
-                    texts.append(text)
-                    valid_items.append(item)
-                else:
-                    failed += 1
-
-            if not texts:
-                continue
-
-            # Generate embeddings
-            try:
-                embeddings = await self.generate_embeddings_batch(texts)
-            except Exception as e:
-                logger.error(f"Embedding batch failed: {e}")
-                failed += len(valid_items)
-                continue
-
-            if len(embeddings) != len(valid_items):
-                logger.error(f"Embedding count mismatch: {len(embeddings)} vs {len(valid_items)}")
-                failed += len(valid_items)
-                continue
-
-            # Prepare ChromaDB upsert
-            ids = []
-            metadatas = []
-            for item in valid_items:
-                doc_id = f"{item.media_type}:{item.tmdb_id}"
-                ids.append(doc_id)
-                metadatas.append({
-                    "tmdb_id": item.tmdb_id,
-                    "media_type": item.media_type,
-                    "title": item.title or "",
-                    "year": item.year or 0,
-                    "vote_average": float(item.vote_average) if item.vote_average else 0.0,
-                    "popularity": float(item.popularity) if item.popularity else 0.0,
-                    "original_language": item.original_language or "en",
-                })
-
-            # Upsert to ChromaDB
-            try:
-                await self.upsert_embeddings(ids, embeddings, texts, metadatas)
-
-                # Update embedding_id in DB
-                for item, doc_id in zip(valid_items, ids):
-                    item.embedding_id = doc_id
-                await db.commit()
-
-                embedded += len(valid_items)
-            except Exception as e:
-                logger.error(f"ChromaDB upsert failed: {e}")
-                failed += len(valid_items)
-                await db.rollback()
-
-            if progress_callback:
-                await progress_callback(
-                    batch_start + len(batch), total,
-                    valid_items[-1].title if valid_items else "?"
-                )
-
-        return {
-            "embedded": embedded,
-            "skipped": total - embedded - failed,
-            "failed": failed,
-            "total": total,
-        }
+        """Embed all cached TMDB items — delegates to embedding_library module."""
+        from app.services.embedding_library import embed_library
+        return await embed_library(self, db, media_type, batch_size, progress_callback)
 
     async def embed_text_query(self, text: str) -> list[float]:
         """Embed a user query (for Mood Match, search, etc.)."""

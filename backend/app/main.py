@@ -56,12 +56,14 @@ from app.api import health, users, recommendations, auth, refresh, feedback
 from app.api import settings as settings_api
 from app.api import ai_settings, watchlist, library
 from app.api import instances as instances_api
-from app.api import discovery, media_requests, collections_routes
+from app.api import discovery, discovery_extras, media_requests, collections_routes
 from app.api import schedule, browse, wrapped, social, list_import, cultural_pulse
+from app.api import rec_mood
 
 app.include_router(health.router,                prefix="/api/v1", tags=["system"])
 app.include_router(users.router,                 prefix="/api/v1", tags=["users"])
 app.include_router(recommendations.router,       prefix="/api/v1", tags=["recommendations"])
+app.include_router(rec_mood.router,              prefix="/api/v1", tags=["recommendations"])
 app.include_router(auth.router,                  prefix="/api/v1", tags=["auth"])
 app.include_router(refresh.router,               prefix="/api/v1", tags=["cache"])
 app.include_router(feedback.router,              prefix="/api/v1", tags=["feedback"])
@@ -77,6 +79,7 @@ app.include_router(schedule.router,              prefix="/api/v1", tags=["schedu
 app.include_router(list_import.router,           prefix="/api/v1", tags=["import"])
 app.include_router(cultural_pulse.router,        prefix="/api/v1", tags=["pulse"])
 app.include_router(discovery.router,             prefix="/api/v1", tags=["discovery"])
+app.include_router(discovery_extras.router,      prefix="/api/v1", tags=["discovery"])
 app.include_router(media_requests.router,        prefix="/api/v1", tags=["requests"])
 app.include_router(collections_routes.router,    prefix="/api/v1", tags=["collections"])
 
