@@ -30,9 +30,9 @@ from app.services.rec_library import (
     get_library_candidates, candidate_to_recommendation,
     resolve_genre_ids, get_detail, discover_to_candidate,
 )
-from app.services.rec_modes import (
-    mode_tonight, mode_worth_grabbing, mode_rediscover,
-    mode_group_night, mode_mood_match,
+from app.services.rec_modes import mode_tonight, mode_worth_grabbing
+from app.services.rec_modes_secondary import (
+    mode_rediscover, mode_group_night, mode_mood_match,
 )
 
 logger = logging.getLogger(__name__)
