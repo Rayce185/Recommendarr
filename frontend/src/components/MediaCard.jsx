@@ -92,6 +92,9 @@ function MediaCard({ item, onClick, onFeedback }) {
           <span>{item.media_type === "movie" ? "Movie" : "Series"}</span>
           {item.year && <><span>·</span><span>{item.year}</span></>}
         </div>
+        {item.explanation_signals?.length > 0 && item.explanation_signals[0]?.startsWith("Because") && (
+          <div className="card-trace">{item.explanation_signals[0]}</div>
+        )}
       </div>
     </div>
   );

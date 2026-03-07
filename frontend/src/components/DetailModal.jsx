@@ -106,6 +106,15 @@ function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest,
             </div>
           )}
 
+          {/* Because You Watched traces */}
+          {item.explanation_signals?.some(s => s.startsWith("Because")) && (
+            <div className="modal-traces">
+              {item.explanation_signals.filter(s => s.startsWith("Because")).map((t, i) => (
+                <div key={i} className="trace-item">{t}</div>
+              ))}
+            </div>
+          )}
+
           {/* External Ratings */}
           {(d.vote_average > 0 || d.imdb_id) && (
             <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>

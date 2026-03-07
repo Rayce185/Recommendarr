@@ -20,6 +20,7 @@ from app.services.ai_explanations import generate_explanations, build_profile_su
 from app.services.profile_overrides import get_override_store
 from app.services.feedback import get_feedback_store
 from app.services.rec_history import log_recommendations
+from app.services.rec_trace import enrich_with_traces, get_watched_titles_for_traces
 from app.services.cache import get_cache
 
 # Modular imports
@@ -113,6 +114,18 @@ class RecommendationEngine:
                     rec.explanation = expl
             except Exception as e:
                 logger.warning(f"AI explanations skipped: {e}")
+
+        # Enrich with "Because You Watched X" traces
+        if results and not request.skip_explanations:
+            try:
+                watched = await get_watched_titles_for_traces(
+                    self.tautulli, self.tmdb,
+                    request.username, request._uid, limit=50,
+                )
+                if watched:
+                    enrich_with_traces(results, watched)
+            except Exception as e:
+                logger.warning(f"Trace enrichment skipped: {e}", exc_info=True)
 
         # Filter out dismissed items
         dismissed = getattr(request, '_dismissed_ids', set())
