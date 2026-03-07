@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Film, Tv, Heart, BarChart3, Settings, Play, Download, TrendingUp,
-  Sparkles, X, Loader2, RefreshCw, Users, Menu, Bookmark, LogIn, LogOut,
-  Search, Globe, Layers, Eye, Upload, Activity, CalendarDays} from "lucide-react";
+import { Film, X, Loader2, RefreshCw, Menu, LogIn, LogOut, Eye } from "lucide-react";
+import navItems from "./navConfig.js";
 import { api, API_BASE } from "./api.js";
 import { posterUrl } from "./utils.js";
 import "./styles/index.css";
@@ -88,25 +87,7 @@ export default function Recommendarr() {
     setView("tonight");
   }, [authLogout, setView]);
 
-  const navItems = [
-    { id: "tonight", label: "Watch Tonight", icon: Play, section: "Recommendations" },
-    { id: "grab", label: "Worth Grabbing", icon: Download, section: "Recommendations" },
-    { id: "rediscover", label: "Rediscover", icon: RefreshCw, section: "Recommendations" },
-    { id: "mood", label: "Mood Match", icon: Sparkles, section: "Discovery" },
-    { id: "trending", label: "Trending", icon: TrendingUp, section: "Discovery" },
-    { id: "browse", label: "Browse & Search", icon: Search, section: "Discovery" },
-    { id: "world-cinema", label: "World Cinema", icon: Globe, section: "Discovery" },
-    { id: "collections", label: "Collections", icon: Layers, section: "Discovery" },
-    { id: "group", label: "Group Night", icon: Users, section: "Discovery" },
-    { id: "watchlist", label: "Watchlist", icon: Bookmark, section: "Discovery" },
-    { id: "import", label: "List Import", icon: Upload, section: "Discovery" },
-    { id: "pulse", label: "Cultural Pulse", icon: Activity, section: "Discovery" },
-    { id: "calendar", label: "Coming Soon", icon: CalendarDays, section: "Discovery" },
-    { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
-    { id: "wrapped", label: "Plex Wrapped", icon: BarChart3, section: "Profile" },
-    { id: "social", label: "Social", icon: Users, section: "Profile" },
-    { id: "admin", label: "System Settings", icon: Settings, section: "Admin" },
-  ];
+
 
   let currentSection = "";
 
