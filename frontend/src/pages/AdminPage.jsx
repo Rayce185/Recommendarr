@@ -166,6 +166,13 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
                   <h4 style={{ margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
                     {svc.status === "ok" ? <CheckCircle2 size={14} style={{ color: "var(--green)" }} /> : <XCircle size={14} style={{ color: "var(--red)" }} />}
                     {name}
+                    {svc.latency_ms != null && (
+                      <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", borderRadius: 4, marginLeft: 2,
+                        background: svc.latency_ms < 100 ? "rgba(46,204,113,0.12)" : svc.latency_ms < 500 ? "rgba(245,158,11,0.12)" : "rgba(239,68,68,0.12)",
+                        color: svc.latency_ms < 100 ? "#2ecc71" : svc.latency_ms < 500 ? "#f59e0b" : "#ef4444" }}>
+                        {svc.latency_ms}ms
+                      </span>
+                    )}
                   </h4>
                   <button className={`test-btn ${testing[name] ? "testing" : ""}`} onClick={() => handleTest(name)}>
                     {testing[name] ? <><Loader2 size={11} className="spin" /> Testing...</> : <><Zap size={11} /> Test</>}

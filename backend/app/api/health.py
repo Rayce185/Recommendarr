@@ -1,6 +1,7 @@
 """Health & system status endpoints v2 — live service probing."""
 
 from fastapi import APIRouter
+import time
 from datetime import datetime, timezone
 
 from app.services.factory import get_stack
@@ -8,47 +9,38 @@ from app.services.factory import get_stack
 router = APIRouter()
 
 
+async def _timed_probe(client, name):
+    """Probe a service and return status + latency in ms."""
+    t0 = time.monotonic()
+    try:
+        ok = await client.test_connection()
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        return name, {"status": "ok" if ok else "error", "url": client.url, "latency_ms": latency_ms}
+    except Exception as e:
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        return name, {"status": "error", "error": str(e), "url": getattr(client, "url", ""), "latency_ms": latency_ms}
+
+
 @router.get("/health")
 async def health_check():
-    """Service health — probes all upstream APIs."""
+    """Service health — probes all upstream APIs with latency."""
     stack = get_stack()
 
-    checks = {}
+    probes = [
+        ("tautulli", stack.tautulli),
+        ("seerr", stack.seerr),
+        ("radarr", stack.radarr),
+        ("sonarr_tv", stack.sonarr_tv),
+        ("sonarr_anime", stack.sonarr_anime),
+    ]
 
-    # Tautulli
-    try:
-        ok = await stack.tautulli.test_connection()
-        checks["tautulli"] = {"status": "ok" if ok else "error", "url": stack.tautulli.url}
-    except Exception as e:
-        checks["tautulli"] = {"status": "error", "error": str(e)}
+    # Probe Plex if configured
+    if stack.plex:
+        probes.append(("plex", stack.plex))
 
-    # Seerr
-    try:
-        ok = await stack.seerr.test_connection()
-        checks["seerr"] = {"status": "ok" if ok else "error", "url": stack.seerr.url}
-    except Exception as e:
-        checks["seerr"] = {"status": "error", "error": str(e)}
-
-    # Radarr
-    try:
-        ok = await stack.radarr.test_connection()
-        checks["radarr"] = {"status": "ok" if ok else "error", "url": stack.radarr.url}
-    except Exception as e:
-        checks["radarr"] = {"status": "error", "error": str(e)}
-
-    # Sonarr TV
-    try:
-        ok = await stack.sonarr_tv.test_connection()
-        checks["sonarr_tv"] = {"status": "ok" if ok else "error", "url": stack.sonarr_tv.url}
-    except Exception as e:
-        checks["sonarr_tv"] = {"status": "error", "error": str(e)}
-
-    # Sonarr Anime
-    try:
-        ok = await stack.sonarr_anime.test_connection()
-        checks["sonarr_anime"] = {"status": "ok" if ok else "error", "url": stack.sonarr_anime.url}
-    except Exception as e:
-        checks["sonarr_anime"] = {"status": "error", "error": str(e)}
+    import asyncio
+    results = await asyncio.gather(*[_timed_probe(c, n) for n, c in probes])
+    checks = dict(results)
 
     all_ok = all(c.get("status") == "ok" for c in checks.values())
 
