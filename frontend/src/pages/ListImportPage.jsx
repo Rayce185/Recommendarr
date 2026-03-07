@@ -239,7 +239,7 @@ function ImportResultRow({ item, index, isSelected, isExpanded, onToggleSelect, 
 
         {/* Poster thumbnail */}
         {item.poster_url ? (
-          <img src={item.poster_url} alt="" style={{ width: 32, height: 48, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
+          <img src={item.poster_url} alt="" loading="lazy" style={{ width: 32, height: 48, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
         ) : (
           <div style={{ width: 32, height: 48, borderRadius: 4, background: "var(--bg-elevated)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Film size={14} color="var(--text-muted)" />

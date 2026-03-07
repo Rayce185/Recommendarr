@@ -41,7 +41,7 @@ function CollectionsPage({ user, onCardClick }) {
             {collections.map(c => (
               <div key={c.collection_id} className="coll-card">
                 <div className="coll-header" onClick={() => setExpanded(expanded === c.collection_id ? null : c.collection_id)}>
-                  {c.poster_url && <img src={c.poster_url} alt="" className="coll-poster" />}
+                  {c.poster_url && <img src={c.poster_url} alt="" className="coll-poster" loading="lazy" />}
                   <div className="coll-info">
                     <h3>{c.name}</h3>
                     <div className="coll-meta">
@@ -63,7 +63,7 @@ function CollectionsPage({ user, onCardClick }) {
                     {c.parts.map(p => (
                       <div key={p.tmdb_id} className={`coll-part ${p.watched ? "watched" : ""}`}
                            onClick={() => !p.watched && onCardClick && onCardClick({ tmdb_id: p.tmdb_id, media_type: "movie", title: p.title, year: p.year, poster_url: p.poster_url })}>
-                        {p.poster_url && <img src={p.poster_url} alt="" className="coll-part-poster" />}
+                        {p.poster_url && <img src={p.poster_url} alt="" className="coll-part-poster" loading="lazy" />}
                         <div className="coll-part-info">
                           <span className="coll-part-title">{p.title} {p.year ? `(${p.year})` : ""}</span>
                           <span className="coll-part-status">

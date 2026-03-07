@@ -19,7 +19,7 @@ function BuzzCard({ item, onCardClick }) {
   return (
     <div className={`buzz-card ${hasMedia ? "has-media" : ""}`}>
       {hasMedia && item.poster_url && (
-        <img className="buzz-poster" src={item.poster_url} alt=""
+        <img className="buzz-poster" src={item.poster_url} alt="" loading="lazy"
           onClick={() => onCardClick?.({ tmdb_id: item.tmdb_id, media_type: item.media_type, title: item.title })} />
       )}
       <div className="buzz-content">

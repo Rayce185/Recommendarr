@@ -52,14 +52,14 @@ function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest,
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-container">
         <div className="modal-backdrop">
-          {backdrop ? <img src={backdrop} alt="" /> : <div style={{ background: "var(--bg-elevated)", height: "100%" }} />}
+          {backdrop ? <img src={backdrop} alt="" loading="lazy" /> : <div style={{ background: "var(--bg-elevated)", height: "100%" }} />}
           <div className="backdrop-gradient" />
           <button className="modal-close" onClick={onClose}><X size={16} /></button>
         </div>
         <div className="modal-body">
           <div className="modal-top-row">
             <div className="modal-poster">
-              {poster ? <img src={poster} alt={d.title} /> : <div style={{ background: "var(--bg-elevated)", aspectRatio: "2/3" }} />}
+              {poster ? <img src={poster} alt={d.title} loading="lazy" /> : <div style={{ background: "var(--bg-elevated)", aspectRatio: "2/3" }} />}
             </div>
             <div className="modal-title-block">
               <h2>{d.title}</h2>
@@ -266,7 +266,7 @@ function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest,
               <div className="coll-missing-grid">
                 {collectionData.missing.map(p => (
                   <div className="coll-missing-item" key={p.tmdb_id}>
-                    {p.poster_url ? <img src={p.poster_url} alt={p.title} /> : <div className="coll-missing-noposter" />}
+                    {p.poster_url ? <img src={p.poster_url} alt={p.title} loading="lazy" /> : <div className="coll-missing-noposter" />}
                     <div className="coll-missing-info">
                       <span className="coll-missing-title">{p.title}</span>
                       <span className="coll-missing-year">{p.year || "TBA"}{p.vote_average ? ` · ★ ${p.vote_average.toFixed(1)}` : ""}</span>
