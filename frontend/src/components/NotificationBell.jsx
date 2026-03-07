@@ -18,7 +18,9 @@ export default function NotificationBell({ onNavigate }) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0 });
   const ref = useRef(null);
+  const btnRef = useRef(null);
 
   // Close on outside click
   useEffect(() => {
@@ -29,6 +31,17 @@ export default function NotificationBell({ onNavigate }) {
 
   const handleToggle = async () => {
     if (open) { setOpen(false); return; }
+    // Calculate position from button — keep dropdown within viewport
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const dropW = Math.min(340, vw - 20);
+      // Anchor right edge to bell's right edge, but clamp to viewport
+      let left = rect.right - dropW;
+      if (left < 10) left = 10;
+      if (left + dropW > vw - 10) left = vw - dropW - 10;
+      setDropPos({ top: rect.bottom + 8, left });
+    }
     setOpen(true);
     setLoading(true);
     try {
@@ -52,22 +65,22 @@ export default function NotificationBell({ onNavigate }) {
 
   return (
     <div className="notification-bell-wrapper" ref={ref}>
-      <button className="notification-bell-btn" onClick={handleToggle} title="Notifications">
+      <button ref={btnRef} className="notification-bell-btn" onClick={handleToggle} title="Notifications">
         <Bell size={18} />
         {count > 0 && <span className="notification-badge">{count > 9 ? "9+" : count}</span>}
       </button>
 
       {open && (
-        <div className="notification-dropdown">
+        <div className="notification-dropdown" style={{ top: dropPos.top, left: dropPos.left }}>
           <div className="notification-header">
             <span>Notifications</span>
             <button className="notification-close" onClick={() => setOpen(false)}><X size={14} /></button>
           </div>
           <div className="notification-body">
             {loading ? (
-              <div className="notification-empty">Loading…</div>
+              <div className="notification-empty">Loading\u2026</div>
             ) : !data?.notifications?.length ? (
-              <div className="notification-empty">All clear — nothing new right now.</div>
+              <div className="notification-empty">All clear \u2014 nothing new right now.</div>
             ) : (
               data.notifications.map((n, i) => {
                 const Icon = ICON_MAP[n.icon] || Bell;
