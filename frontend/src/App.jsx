@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { Film, X, Loader2, RefreshCw, Menu, LogIn, LogOut, Eye } from "lucide-react";
 import navItems from "./navConfig.js";
 import { api, API_BASE } from "./api.js";
@@ -10,24 +10,24 @@ import { ToastContainer, useToast } from "./components/Toast.jsx";
 import { useAuth } from "./hooks/useAuth.js";
 import { useRefresh } from "./hooks/useRefresh.js";
 import { useDetailModal } from "./hooks/useDetailModal.js";
-import RecommendationsPage from "./pages/RecommendationsPage.jsx";
-import MoodPage from "./pages/MoodPage.jsx";
-import TrendingPage from "./pages/TrendingPage.jsx";
-import TasteProfilePage from "./pages/TasteProfilePage.jsx";
-import WrappedPage from "./pages/WrappedPage.jsx";
-import GroupNightPage from "./pages/GroupNightPage.jsx";
-import CollectionsPage from "./pages/CollectionsPage.jsx";
-import WatchlistPage from "./pages/WatchlistPage.jsx";
-import BrowsePage from "./pages/BrowsePage.jsx";
-import AdminPage from "./pages/AdminPage.jsx";
-import SocialPage from "./pages/SocialPage.jsx";
-import ListImportPage from "./pages/ListImportPage.jsx";
-import PulsePage from "./pages/PulsePage.jsx";
-import CalendarPage from "./pages/CalendarPage.jsx";
-import HistoryPage from "./pages/HistoryPage.jsx";
+const RecommendationsPage = lazy(() => import("./pages/RecommendationsPage.jsx"));
+const MoodPage = lazy(() => import("./pages/MoodPage.jsx"));
+const TrendingPage = lazy(() => import("./pages/TrendingPage.jsx"));
+const TasteProfilePage = lazy(() => import("./pages/TasteProfilePage.jsx"));
+const WrappedPage = lazy(() => import("./pages/WrappedPage.jsx"));
+const GroupNightPage = lazy(() => import("./pages/GroupNightPage.jsx"));
+const CollectionsPage = lazy(() => import("./pages/CollectionsPage.jsx"));
+const WatchlistPage = lazy(() => import("./pages/WatchlistPage.jsx"));
+const BrowsePage = lazy(() => import("./pages/BrowsePage.jsx"));
+const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
+const SocialPage = lazy(() => import("./pages/SocialPage.jsx"));
+const ListImportPage = lazy(() => import("./pages/ListImportPage.jsx"));
+const PulsePage = lazy(() => import("./pages/PulsePage.jsx"));
+const CalendarPage = lazy(() => import("./pages/CalendarPage.jsx"));
+const HistoryPage = lazy(() => import("./pages/HistoryPage.jsx"));
 import NotificationBell from "./components/NotificationBell.jsx";
 import ThemeToggle from "./components/ThemeToggle.jsx";
-import WorldCinemaPage from "./pages/WorldCinemaPage.jsx";
+const WorldCinemaPage = lazy(() => import("./pages/WorldCinemaPage.jsx"));
 
 export default function Recommendarr() {
   // ── Hash-based routing ──────────────────────────────────────
@@ -265,7 +265,7 @@ export default function Recommendarr() {
                 {loginLoading ? <><Loader2 size={15} className="spin" /> Connecting...</> : <><LogIn size={15} /> Sign in with Plex</>}
               </button>
             </div>
-          ) : renderPage()}
+          ) : <Suspense fallback={<LoadingState />}>{renderPage()}</Suspense>}
         </main>
       </div>
 
