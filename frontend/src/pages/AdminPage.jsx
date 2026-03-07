@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { Settings, Database, Activity, BarChart3, SlidersHorizontal, Loader2, CheckCircle2, XCircle,
-  Zap, Clock, Sparkles, Film, Tv, Users, RotateCcw } from "lucide-react";
+  Zap, Clock, Sparkles, Film, Tv, Users, RotateCcw, Server, Shuffle } from "lucide-react";
 import { api } from "../api.js";
 import { formatHours } from "../utils.js";
 import ConfigTab from "./admin/ConfigTab.jsx";
 import PrefsTab from "./admin/PrefsTab.jsx";
+import ServarrTab from "./admin/ServarrTab.jsx";
+import RoutingTab from "./admin/RoutingTab.jsx";
 
 function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser }) {
   const [settingsTab, setSettingsTabRaw] = useState(initialSubtab || "services");
@@ -134,6 +136,8 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
     { id: "library", label: "Library", icon: Database },
     { id: "cache", label: "Cache", icon: BarChart3 },
     { id: "config", label: "Configuration", icon: Settings },
+    { id: "servarr", label: "Servarr", icon: Server },
+    { id: "routing", label: "Routing", icon: Shuffle },
     { id: "prefs", label: "Preferences", icon: SlidersHorizontal },
   ];
 
@@ -233,6 +237,10 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
             handleEditField={handleEditField} toggleShowKey={toggleShowKey}
           />
         )}
+
+        {settingsTab === "servarr" && <ServarrTab />}
+
+        {settingsTab === "routing" && <RoutingTab />}
 
         {settingsTab === "prefs" && (
           <PrefsTab

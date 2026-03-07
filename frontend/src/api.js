@@ -155,3 +155,24 @@ const api = {
 };
 
 export { api, API_BASE };
+
+// ── Servarr Instances ───────────────────────────────────────────
+const instances = {
+  list: () => authFetch(`${API_BASE}/system/instances`).then(r => r.json()),
+  detail: (name) => authFetch(`${API_BASE}/system/instances/${encodeURIComponent(name)}`).then(r => r.json()),
+  add: (data) => authFetch(`${API_BASE}/system/instances`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Add failed"); return d; })),
+  update: (name, data) => authFetch(`${API_BASE}/system/instances/${encodeURIComponent(name)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Update failed"); return d; })),
+  remove: (name) => authFetch(`${API_BASE}/system/instances/${encodeURIComponent(name)}`, { method: "DELETE" }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Delete failed"); return d; })),
+  test: (name) => authFetch(`${API_BASE}/system/instances/${encodeURIComponent(name)}/test`, { method: "POST" }).then(r => r.json()),
+};
+
+// ── Routing Rules ───────────────────────────────────────────────
+const routing = {
+  get: () => authFetch(`${API_BASE}/system/routing`).then(r => r.json()),
+  update: (rules) => authFetch(`${API_BASE}/system/routing`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rules }) }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Update failed"); return d; })),
+  reset: () => authFetch(`${API_BASE}/system/routing/reset`, { method: "POST" }).then(r => r.json()),
+  autoDetect: () => authFetch(`${API_BASE}/system/routing/auto-detect`, { method: "POST" }).then(r => r.json()),
+  instanceInfo: () => authFetch(`${API_BASE}/system/instances`).then(r => r.json()),
+};
+
+export { instances, routing };
