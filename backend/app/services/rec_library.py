@@ -100,53 +100,63 @@ async def get_library_candidates(
                 "popularity": 0,
             })
 
-    fix_poster_urls(candidates)
+    enrich_candidates_from_cache(candidates)
     cache.set_library(domain, candidates)
     return candidates
 
 
-def fix_poster_urls(candidates: list[dict]) -> None:
-    """Replace TVDB poster URLs with TMDB paths from cache.
+def enrich_candidates_from_cache(candidates: list[dict]) -> None:
+    """Enrich library candidates with TmdbCache data: posters, cast, directors, keywords, trailers.
 
-    Sonarr returns TVDB poster URLs which get hotlink-blocked in browsers.
-    Bulk lookup against tmdb_cache and swap for TMDB paths.
+    Radarr/Sonarr provide basic metadata; TmdbCache has rich TMDB data from prior lookups.
+    Single bulk query enriches all fields at once.
     """
-    needs_fix = [c for c in candidates
-                 if (c.get("poster_path") or "").startswith("http")
-                 and "image.tmdb.org" not in (c.get("poster_path") or "")]
-    if not needs_fix:
+    if not candidates:
         return
-
     try:
         from app.database import get_db
         from app.models import TmdbCache
         from sqlalchemy import select
+        import json
 
-        tmdb_ids = [c["tmdb_id"] for c in needs_fix]
+        tmdb_ids = [c["tmdb_id"] for c in candidates]
         with get_db() as db:
             rows = db.execute(
-                select(TmdbCache.tmdb_id, TmdbCache.poster_path).where(
-                    TmdbCache.tmdb_id.in_(tmdb_ids),
-                    TmdbCache.poster_path.isnot(None),
-                    TmdbCache.poster_path != "",
-                )
-            ).all()
-            poster_map = {r.tmdb_id: r.poster_path for r in rows
-                          if r.poster_path and r.poster_path.startswith("/")}
+                select(TmdbCache).where(TmdbCache.tmdb_id.in_(tmdb_ids))
+            ).scalars().all()
+            cache_map = {r.tmdb_id: r for r in rows}
 
-        fixed = 0
-        for c in needs_fix:
-            tmdb_poster = poster_map.get(c["tmdb_id"])
-            if tmdb_poster:
-                c["poster_path"] = tmdb_poster
-                fixed += 1
+        enriched = 0
+        for c in candidates:
+            row = cache_map.get(c["tmdb_id"])
+            if not row:
+                continue
+            # Poster fix (TVDB -> TMDB)
+            if (c.get("poster_path") or "").startswith("http") and row.poster_path and row.poster_path.startswith("/"):
+                c["poster_path"] = row.poster_path
+            # Cast/crew enrichment
+            cc = row.cast_crew if isinstance(row.cast_crew, dict) else json.loads(row.cast_crew) if row.cast_crew else {}
+            if cc:
+                if not c.get("directors") and cc.get("directors"):
+                    c["directors"] = cc["directors"][:5]
+                if not c.get("cast") and cc.get("cast"):
+                    c["cast"] = [a["name"] if isinstance(a, dict) else a for a in cc["cast"][:10]]
+                if cc.get("trailers"):
+                    t = cc["trailers"][0] if isinstance(cc["trailers"], list) else None
+                    if t and isinstance(t, dict):
+                        c["trailer_key"] = t.get("key")
+                        c["trailer_site"] = t.get("site", "YouTube")
+                enriched += 1
+            # Keywords enrichment
+            if not c.get("keywords") and row.keywords:
+                kws = row.keywords if isinstance(row.keywords, list) else json.loads(row.keywords) if row.keywords else []
+                if kws:
+                    c["keywords"] = [k["name"] if isinstance(k, dict) else k for k in kws[:15]]
 
-        still_broken = len(needs_fix) - fixed
-        if fixed or still_broken:
-            logger.info(f"Poster fix: {fixed} TVDB→TMDB, {still_broken} need enrichment")
+        if enriched:
+            logger.info(f"Cache enrichment: {enriched}/{len(candidates)} items got cast/crew/keywords")
     except Exception as e:
-        logger.warning(f"Poster URL fix failed: {e}")
-
+        logger.warning(f"Cache enrichment failed: {e}")
 
 async def get_library_tmdb_ids(radarr, sonarr_tv, sonarr_anime, domain: str = "all") -> set[int]:
     """Get set of all TMDB IDs in the library (for dedup in grab mode)."""
