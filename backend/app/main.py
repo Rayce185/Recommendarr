@@ -27,7 +27,7 @@ logging.basicConfig(
 
 app = FastAPI(
     title="Recommendarr",
-    version="0.5.0",
+    version="1.0.0",
     description="Personal media recommendation engine — SQLite + TMDB + ChromaDB RAG",
     lifespan=lifespan,
     docs_url="/api/docs" if settings.debug else None,
@@ -112,4 +112,4 @@ if os.path.isdir(STATIC_DIR):
 else:
     @app.get("/")
     async def root():
-        return {"name": "Recommendarr", "version": "0.5.0", "docs": "/api/docs"}
+        return {"name": "Recommendarr", "version": "1.0.0", "docs": "/api/docs"}

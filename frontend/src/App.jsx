@@ -64,6 +64,10 @@ export default function Recommendarr() {
   }, []);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState("…");
+  useEffect(() => {
+    api("/api/v1/health").then(d => d?.version && setAppVersion(d.version)).catch(() => {});
+  }, []);
 
   // ── Toast + Auth + Refresh hooks ──────────────────────────
   const { toasts, addToast } = useToast();
@@ -235,7 +239,7 @@ export default function Recommendarr() {
             </div>
           )}
           <div className="sidebar-footer">
-            <span>Recommendarr v0.5.0</span>
+            <span>Recommendarr v{appVersion}</span>
             <ThemeToggle />
           </div>
         </nav>
