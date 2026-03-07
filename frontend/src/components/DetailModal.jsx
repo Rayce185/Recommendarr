@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useModalA11y } from "../hooks/useModalA11y.js";
 import { X, Star, Clock, Play, Download, ExternalLink, ThumbsUp, ThumbsDown, Bookmark,
   CheckCircle2, XCircle, Film, Layers, ChevronDown, Loader2, Eye, Heart, MapPin, Sparkles } from "lucide-react";
 import { api, authFetch, API_BASE } from "../api.js";
@@ -15,11 +16,8 @@ function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest,
   const [collLoading, setCollLoading] = useState(false);
   const [collRequestingId, setCollRequestingId] = useState(null);
 
-  useEffect(() => {
-    const handler = (e) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  const containerRef = useRef(null);
+  useModalA11y(containerRef, onClose);
 
   // Fetch collection info for movies
   useEffect(() => {
@@ -50,7 +48,7 @@ function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest,
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-container">
+      <div className="modal-container" ref={containerRef} role="dialog" aria-modal="true">
         <div className="modal-backdrop">
           {backdrop ? <img src={backdrop} alt="" loading="lazy" /> : <div style={{ background: "var(--bg-elevated)", height: "100%" }} />}
           <div className="backdrop-gradient" />

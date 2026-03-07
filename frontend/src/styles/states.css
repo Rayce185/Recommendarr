@@ -6,10 +6,27 @@
   justify-content: center;
   padding: 60px 20px;
   color: var(--text-secondary);
-  gap: 12px;
+  gap: 14px;
+  text-align: center;
 }
-.state-container svg { color: var(--text-muted); }
-.state-container h3 { color: var(--text-primary); font-size: 16px; }
-.state-container p { font-size: 13px; max-width: 320px; text-align: center; }
+.state-container svg {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+.state-container h3 {
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0;
+}
+.state-container p {
+  font-size: 13px;
+  max-width: 360px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.state-container.error svg { color: var(--red, #e74c3c); opacity: 0.7; }
+.state-container.error h3 { color: var(--red, #e74c3c); }
 .spinner { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

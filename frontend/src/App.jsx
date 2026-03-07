@@ -63,6 +63,13 @@ export default function Recommendarr() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  // Escape closes mobile menu
+  useEffect(() => {
+    const handler = (e) => { if (e.key === "Escape" && mobileMenuOpen) setMobileMenuOpen(false); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [mobileMenuOpen]);
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [appVersion, setAppVersion] = useState("…");
   useEffect(() => {
