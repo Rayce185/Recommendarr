@@ -1,0 +1,56 @@
+/* Skeleton loading animations */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.3; }
+}
+
+.skeleton-pulse {
+  background: var(--text-primary, #ccc);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* Card skeleton — matches .rec-card dimensions */
+.skeleton-card {
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--card-bg, #1a1a2e);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.06));
+}
+
+.skeleton-card-poster {
+  width: 100%;
+  aspect-ratio: 2/3;
+}
+
+.skeleton-card-body {
+  padding: 0.75rem;
+}
+
+.skeleton-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  padding: 1rem 0;
+}
+
+/* Table skeleton */
+.skeleton-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.skeleton-table-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+/* Admin panel skeleton */
+.skeleton-admin-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Layers, ChevronDown, CheckCircle2, Film, XCircle } from "lucide-react";
+import Skeleton from "../components/Skeleton.jsx";
 import { api } from "../api.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
 
@@ -21,7 +22,7 @@ function CollectionsPage({ user, onCardClick }) {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <><div className="page-header"><h2>Complete The Collection</h2></div><div className="page-body"><LoadingState message="Scanning your watch history for franchise gaps..." /></div></>;
+  if (loading) return <><div className="page-header"><h2>Complete The Collection</h2></div><div className="page-body"><Skeleton.CardGrid count={6} /></div></>;
   if (error) return <><div className="page-header"><h2>Complete The Collection</h2></div><div className="page-body"><ErrorState message={error} onRetry={load} /></div></>;
 
   const collections = data?.collections || [];

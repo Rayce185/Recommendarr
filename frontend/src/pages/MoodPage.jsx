@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Sparkles, Loader2, Search } from "lucide-react";
+import Skeleton from "../components/Skeleton.jsx";
 import { api } from "../api.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
 import MediaCard from "../components/MediaCard.jsx";
@@ -109,7 +110,7 @@ function MoodPage({ user, onCardClick }) {
           </div>
         )}
 
-        {loading ? <LoadingState message="Matching your mood..." /> :
+        {loading ? <Skeleton.CardGrid count={6} /> :
          items.length > 0 ? (
           <div className="card-grid">
             {items.map((item, i) => <MediaCard key={`${item.tmdb_id}-${i}`} item={item} onClick={onCardClick} />)}

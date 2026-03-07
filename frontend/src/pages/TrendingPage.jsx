@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { TrendingUp, Globe, Tv, Sparkles, MessageCircle, ExternalLink, ArrowUp, MessageSquare } from "lucide-react";
+import Skeleton from "../components/Skeleton.jsx";
 import { api } from "../api.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
 import MediaCard from "../components/MediaCard.jsx";
@@ -188,7 +189,7 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
           </div>
         )}
 
-        {loading ? <LoadingState message={subtab === "buzz" ? "Fetching Reddit buzz..." : "Fetching trends..."} /> :
+        {loading ? <Skeleton.CardGrid count={8} /> :
          error ? <ErrorState message={error} onRetry={load} /> :
          subtab === "buzz" ? (
            filteredBuzz.length === 0 ? <EmptyState icon={MessageCircle} title="No buzz found" /> :

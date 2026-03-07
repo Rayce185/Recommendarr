@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Search, Film, Tv, Loader2, Star } from "lucide-react";
 import { api } from "../api.js";
+import Skeleton from "../components/Skeleton.jsx";
 import { posterUrl } from "../utils.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
 import MediaCard from "../components/MediaCard.jsx";
@@ -199,9 +200,7 @@ function BrowsePage({ onCardClick }) {
 
       {/* Results Grid */}
       {loading && results.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)" }}>
-          <Loader2 size={24} className="spinning" /> Loading...
-        </div>
+        <Skeleton.CardGrid count={8} />
       ) : results.length === 0 ? (
         <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)" }}>
           {mode === "search" ? "No results found." : "No titles match these filters."}

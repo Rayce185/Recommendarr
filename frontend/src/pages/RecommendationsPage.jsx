@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Play, Download, RefreshCw, AlertCircle, Loader2 } from "lucide-react";
+import Skeleton from "../components/Skeleton.jsx";
 import { api, authFetch, API_BASE } from "../api.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
 import MediaCard from "../components/MediaCard.jsx";
@@ -128,7 +129,7 @@ function RecommendationsPage({ user, mode, onCardClick }) {
         onApply={(f) => { setFilters(f); saveFilters(f); load(true, f); }}
       />
       <div className="page-body">
-        {loading ? <LoadingState message={`Finding ${mode === 'grab' ? 'new releases' : 'recommendations'}...`} /> :
+        {loading ? <Skeleton.CardGrid count={8} /> :
          error ? <ErrorState message={error} onRetry={load} /> :
          items.length === 0 ? <EmptyState icon={cfg.icon} title="No recommendations" message={`No ${mode} picks found for this user.`} /> :
          <div className="card-grid">

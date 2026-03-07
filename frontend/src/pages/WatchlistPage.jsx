@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Bookmark, Loader2, Film, Tv, ChevronDown } from "lucide-react";
 import { api } from "../api.js";
+import Skeleton from "../components/Skeleton.jsx";
 import { posterUrl } from "../utils.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
 import MediaCard from "../components/MediaCard.jsx";
@@ -110,7 +111,7 @@ function WatchlistPage({ user, onCardClick }) {
       </div>
 
       <div className="page-body">
-        {loading ? <LoadingState message="Loading watchlist..." /> :
+        {loading ? <Skeleton.CardGrid count={6} /> :
          error ? <ErrorState message={error} onRetry={load} /> :
          items.length === 0 ? <EmptyState icon={Bookmark} title="Watchlist empty" message="Add titles to your Plex watchlist to see them here." /> :
          <div className="card-grid">

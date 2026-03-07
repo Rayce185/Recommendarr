@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Settings, Database, Activity, BarChart3, SlidersHorizontal, Loader2, CheckCircle2, XCircle,
   Zap, Clock, Sparkles, Film, Tv, Users, RotateCcw, Server, Shuffle } from "lucide-react";
+import Skeleton from "../components/Skeleton.jsx";
 import { LoadingState, ErrorState } from "../components/StateDisplays.jsx";
 import { api } from "../api.js";
 import { formatHours } from "../utils.js";
@@ -128,7 +129,7 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
     setShowKeys(prev => ({ ...prev, [field]: !prev[field] }));
   };
 
-  if (loading) return <><div className="page-header"><h2>System Settings</h2></div><div className="page-body"><LoadingState /></div></>;
+  if (loading) return <><div className="page-header"><h2>System Settings</h2></div><div className="page-body"><div className="skeleton-admin-panel"><Skeleton.Line width="60%" height="1.2rem" /><Skeleton.Table rows={5} cols={3} /><Skeleton.Line width="40%" height="1rem" /><Skeleton.Table rows={3} cols={2} /></div></div></>;
   if (error) return <><div className="page-header"><h2>System Settings</h2></div><div className="page-body"><ErrorState message={error} onRetry={load} /></div></>;
 
 
