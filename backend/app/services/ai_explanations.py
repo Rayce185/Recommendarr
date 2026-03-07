@@ -87,7 +87,7 @@ async def generate_explanations(
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
 
-        explanations = json.loads(cleaned)
+        explanations = json.loads(cleaned, strict=False)  # Allow control chars from LLMs
         if not isinstance(explanations, list):
             logger.warning("AI explanations: expected list, got %s", type(explanations))
             return originals

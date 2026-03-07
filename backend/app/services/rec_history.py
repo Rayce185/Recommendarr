@@ -5,7 +5,7 @@ Provides per-user history queries and "don't recommend again" exclusion.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select, func, desc, and_
@@ -264,3 +264,45 @@ def mark_interaction(
 
     db.close()
     return False
+
+
+def get_recent_rec_map(username: str, days: int = 30) -> dict[int, dict]:
+    """Get recently recommended items with recency info for freshness scoring.
+
+    Returns {tmdb_id: {"count": N, "last_at": datetime, "hours_ago": float}}.
+    """
+    try:
+        db = get_db()
+        user_id = _resolve_user_db_id(db, username)
+        if not user_id:
+            db.close()
+            return {}
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        rows = db.execute(
+            select(
+                RecommendationLog.tmdb_id,
+                func.count().label("cnt"),
+                func.max(RecommendationLog.created_at).label("last_at"),
+            )
+            .where(and_(
+                RecommendationLog.user_id == user_id,
+                RecommendationLog.created_at >= cutoff,
+            ))
+            .group_by(RecommendationLog.tmdb_id)
+        ).all()
+
+        now = datetime.now(timezone.utc)
+        result = {}
+        for tmdb_id, cnt, last_at in rows:
+            # SQLite stores naive datetimes — make timezone-aware for comparison
+            if last_at and last_at.tzinfo is None:
+                last_at = last_at.replace(tzinfo=timezone.utc)
+            hours = (now - last_at).total_seconds() / 3600 if last_at else 999
+            result[tmdb_id] = {"count": cnt, "last_at": last_at, "hours_ago": hours}
+
+        db.close()
+        return result
+    except Exception as e:
+        logger.warning(f"get_recent_rec_map failed: {e}")
+        return {}

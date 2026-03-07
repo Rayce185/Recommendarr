@@ -19,7 +19,7 @@ from app.services.ai_mood import parse_mood_ai
 from app.services.ai_explanations import generate_explanations, build_profile_summary
 from app.services.profile_overrides import get_override_store
 from app.services.feedback import get_feedback_store
-from app.services.rec_history import log_recommendations
+from app.services.rec_history import log_recommendations, get_recent_rec_map
 from app.services.rec_trace import enrich_with_traces, get_watched_titles_for_traces
 from app.services.cache import get_cache
 
@@ -102,6 +102,37 @@ class RecommendationEngine:
 
         results = await handler(self, request)
 
+        # Apply freshness penalty — penalize recently-recommended items (E1)
+        if results:
+            rec_map = get_recent_rec_map(request.username, days=30)
+            if rec_map:
+                penalized = 0
+                for rec in results:
+                    info = rec_map.get(rec.tmdb_id)
+                    if info:
+                        hours = info["hours_ago"]
+                        count = info["count"]
+                        # Recency-based penalty
+                        if hours < 24:
+                            recency_factor = 0.5
+                        elif hours < 168:  # 7 days
+                            recency_factor = 0.75
+                        else:
+                            recency_factor = 0.9
+                        # Frequency-based penalty (stacks with recency)
+                        freq_factor = max(0.6, 1.0 - (count - 1) * 0.08)
+                        penalty = recency_factor * freq_factor
+                        rec.score = round(rec.score * penalty, 4)
+                        rec.score_breakdown["freshness"] = round(penalty, 2)
+                        penalized += 1
+                if penalized:
+                    results.sort(key=lambda r: r.score, reverse=True)
+                    logger.debug(f"Freshness: penalized {penalized} items for {request.username}")
+
+        # Apply diversity injection (E2) — prevent genre monotony in top results
+        if results and len(results) > 5:
+            results = self._diversify_results(results, max_per_genre=3, top_n=15)
+
         # Generate AI explanations (if enabled + results exist)
         if results and not request.skip_explanations:
             try:
@@ -178,6 +209,41 @@ class RecommendationEngine:
         """Clear all in-memory caches."""
         self._library_cache.clear()
         self._profile_cache.clear()
+
+    def _diversify_results(
+        self, recs: list[Recommendation], max_per_genre: int = 3, top_n: int = 15,
+    ) -> list[Recommendation]:
+        """Enforce genre diversity in top results.
+
+        Ensures no single genre dominates the top_n results by demoting
+        excess same-genre items and promoting diverse alternatives.
+        """
+        if len(recs) <= max_per_genre:
+            return recs
+
+        diverse = []
+        genre_counts: dict[str, int] = {}
+        overflow = []
+
+        for rec in recs:
+            primary_genre = rec.genres[0] if rec.genres else "Unknown"
+            if len(diverse) < top_n:
+                count = genre_counts.get(primary_genre, 0)
+                if count < max_per_genre:
+                    diverse.append(rec)
+                    genre_counts[primary_genre] = count + 1
+                else:
+                    overflow.append(rec)
+            else:
+                overflow.append(rec)
+
+        # Fill remaining top_n slots from overflow
+        while len(diverse) < top_n and overflow:
+            diverse.append(overflow.pop(0))
+
+        # Append remaining overflow after diversified top
+        result = diverse + overflow
+        return result
 
     def _shuffle_top_tier(self, recs: list[Recommendation], limit: int) -> list[Recommendation]:
         """Add variety by shuffling within score tiers.
