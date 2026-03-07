@@ -1,4 +1,8 @@
-# Recommendarr
+<p align="center">
+  <img src="logo.png" alt="Recommendarr" width="200"/>
+</p>
+
+<h1 align="center">Recommendarr</h1>
 
 A self-hosted media recommendation engine for Plex. Learns from viewing behavior across all server users to generate personalized, explainable recommendations.
 
