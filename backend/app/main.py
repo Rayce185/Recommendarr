@@ -64,6 +64,7 @@ from app.api import calendar
 from app.api import profile_transfer
 from app.api import notifications
 from app.api import history
+from app.api import setup, webhooks
 
 app.include_router(health.router,                prefix="/api/v1", tags=["system"])
 app.include_router(users.router,                 prefix="/api/v1", tags=["users"])
@@ -92,6 +93,8 @@ app.include_router(calendar.router,              prefix="/api/v1", tags=["calend
 app.include_router(profile_transfer.router, prefix="/api/v1", tags=["profile"])
 app.include_router(notifications.router,      prefix="/api/v1", tags=["notifications"])
 app.include_router(history.router,            prefix="/api/v1", tags=["history"])
+app.include_router(setup.router,             prefix="/api/v1", tags=["setup"])
+app.include_router(webhooks.router,          prefix="/api/v1", tags=["webhooks"])
 
 # ── Static files (frontend) ──────────────────────────────────────
 
