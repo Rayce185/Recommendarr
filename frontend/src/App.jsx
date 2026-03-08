@@ -69,7 +69,7 @@ export default function Recommendarr() {
 
   const [appVersion, setAppVersion] = useState("…");
   useEffect(() => {
-    api("/api/v1/health").then(d => d?.version && setAppVersion(d.version)).catch(() => {});
+    api.health().then(d => d?.version && setAppVersion(d.version)).catch(() => {});
   }, []);
 
   // ── Toast + Auth + Refresh + Detail hooks ─────────────────
