@@ -14,6 +14,7 @@ from typing import Optional
 from app.services.cache import get_cache
 from app.services.rec_library import get_library_candidates
 from app.services.rec_types import Recommendation
+from app.api.rec_helpers import img_url
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +250,7 @@ def _to_feed_item(candidate: dict) -> dict:
         "year": candidate.get("year"),
         "media_type": candidate.get("media_type", "movie"),
         "poster_path": candidate.get("poster_path"),
+        "poster_url": img_url(candidate.get("poster_path"), "w342"),
         "vote_average": candidate.get("vote_average"),
         "overview": candidate.get("overview", ""),
         "genres": candidate.get("genres", []),

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Heart, Star, Film, Tv, BarChart3, Save, Loader2, Download, Upload } from "lucide-react";
+import { Heart, Star, Film, Tv, BarChart3, Save, Loader2, Download, Upload, Sparkles, SlidersHorizontal, ThumbsUp, ThumbsDown, X } from "lucide-react";
 import { api } from "../api.js";
 import ProfileDataTab from "../components/ProfileDataTab.jsx";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
