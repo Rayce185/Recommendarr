@@ -34,23 +34,40 @@ async def get_trending(
     return results, d.get("total_pages", 1)
 
 
+async def discover_popular(
+    get_fn: GetFn,
+    media_type: str = "movie",
+    page: int = 1,
+    extra_params: dict | None = None,
+) -> tuple[list[TMDBDiscoverResult], int]:
+    """Popular content via discover (supports genre filtering unlike /trending)."""
+    endpoint = "/discover/movie" if media_type == "movie" else "/discover/tv"
+    params = {"sort_by": "popularity.desc", "page": page, "vote_count.gte": 10}
+    if extra_params:
+        params.update(extra_params)
+    d = await get_fn(endpoint, params)
+    results = [parse_discover_result(r, media_type) for r in d.get("results", [])]
+    return results, d.get("total_pages", 1)
+
+
 async def discover_by_country(
     get_fn: GetFn,
     region: str,
     media_type: str = "movie",
     page: int = 1,
+    extra_params: dict | None = None,
 ) -> tuple[list[TMDBDiscoverResult], int]:
     """Popular content in a specific country/region."""
     if media_type == "movie":
-        d = await get_fn("/discover/movie", {
-            "region": region, "sort_by": "popularity.desc",
-            "page": page, "vote_count.gte": 10,
-        })
+        params = {"region": region, "sort_by": "popularity.desc",
+                  "page": page, "vote_count.gte": 10}
     else:
-        d = await get_fn("/discover/tv", {
-            "watch_region": region, "sort_by": "popularity.desc",
-            "page": page, "vote_count.gte": 10,
-        })
+        params = {"watch_region": region, "sort_by": "popularity.desc",
+                  "page": page, "vote_count.gte": 10}
+    if extra_params:
+        params.update(extra_params)
+    endpoint = "/discover/movie" if media_type == "movie" else "/discover/tv"
+    d = await get_fn(endpoint, params)
     results = [parse_discover_result(r, media_type) for r in d.get("results", [])]
     return results, d.get("total_pages", 1)
 
@@ -61,13 +78,15 @@ async def discover_by_provider(
     region: str = "CH",
     media_type: str = "movie",
     page: int = 1,
+    extra_params: dict | None = None,
 ) -> tuple[list[TMDBDiscoverResult], int]:
     """Popular content on a specific streaming provider in a region."""
     endpoint = "/discover/movie" if media_type == "movie" else "/discover/tv"
-    d = await get_fn(endpoint, {
-        "watch_region": region, "with_watch_providers": str(provider_id),
-        "sort_by": "popularity.desc", "page": page,
-    })
+    params = {"watch_region": region, "with_watch_providers": str(provider_id),
+              "sort_by": "popularity.desc", "page": page}
+    if extra_params:
+        params.update(extra_params)
+    d = await get_fn(endpoint, params)
     results = [parse_discover_result(r, media_type) for r in d.get("results", [])]
     return results, d.get("total_pages", 1)
 
@@ -98,25 +117,26 @@ async def discover_new_releases(
     days: int = 90,
     media_type: str = "movie",
     page: int = 1,
+    extra_params: dict | None = None,
 ) -> tuple[list[TMDBDiscoverResult], int]:
     """Recently released content sorted by popularity."""
     now = datetime.utcnow()
     date_from = (now - timedelta(days=days)).strftime("%Y-%m-%d")
     date_to = now.strftime("%Y-%m-%d")
     if media_type == "movie":
-        d = await get_fn("/discover/movie", {
-            "sort_by": "popularity.desc",
-            "primary_release_date.gte": date_from,
-            "primary_release_date.lte": date_to,
-            "page": page, "vote_count.gte": 5,
-        })
+        params = {"sort_by": "popularity.desc",
+                  "primary_release_date.gte": date_from,
+                  "primary_release_date.lte": date_to,
+                  "page": page, "vote_count.gte": 5}
     else:
-        d = await get_fn("/discover/tv", {
-            "sort_by": "popularity.desc",
-            "first_air_date.gte": date_from,
-            "first_air_date.lte": date_to,
-            "page": page, "vote_count.gte": 5,
-        })
+        params = {"sort_by": "popularity.desc",
+                  "first_air_date.gte": date_from,
+                  "first_air_date.lte": date_to,
+                  "page": page, "vote_count.gte": 5}
+    if extra_params:
+        params.update(extra_params)
+    endpoint = "/discover/movie" if media_type == "movie" else "/discover/tv"
+    d = await get_fn(endpoint, params)
     results = [parse_discover_result(r, media_type) for r in d.get("results", [])]
     return results, d.get("total_pages", 1)
 

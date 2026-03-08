@@ -250,17 +250,20 @@ class TMDBClient:
     async def get_trending(self, media_type="all", window="week", page=1):
         return await tmdb_discover.get_trending(self._get, media_type, window, page)
 
-    async def discover_by_country(self, region, media_type="movie", page=1):
-        return await tmdb_discover.discover_by_country(self._get, region, media_type, page)
+    async def discover_by_country(self, region, media_type="movie", page=1, extra_params=None):
+        return await tmdb_discover.discover_by_country(self._get, region, media_type, page, extra_params)
 
-    async def discover_by_provider(self, provider_id, region="CH", media_type="movie", page=1):
-        return await tmdb_discover.discover_by_provider(self._get, provider_id, region, media_type, page)
+    async def discover_by_provider(self, provider_id, region="CH", media_type="movie", page=1, extra_params=None):
+        return await tmdb_discover.discover_by_provider(self._get, provider_id, region, media_type, page, extra_params)
 
     async def get_providers(self, region="CH", media_type="movie"):
         return await tmdb_discover.get_providers(self._get, region, media_type)
 
-    async def discover_new_releases(self, days=90, media_type="movie", page=1):
-        return await tmdb_discover.discover_new_releases(self._get, days, media_type, page)
+    async def discover_new_releases(self, days=90, media_type="movie", page=1, extra_params=None):
+        return await tmdb_discover.discover_new_releases(self._get, days, media_type, page, extra_params)
+
+    async def discover_popular(self, media_type="movie", page=1, extra_params=None):
+        return await tmdb_discover.discover_popular(self._get, media_type, page, extra_params)
 
     async def discover_by_genre(self, genre_id, media_type="movie", page=1):
         return await tmdb_discover.discover_by_genre(self._get, genre_id, media_type, page)

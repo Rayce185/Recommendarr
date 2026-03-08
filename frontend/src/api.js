@@ -51,10 +51,12 @@ const api = {
     if (opts.media_type) params.set("media_type", opts.media_type);
     if (opts.region) params.set("region", opts.region);
     if (opts.provider_id) params.set("provider_id", opts.provider_id);
+    if (opts.genre_id) params.set("genre_id", opts.genre_id);
     if (opts.days) params.set("days", opts.days);
     if (opts.page) params.set("page", opts.page);
     return authFetch(`${API_BASE}/discover/trending?${params}`).then(r => r.json());
   },
+  trendingGenres: () => authFetch(`${API_BASE}/discover/genres`).then(r => r.json()),
   trendingCountries: () => authFetch(`${API_BASE}/discover/countries`).then(r => r.json()),
   trendingProviders: (region = "CH") => authFetch(`${API_BASE}/discover/providers?country=${region}`).then(r => r.json()),
   buzz: (subs) => authFetch(`${API_BASE}/discover/buzz${subs ? '?subreddits=' + encodeURIComponent(subs) : ''}`).then(r => r.json()),

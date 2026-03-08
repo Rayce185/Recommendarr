@@ -66,8 +66,13 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
   // Buzz filter
   const [buzzFilter, setBuzzFilter] = useState("all");
 
+  // Genre filter
+  const [genres, setGenres] = useState([]);
+  const [genreId, setGenreId] = useState(null);
+
   useEffect(() => {
     api.trendingCountries().then(d => setCountries(d.countries || [])).catch(() => {});
+    api.trendingGenres().then(d => setGenres(d.genres || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -99,11 +104,12 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
       opts.region = providerRegion;
       opts.provider_id = providerId;
     }
+    if (genreId) opts.genre_id = genreId;
     api.trendingExpanded(source, opts)
       .then(data => setItems(data.results || []))
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
-  }, [subtab, mediaType, region, providerId, providerRegion]);
+  }, [subtab, mediaType, region, providerId, providerRegion, genreId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -140,6 +146,12 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
                 { value: "tv", label: "TV Shows" },
                 { value: "anime", label: "Anime" },
               ]} />
+            </div>
+
+            <div className="filter-group">
+              <label>Genre</label>
+              <CustomSelect value={genreId || ""} onChange={v => setGenreId(v ? Number(v) : null)}
+                options={[{ value: "", label: "All Genres" }, ...genres.map(g => ({ value: g.id, label: g.name }))]} />
             </div>
 
             {subtab === "country" && (
