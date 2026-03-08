@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { UserPlus, UserMinus, Check, X, Clock, Shield, Loader2 } from "lucide-react";
+import { UserPlus, UserMinus, Check, X, Clock, Shield, Loader2, Sparkles } from "lucide-react";
 import { authFetch, API_BASE } from "../api.js";
 
 function FriendsPanel({ user }) {
@@ -9,6 +9,7 @@ function FriendsPanel({ user }) {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
 
   const load = useCallback(async () => {
     if (!user?.username) return;
@@ -22,6 +23,20 @@ function FriendsPanel({ user }) {
       setFriends(fRes.friends || []);
       setPending(pRes);
       setPrivacy(prRes);
+      // Load taste overlaps for friend suggestions
+      const friendNames = new Set((fRes.friends || []).map(f => f.username));
+      const pendingNames = new Set([
+        ...(pRes.incoming || []).map(p => p.username),
+        ...(pRes.outgoing || []).map(p => p.username),
+      ]);
+      try {
+        const ovRes = await authFetch(`${API_BASE}/users/${user.username}/taste-overlap?domain=all`);
+        const ovData = await ovRes.json();
+        const sug = (ovData.overlaps || [])
+          .filter(o => !friendNames.has(o.username) && !pendingNames.has(o.username) && o.overlap_pct >= 30)
+          .slice(0, 5);
+        setSuggestions(sug);
+      } catch (e) { /* ok */ }
     } catch (err) {
       console.error("Failed to load friends:", err);
     } finally {
@@ -185,6 +200,44 @@ function FriendsPanel({ user }) {
             {pending.outgoing.map(r => (
               <div key={r.username} style={{ padding: "6px 0", borderBottom: "1px solid var(--border-subtle, rgba(255,255,255,0.06))" }}>
                 {r.display_name} — waiting for response
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Friend Suggestions */}
+      {suggestions.length > 0 && (
+        <div className="wrapped-chart-section" style={{ marginBottom: 16 }}>
+          <h3 style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Sparkles size={16} /> Suggested Friends
+          </h3>
+          <p style={{ color: "var(--text-muted)", fontSize: 12, marginBottom: 8 }}>Based on taste overlap</p>
+          <div className="social-overlap-list">
+            {suggestions.map(s => (
+              <div key={s.username} className="social-overlap-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                  {s.thumb ? (
+                    <img src={s.thumb} alt="" className="group-user-avatar" />
+                  ) : (
+                    <div className="group-user-avatar group-user-avatar-placeholder">
+                      {(s.friendly_name || s.username).charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span className="social-overlap-name">{s.friendly_name || s.username}</span>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                      {s.overlap_pct}% match{s.shared_genres.length > 0 ? ` · ${s.shared_genres.slice(0, 3).join(", ")}` : ""}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className="btn-small btn-accent"
+                  disabled={actionLoading === s.username}
+                  onClick={() => doAction("/friends/request", "POST", { username: s.username })}
+                >
+                  <UserPlus size={14} /> Add
+                </button>
               </div>
             ))}
           </div>
