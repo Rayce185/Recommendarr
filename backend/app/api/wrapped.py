@@ -5,8 +5,11 @@ from typing import Optional
 
 from app.services.factory import get_stack
 from app.services.wrapped import build_wrapped
+from app.services.cache import get_cache
 
 router = APIRouter()
+
+WRAPPED_CACHE_TTL = 3600  # 1 hour
 
 
 @router.get("/users/{username}/wrapped")
@@ -15,6 +18,13 @@ async def get_user_wrapped(
     year: Optional[int] = Query(None, description="Year to analyze (default: current year)"),
 ):
     """Get Plex Wrapped viewing statistics for a user."""
+    # Check cache first
+    cache = get_cache()
+    cache_key = f"wrapped:{username}:{year or 'current'}"
+    cached = cache.get_generic(cache_key)
+    if cached is not None:
+        return cached
+
     stack = get_stack()
 
     users = await stack.tautulli.get_users()
@@ -28,7 +38,7 @@ async def get_user_wrapped(
             break
 
     if not user_match:
-        raise HTTPException(404, f"User '{username}' not found")
+        raise HTTPException(404, f"User \'{username}\' not found")
 
     user_id = str(user_match.get("user_id"))
 
@@ -39,6 +49,7 @@ async def get_user_wrapped(
             username=username,
             year=year,
         )
+        cache.set_generic(cache_key, result, ttl=WRAPPED_CACHE_TTL)
         return result
     except Exception as e:
         raise HTTPException(500, f"Failed to build wrapped: {e}")
