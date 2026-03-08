@@ -13,7 +13,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.clients.tmdb import TmdbClient
+from app.clients.tmdb import TMDBClient as TmdbClient
 from app.clients.plex import PlexClient
 from app.models import TmdbCache
 
