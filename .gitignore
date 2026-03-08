@@ -32,3 +32,4 @@ Thumbs.db
 # Build outputs
 frontend/dist/
 *.bak
+deploy.env
