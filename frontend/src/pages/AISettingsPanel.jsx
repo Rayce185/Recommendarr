@@ -173,12 +173,15 @@ function AISettingsPanel() {
 
               {/* Temperature & Max Tokens */}
               <div style={rowStyle}>
-                <span style={labelStyle}>Temperature</span>
+                <span style={labelStyle} title="Controls randomness: 0 = deterministic, 1 = creative, 2 = wild. Default 0.7 works well for recommendations.">Temperature ⓘ</span>
                 <input type="number" value={llmTemp} min={0} max={2} step={0.1} onChange={e => { setLlmTemp(parseFloat(e.target.value) || 0); setDirty(true); }}
                   style={{ ...inputStyle, maxWidth: 80 }} />
-                <span style={{ ...labelStyle, minWidth: 80, textAlign: "right" }}>Max tokens</span>
+                <span style={{ ...labelStyle, minWidth: 80, textAlign: "right" }} title="Maximum length of AI responses. Higher = more detailed explanations but slower. Default 500 is a good balance.">Max tokens ⓘ</span>
                 <input type="number" value={llmMaxTokens} min={50} max={4096} step={50} onChange={e => { setLlmMaxTokens(parseInt(e.target.value) || 500); setDirty(true); }}
                   style={{ ...inputStyle, maxWidth: 80 }} />
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", padding: "2px 0 4px", lineHeight: 1.4 }}>
+                Temperature: creativity level (0=focused, 2=wild). Max tokens: AI response length limit.
               </div>
 
               {/* Test + Result */}

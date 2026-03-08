@@ -148,7 +148,7 @@ class RadarrClient:
                             or m.get("inCinemas")
                         ),
                         "media_type": "movie",
-                        "poster": m["images"][0].get("remoteUrl") if m.get("images") and m["images"][0].get("remoteUrl") else None,
+                        "poster": next((img.get("remoteUrl") for img in m.get("images", []) if img.get("coverType") == "poster" and img.get("remoteUrl")), None),
                         "source": "radarr",
                         "status": m.get("status", ""),
                         "monitored": True,
