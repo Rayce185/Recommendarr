@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Film, Tv, Loader2, Star, X, Eye } from "lucide-react";
+import { Search, Film, Tv, Loader2, Star, X, Eye, Library } from "lucide-react";
 import { api } from "../api.js";
 import Skeleton from "../components/Skeleton.jsx";
 import { posterUrl } from "../utils.js";
@@ -12,36 +12,38 @@ function BrowsePage({ onCardClick }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState("discover"); // "search" | "discover"
-  const [mediaType, setMediaType] = useState("movie");
+  const [mediaType, setMediaType] = useState("all");
   const [genres, setGenres] = useState({ movie_genres: [], tv_genres: [] });
   const [selectedGenre, setSelectedGenre] = useState(null);
-  const [yearRange, setYearRange] = useState(null); // { min, max }
+  const [yearRange, setYearRange] = useState(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  const [libraries, setLibraries] = useState([]);
+  const [selectedLibrary, setSelectedLibrary] = useState(null);
   const searchInputRef = useRef(null);
-
-  // Load genres on mount
+  // Load genres + libraries on mount
   useEffect(() => {
     api.browseGenres().then(setGenres).catch(() => {});
+    api.browseLibraries().then(d => setLibraries(d.libraries || [])).catch(() => {});
   }, []);
 
   // Auto-discover on filter change
   useEffect(() => {
     if (mode === "discover") doDiscover(1);
-  }, [mediaType, selectedGenre, yearRange, sortBy]);
+  }, [mediaType, selectedGenre, yearRange, sortBy, selectedLibrary]);
 
   const doSearch = async (p = 1) => {
     if (!query.trim()) return;
     setLoading(true);
     setMode("search");
     try {
-      const data = await api.browseSearch(query, p);
+      const data = await api.browseSearch(query, p, selectedLibrary);
       if (p === 1) setResults(data.results);
       else setResults(prev => [...prev, ...data.results]);
       setPage(p);
-      setTotalPages(5); // TMDB multi-search doesn't return total_pages reliably
+      setTotalPages(5);
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -56,6 +58,7 @@ function BrowsePage({ onCardClick }) {
         year_max: yearRange?.max,
         sort_by: sortBy,
         page: p,
+        library: selectedLibrary,
       });
       if (p === 1) setResults(data.results);
       else setResults(prev => [...prev, ...data.results]);
@@ -78,7 +81,10 @@ function BrowsePage({ onCardClick }) {
     doDiscover(1);
   };
 
-  const currentGenres = mediaType === "movie" ? genres.movie_genres : genres.tv_genres;
+  // For "all" mode, combine genres; for single type, show that type's genres
+  const currentGenres = mediaType === "all"
+    ? [...genres.movie_genres]  // show movie genres for "all" (most overlap)
+    : mediaType === "movie" ? genres.movie_genres : genres.tv_genres;
 
   const decades = [
     { label: "2020s", min: 2020, max: 2029 },
@@ -95,6 +101,12 @@ function BrowsePage({ onCardClick }) {
     { value: "primary_release_date.desc", label: "Newest First" },
     { value: "primary_release_date.asc", label: "Oldest First" },
     { value: "revenue.desc", label: "Highest Revenue" },
+  ];
+
+  const mediaTypes = [
+    { key: "all", label: "All" },
+    { key: "movie", label: "Movies" },
+    { key: "tv", label: "TV Shows" },
   ];
 
   return (
@@ -138,20 +150,33 @@ function BrowsePage({ onCardClick }) {
       {/* Filters — only show in discover mode */}
       {mode === "discover" && (
         <div style={{ marginBottom: 20 }}>
-          {/* Media type + Sort */}
+          {/* Media type + Library + Sort */}
           <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div style={{ display: "flex", gap: 2, background: "var(--bg-surface)", borderRadius: 8, padding: 2 }}>
-              {["movie", "tv"].map(mt => (
-                <button key={mt} onClick={() => { setMediaType(mt); setSelectedGenre(null); }}
+              {mediaTypes.map(mt => (
+                <button key={mt.key} onClick={() => { setMediaType(mt.key); setSelectedGenre(null); }}
                   style={{
                     padding: "6px 14px", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                    background: mediaType === mt ? "var(--accent)" : "transparent",
-                    color: mediaType === mt ? "#000" : "var(--text-secondary)",
+                    background: mediaType === mt.key ? "var(--accent)" : "transparent",
+                    color: mediaType === mt.key ? "#000" : "var(--text-secondary)",
                   }}>
-                  {mt === "movie" ? "Movies" : "TV Shows"}
+                  {mt.label}
                 </button>
               ))}
             </div>
+
+            {libraries.length > 0 && (
+              <select value={selectedLibrary || ""} onChange={e => setSelectedLibrary(e.target.value || null)}
+                style={{
+                  padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-surface)",
+                  color: "var(--text-secondary)", fontSize: 12, outline: "none",
+                }}>
+                <option value="">All Libraries</option>
+                {libraries.map(lib => (
+                  <option key={lib.key} value={lib.title}>{lib.title}</option>
+                ))}
+              </select>
+            )}
 
             <select value={sortBy} onChange={e => setSortBy(e.target.value)}
               style={{
@@ -178,23 +203,42 @@ function BrowsePage({ onCardClick }) {
             ))}
           </div>
 
-          {/* Genres */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button onClick={() => setSelectedGenre(null)}
-              className={`filter-chip ${!selectedGenre ? "chip-active" : ""}`}>All Genres</button>
-            {currentGenres.map(g => (
-              <button key={g.id} onClick={() => setSelectedGenre(selectedGenre === g.id ? null : g.id)}
-                className={`filter-chip ${selectedGenre === g.id ? "chip-active" : ""}`}>{g.name}</button>
-            ))}
-          </div>
+          {/* Genres — hide when "all" since genres differ per type */}
+          {mediaType !== "all" && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button onClick={() => setSelectedGenre(null)}
+                className={`filter-chip ${!selectedGenre ? "chip-active" : ""}`}>All Genres</button>
+              {currentGenres.map(g => (
+                <button key={g.id} onClick={() => setSelectedGenre(selectedGenre === g.id ? null : g.id)}
+                  className={`filter-chip ${selectedGenre === g.id ? "chip-active" : ""}`}>{g.name}</button>
+              ))}
+            </div>
+          )}
+          {mediaType === "all" && (
+            <div style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
+              Genre filter available when Movies or TV Shows is selected
+            </div>
+          )}
         </div>
       )}
 
       {mode === "search" && query && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button onClick={clearSearch} className="filter-chip chip-active" style={{ cursor: "pointer" }}>
             <X size={12} /> Clear search — back to Browse
           </button>
+          {libraries.length > 0 && (
+            <select value={selectedLibrary || ""} onChange={e => { setSelectedLibrary(e.target.value || null); }}
+              style={{
+                padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-surface)",
+                color: "var(--text-secondary)", fontSize: 12, outline: "none",
+              }}>
+              <option value="">All Libraries</option>
+              {libraries.map(lib => (
+                <option key={lib.key} value={lib.title}>{lib.title}</option>
+              ))}
+            </select>
+          )}
         </div>
       )}
 
@@ -229,6 +273,7 @@ function BrowsePage({ onCardClick }) {
                   <div className="card-meta">
                     {item.year && <span>{item.year}</span>}
                     {item.media_type && <><span className="sep">·</span><span>{item.media_type === "movie" ? "Movie" : "Series"}</span></>}
+                    {item.library_name && <><span className="sep">·</span><span style={{ opacity: 0.7 }}>{item.library_name}</span></>}
                   </div>
                 </div>
               </div>

@@ -140,7 +140,11 @@ const api = {
   removeFeedback: (u, tmdbId) => authFetch(`${API_BASE}/users/${u}/feedback/${tmdbId}`, { method: "DELETE" }).then(r => r.json()),
   getFeedback: (u) => authFetch(`${API_BASE}/users/${u}/feedback`).then(r => r.json()),
   // Browse/search
-  browseSearch: (q, page = 1) => authFetch(`${API_BASE}/browse/search?q=${encodeURIComponent(q)}&page=${page}`).then(r => r.json()),
+  browseSearch: (q, page = 1, library = null) => {
+    let url = `${API_BASE}/browse/search?q=${encodeURIComponent(q)}&page=${page}`;
+    if (library) url += `&library=${encodeURIComponent(library)}`;
+    return authFetch(url).then(r => r.json());
+  },
   browseDiscover: (opts = {}) => {
     const p = new URLSearchParams();
     if (opts.media_type) p.set("media_type", opts.media_type);
@@ -149,9 +153,11 @@ const api = {
     if (opts.year_max) p.set("year_max", opts.year_max);
     if (opts.sort_by) p.set("sort_by", opts.sort_by);
     if (opts.page) p.set("page", opts.page);
+    if (opts.library) p.set("library", opts.library);
     return authFetch(`${API_BASE}/browse/discover?${p}`).then(r => r.json());
   },
   browseGenres: () => authFetch(`${API_BASE}/browse/genres`).then(r => r.json()),
+  browseLibraries: () => authFetch(`${API_BASE}/browse/libraries`).then(r => r.json()),
   // List Import
   importExtract: (data) => authFetch(`${API_BASE}/import/extract`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Extract failed"); return d; })),
   importBulkRequest: (tmdbIds) => authFetch(`${API_BASE}/import/bulk-request`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tmdb_ids: tmdbIds }) }).then(r => r.json()),

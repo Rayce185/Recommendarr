@@ -159,7 +159,6 @@ class TautulliClient(IWatchHistoryProvider):
 
     # ── Webhook payload parsing ──────────────────────────────────
 
-    @staticmethod
     async def resolve_tmdb_id(self, rating_key: str, media_type: str = "movie") -> int | None:
         """Resolve a Plex rating_key to a TMDB ID via Tautulli's get_metadata.
 

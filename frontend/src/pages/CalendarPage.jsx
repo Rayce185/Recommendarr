@@ -1,147 +1,176 @@
 import { useState, useEffect, useMemo } from "react";
-import { Calendar, Film, Tv, Loader2, Filter, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Calendar, Film, Tv, Loader2, ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
 import { api } from "../api.js";
-import { posterUrl } from "../utils.js";
 
-const DAYS_OPTIONS = [30, 60, 90, 180, 365];
+function getDaysInMonth(year, month) {
+  return new Date(year, month + 1, 0).getDate();
+}
 
-function WeekGroup({ weekStart, items, onCardClick }) {
-  const label = useMemo(() => {
-    if (weekStart === "unknown") return "Date TBD";
-    const d = new Date(weekStart + "T00:00:00");
-    const end = new Date(d); end.setDate(end.getDate() + 6);
-    const fmt = (dt) => dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return `${fmt(d)} — ${fmt(end)}`;
-  }, [weekStart]);
+function getMonthGrid(year, month) {
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const startOffset = firstDay === 0 ? 6 : firstDay - 1; // Mon=0
+  const daysInMonth = getDaysInMonth(year, month);
+  const prevDays = getDaysInMonth(year, month - 1);
+  const cells = [];
+  // Previous month trailing days
+  for (let i = startOffset - 1; i >= 0; i--) cells.push({ day: prevDays - i, current: false });
+  // Current month
+  for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, current: true });
+  // Next month leading days
+  while (cells.length % 7 !== 0) cells.push({ day: cells.length - startOffset - daysInMonth + 1, current: false });
+  return cells;
+}
 
+function DayCell({ cell, dateKey, items, isToday, isSelected, onClick }) {
+  const dayItems = items || [];
+  const show = dayItems.slice(0, 3);
+  const extra = dayItems.length - 3;
   return (
-    <div className="calendar-week">
-      <div className="calendar-week-label">{label}</div>
-      <div className="calendar-week-items">
+    <div className={`cal-day ${cell.current ? "" : "cal-day-dim"} ${isToday ? "cal-day-today" : ""} ${isSelected ? "cal-day-selected" : ""} ${dayItems.length > 0 ? "cal-day-has-items" : ""}`}
+      onClick={() => dayItems.length > 0 && onClick?.(dateKey)}>
+      <div className="cal-day-num">{cell.day}</div>
+      {show.length > 0 && (
+        <div className="cal-day-posters">
+          {show.map((item, i) => (
+            <div key={i} className="cal-day-thumb" title={item.title}>
+              {item.poster ? <img src={item.poster} alt="" /> : <div className="cal-thumb-empty">{item.media_type === "movie" ? "M" : "T"}</div>}
+              {item.monitored && <div className="cal-thumb-dot" />}
+            </div>
+          ))}
+          {extra > 0 && <span className="cal-day-more">+{extra}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DayDetail({ dateKey, items, onCardClick, onClose }) {
+  const label = new Date(dateKey + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  return (
+    <div className="cal-detail">
+      <div className="cal-detail-header">
+        <span>{label} — {items.length} release{items.length !== 1 ? "s" : ""}</span>
+        <button className="cal-detail-close" onClick={onClose}><X size={16} /></button>
+      </div>
+      <div className="cal-detail-grid">
         {items.map((item, i) => (
-          <CalendarCard key={`${item.tmdb_id}-${item.media_type}-${i}`} item={item} onClick={onCardClick} />
+          <div key={i} className="cal-detail-card" onClick={() => onCardClick?.({ tmdb_id: item.tmdb_id, media_type: item.media_type })}>
+            <div className="cal-detail-poster">
+              {item.poster ? <img src={item.poster} alt={item.title} /> : <div className="cal-detail-no-poster">{item.media_type === "movie" ? <Film size={20} /> : <Tv size={20} />}</div>}
+              {item.monitored && <span className="calendar-badge monitored-badge"><Eye size={9} /></span>}
+            </div>
+            <div className="cal-detail-info">
+              <div className="cal-detail-title">{item.title}</div>
+              {item.episode_title && <div className="cal-detail-ep">S{String(item.season).padStart(2,"0")}E{String(item.episode).padStart(2,"0")} — {item.episode_title}</div>}
+              <div className="cal-detail-meta">{item.media_type === "movie" ? "Movie" : "TV"}{item.vote_average > 0 ? ` · ★${item.vote_average.toFixed(1)}` : ""}</div>
+            </div>
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-function CalendarCard({ item, onClick }) {
-  const rd = item.release_date;
-  const dateLabel = rd
-    ? new Date(rd + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
-    : "TBD";
-
-  return (
-    <div
-      className={`calendar-card ${item.monitored ? "monitored" : ""}`}
-      onClick={() => onClick?.({ tmdb_id: item.tmdb_id, media_type: item.media_type })}
-    >
-      <div className="calendar-card-poster">
-        {item.poster ? (
-          <img src={item.poster} alt={item.title} loading="lazy" />
-        ) : (
-          <div className="calendar-card-no-poster">
-            {item.media_type === "movie" ? <Film size={24} /> : <Tv size={24} />}
-          </div>
-        )}
-        {item.monitored && <span className="calendar-badge monitored-badge"><Eye size={10} /> Monitored</span>}
-        <span className="calendar-badge date-badge">{dateLabel}</span>
-      </div>
-      <div className="calendar-card-info">
-        <div className="calendar-card-title">{item.title}</div>
-        {item.episode_title && (
-          <div className="calendar-card-episode">
-            S{String(item.season).padStart(2, "0")}E{String(item.episode).padStart(2, "0")} — {item.episode_title}
-          </div>
-        )}
-        <div className="calendar-card-meta">
-          {item.media_type === "movie" ? <Film size={11} /> : <Tv size={11} />}
-          <span>{item.media_type === "movie" ? "Movie" : "TV"}</span>
-          {item.vote_average > 0 && <span>★ {item.vote_average.toFixed(1)}</span>}
-        </div>
-      </div>
-    </div>
-  );
-}
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function CalendarPage({ onCardClick }) {
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [items, setItems] = useState([]);
-  const [weeks, setWeeks] = useState({});
   const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState(90);
   const [mediaType, setMediaType] = useState("all");
   const [source, setSource] = useState("all");
-  const [total, setTotal] = useState(0);
+  const [selectedDay, setSelectedDay] = useState(null);
 
+  const monthLabel = new Date(viewYear, viewMonth).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  const navMonth = (delta) => {
+    let m = viewMonth + delta, y = viewYear;
+    if (m > 11) { m = 0; y++; } else if (m < 0) { m = 11; y--; }
+    setViewYear(y); setViewMonth(m); setSelectedDay(null);
+  };
+
+  // Calculate days ahead to cover the viewed month
   useEffect(() => {
-    let cancelled = false;
+    const monthEnd = new Date(viewYear, viewMonth + 1, 0);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const daysAhead = Math.max(30, Math.ceil((monthEnd - now) / 86400000) + 1);
+    if (daysAhead < 0) { setItems([]); setLoading(false); return; } // Past month
     setLoading(true);
-    api.calendar(days, mediaType, source)
-      .then(data => {
-        if (cancelled) return;
-        setItems(data.items || []);
-        setWeeks(data.weeks || {});
-        setTotal(data.total || 0);
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [days, mediaType, source]);
+    api.calendar(Math.min(daysAhead, 365), mediaType, source)
+      .then(d => setItems(d.items || []))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [viewYear, viewMonth, mediaType, source]);
 
-  const sortedWeeks = useMemo(() => {
-    return Object.entries(weeks)
-      .filter(([k]) => k !== "unknown")
-      .sort(([a], [b]) => a.localeCompare(b));
-  }, [weeks]);
+  // Group items by YYYY-MM-DD for the viewed month
+  const dayMap = useMemo(() => {
+    const map = {};
+    const prefix = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}`;
+    for (const item of items) {
+      const rd = item.release_date;
+      if (rd && rd.startsWith(prefix)) {
+        (map[rd] ||= []).push(item);
+      }
+    }
+    return map;
+  }, [items, viewYear, viewMonth]);
 
-  const unknownItems = weeks["unknown"] || [];
+  const grid = useMemo(() => getMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const totalInMonth = Object.values(dayMap).reduce((sum, arr) => sum + arr.length, 0);
 
   return (
     <div className="page-container">
       <div className="page-header">
         <h2><Calendar size={22} /> Coming Soon</h2>
-        <span className="page-subtitle">{total} upcoming titles</span>
+        <span className="page-subtitle">{totalInMonth} releases in {monthLabel}</span>
       </div>
-
-      <div className="calendar-filters">
-        <div className="filter-group">
-          <label>Timeframe</label>
-          <select value={days} onChange={e => setDays(Number(e.target.value))}>
-            {DAYS_OPTIONS.map(d => <option key={d} value={d}>{d} days</option>)}
-          </select>
-        </div>
-        <div className="filter-group">
-          <label>Type</label>
-          <select value={mediaType} onChange={e => setMediaType(e.target.value)}>
-            <option value="all">All</option>
-            <option value="movie">Movies</option>
-            <option value="tv">TV Shows</option>
-          </select>
-        </div>
-        <div className="filter-group">
-          <label>Source</label>
-          <select value={source} onChange={e => setSource(e.target.value)}>
-            <option value="all">TMDB + Monitored</option>
-            <option value="tmdb">TMDB Only</option>
-            <option value="monitored">Monitored Only</option>
-          </select>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="loading-state"><Loader2 size={28} className="spinner" /> Loading calendar…</div>
-      ) : items.length === 0 ? (
-        <div className="empty-state">No upcoming titles found for the selected filters.</div>
-      ) : (
-        <div className="calendar-timeline">
-          {sortedWeeks.map(([weekKey, weekItems]) => (
-            <WeekGroup key={weekKey} weekStart={weekKey} items={weekItems} onCardClick={onCardClick} />
-          ))}
-          {unknownItems.length > 0 && (
-            <WeekGroup weekStart="unknown" items={unknownItems} onCardClick={onCardClick} />
+      {/* Month nav + filters */}
+      <div className="cal-controls">
+        <div className="cal-month-nav">
+          <button onClick={() => navMonth(-1)}><ChevronLeft size={18} /></button>
+          <span className="cal-month-label">{monthLabel}</span>
+          <button onClick={() => navMonth(1)}><ChevronRight size={18} /></button>
+          {(viewYear !== today.getFullYear() || viewMonth !== today.getMonth()) && (
+            <button className="cal-today-btn" onClick={() => { setViewYear(today.getFullYear()); setViewMonth(today.getMonth()); setSelectedDay(null); }}>Today</button>
           )}
         </div>
+        <div className="calendar-filters" style={{ marginBottom: 0 }}>
+          <div className="filter-group">
+            <label>Type</label>
+            <select value={mediaType} onChange={e => setMediaType(e.target.value)}>
+              <option value="all">All</option><option value="movie">Movies</option><option value="tv">TV Shows</option>
+            </select>
+          </div>
+          <div className="filter-group">
+            <label>Source</label>
+            <select value={source} onChange={e => setSource(e.target.value)}>
+              <option value="all">TMDB + Monitored</option><option value="tmdb">TMDB Only</option><option value="monitored">Monitored Only</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      {loading ? (
+        <div className="loading-state"><Loader2 size={28} className="spinner" /> Loading calendar…</div>
+      ) : (
+        <>
+          {/* Month grid */}
+          <div className="cal-grid">
+            {WEEKDAYS.map(d => <div key={d} className="cal-header">{d}</div>)}
+            {grid.map((cell, i) => {
+              const dateKey = cell.current ? `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}` : null;
+              return <DayCell key={i} cell={cell} dateKey={dateKey} items={dateKey ? dayMap[dateKey] : []}
+                isToday={dateKey === todayKey} isSelected={selectedDay === dateKey}
+                onClick={(dk) => setSelectedDay(selectedDay === dk ? null : dk)} />;
+            })}
+          </div>
+          {/* Selected day detail */}
+          {selectedDay && dayMap[selectedDay] && (
+            <DayDetail dateKey={selectedDay} items={dayMap[selectedDay]} onCardClick={onCardClick} onClose={() => setSelectedDay(null)} />
+          )}
+        </>
       )}
     </div>
   );
