@@ -7,7 +7,7 @@ import { ComposableMap, Geographies, Geography, ZoomableGroup } from "react-simp
 import { Pin, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { matchColor, ISO_NUM_TO_A2 } from "../utils/world-cinema-utils.js";
 
-const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+const GEO_URL = "/geo/countries-110m.json";
 const DEFAULT_CENTER = [20, 10];
 const DEFAULT_ZOOM = 1;
 const UNMATCHED_FILL = "rgba(255,255,255,0.04)";

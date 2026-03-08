@@ -9,7 +9,7 @@ import json
 import logging
 import secrets
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -29,6 +29,24 @@ def _gen_code(length=6) -> str:
     alphabet = string.ascii_lowercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
+
+
+SESSION_EXPIRY_DAYS = 30
+
+
+def _cleanup_expired():
+    """Delete group night sessions older than expiry threshold."""
+    cutoff = datetime.utcnow() - timedelta(days=SESSION_EXPIRY_DAYS)
+    with get_db() as db:
+        expired = db.execute(
+            select(GroupNightSession).where(GroupNightSession.created_at < cutoff)
+        ).scalars().all()
+        if expired:
+            for row in expired:
+                db.delete(row)
+            db.commit()
+            logger.info(f"Cleaned up {len(expired)} expired group night sessions")
+    return len(expired) if expired else 0
 
 class SessionCreateRequest(BaseModel):
     participants: list[str] = Field(..., min_length=2, max_length=50)
@@ -113,6 +131,7 @@ async def list_sessions(
     limit: int = Query(10, ge=1, le=50),
 ):
     """List sessions where user is creator or participant."""
+    _cleanup_expired()
     username = current_user.sub
     with get_db() as db:
         rows = db.execute(
