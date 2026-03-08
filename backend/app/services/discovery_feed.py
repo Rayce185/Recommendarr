@@ -21,6 +21,19 @@ FEED_CACHE_TTL = 86400  # 24 hours
 SECTION_SIZE = 6
 
 
+async def _resolve_user_id(stack, username: str) -> str | None:
+    """Resolve username → Tautulli numeric user_id."""
+    try:
+        users = await stack.tautulli.get_users()
+        for u in users:
+            uname = u.get("username", "") or u.get("friendly_name", "")
+            if uname == username:
+                return str(u.get("user_id", ""))
+    except Exception as e:
+        logger.warning(f"Could not resolve username {username}: {e}")
+    return None
+
+
 async def generate_feed(username: str) -> dict:
     """Generate or return cached discovery feed for a user."""
     cache = get_cache()
@@ -119,12 +132,10 @@ async def _hidden_gems(stack, username: str) -> Optional[dict]:
         # Get user's watched set from Tautulli
         watched_ids = set()
         if stack.tautulli:
-            user_id = stack.user_map.get(username)
-            if user_id:
-                from app.services.factory import resolve_user_id
-                tautulli_id = resolve_user_id(user_id)
+            tautulli_id = await _resolve_user_id(stack, username)
+            if tautulli_id:
                 history = await stack.tautulli.get_history(
-                    user_id=tautulli_id, length=500
+                    user_id=tautulli_id, limit=500
                 )
                 watched_ids = {h.tmdb_id for h in history if h.tmdb_id}
 
@@ -166,12 +177,12 @@ async def _because_you_liked(stack, username: str) -> Optional[dict]:
         if not stack.tautulli or not stack.tmdb:
             return None
 
-        user_id = stack.user_map.get(username)
-        if not user_id:
+        tautulli_id = await _resolve_user_id(stack, username)
+        if not tautulli_id:
             return None
 
         history = await stack.tautulli.get_history(
-            user_id=str(user_id), length=50
+            user_id=tautulli_id, limit=50
         )
 
         if not history:
