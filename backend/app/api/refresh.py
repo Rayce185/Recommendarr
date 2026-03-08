@@ -13,7 +13,9 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from app.auth.jwt_handler import TokenPayload, get_current_user
+from datetime import datetime, timezone
 from app.services.cache import get_cache
+from app.services.factory import get_stack
 from app.services.profile_overrides import get_override_store
 from app.services.refresh_task import (
     get_jobs, get_active_job, set_active_job, run_refresh,
@@ -104,6 +106,60 @@ async def stream_refresh(job_id: str):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/my-staleness")
+async def get_my_staleness(user: TokenPayload = Depends(get_current_user)):
+    """Current user's staleness: plays since last refresh, refresh age."""
+    cache = get_cache()
+    stack = get_stack()
+    username = user.username
+    last_refresh_epoch = cache.get_user_refresh_at(username)
+
+    plays_since = 0
+    if last_refresh_epoch:
+        try:
+            since_dt = datetime.fromtimestamp(last_refresh_epoch, tz=timezone.utc)
+            users = await stack.tautulli.get_users()
+            uid = None
+            for u in users:
+                if u.get("username", "").lower() == username.lower():
+                    uid = str(u.get("user_id"))
+                    break
+            if uid:
+                history = await stack.tautulli.get_history(
+                    user_id=uid, since=since_dt, limit=200,
+                )
+                plays_since = len(history)
+        except Exception:
+            pass
+
+    refresh_age_hours = (
+        round((time.time() - last_refresh_epoch) / 3600, 1)
+        if last_refresh_epoch else None
+    )
+
+    if last_refresh_epoch is None:
+        staleness = "never"
+    elif plays_since == 0:
+        staleness = "fresh"
+    elif plays_since < 5:
+        staleness = "slightly_stale"
+    elif plays_since < 20:
+        staleness = "stale"
+    else:
+        staleness = "very_stale"
+
+    return {
+        "username": username,
+        "plays_since_refresh": plays_since,
+        "staleness": staleness,
+        "last_refresh_at": (
+            datetime.fromtimestamp(last_refresh_epoch, tz=timezone.utc).isoformat()
+            if last_refresh_epoch else None
+        ),
+        "refresh_age_hours": refresh_age_hours,
+    }
 
 
 @router.get("/freshness/{username}")

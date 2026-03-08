@@ -128,7 +128,10 @@ class RefreshScheduler:
         return True
 
     async def _run_user_refresh(self, sched: RefreshSchedule):
-        """Execute refresh for a single user (reuses engine logic)."""
+        """Execute refresh for a single user (reuses engine logic).
+
+        Skips refresh if no new plays since last refresh (§staleness-aware).
+        """
         from app.services.factory import get_stack
         from app.services.cache import get_cache
         from app.services.recommender import RecommendationRequest
@@ -139,6 +142,31 @@ class RefreshScheduler:
         start = time.time()
         stack = get_stack()
         cache = get_cache()
+
+        # Skip if no new plays since last refresh
+        last_epoch = cache.get_user_refresh_at(username)
+        if last_epoch:
+            try:
+                from datetime import timezone as tz
+                since_dt = datetime.fromtimestamp(last_epoch, tz=tz.utc)
+                users = await stack.tautulli.get_users()
+                uid = None
+                for u in users:
+                    if u.get("username", "").lower() == username.lower():
+                        uid = str(u.get("user_id"))
+                        break
+                if uid:
+                    recent = await stack.tautulli.get_history(
+                        user_id=uid, since=since_dt, limit=1,
+                    )
+                    if len(recent) == 0:
+                        logger.info(f"Scheduled refresh skipped for {username}: "
+                                    f"0 plays since last refresh")
+                        self._record_success(username, 0)
+                        return
+            except Exception as e:
+                logger.debug(f"Staleness pre-check failed for {username}, "
+                             f"proceeding with refresh: {e}")
 
         try:
             # 1. Invalidate user's caches
@@ -210,6 +238,7 @@ class RefreshScheduler:
                 logger.debug(f"Scheduled collection refresh skipped for {username}: {e}")
 
             elapsed_ms = int((time.time() - start) * 1000)
+            cache.set_user_refresh(username)
             self._record_success(username, elapsed_ms)
             logger.info(f"Scheduled refresh done for {username}: "
                         f"tonight={counts[0]}, grab={counts[1]}, rediscover={counts[2]} "

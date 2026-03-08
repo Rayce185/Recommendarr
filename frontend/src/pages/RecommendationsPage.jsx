@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Play, Download, RefreshCw, AlertCircle, Loader2 } from "lucide-react";
+import { Play, Download, RefreshCw, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import Skeleton from "../components/Skeleton.jsx";
 import { api, authFetch, API_BASE } from "../api.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
@@ -14,6 +14,7 @@ function RecommendationsPage({ user, mode, onCardClick }) {
   const [cacheAge, setCacheAge] = useState(null); // seconds
   const [profileModifiedAt, setProfileModifiedAt] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [staleness, setStaleness] = useState(null);
   const [filters, setFilters] = useState(loadSavedFilters);
 
   const modeConfig = {
@@ -55,7 +56,7 @@ function RecommendationsPage({ user, mode, onCardClick }) {
         }
       })
       .catch(err => setError(err.message))
-      .finally(() => { setLoading(false); setRefreshing(false); });
+      .finally(() => { setLoading(false); setRefreshing(false); api.myStaleness().then(setStaleness).catch(() => {}); });
   }, [user, mode, filters]);
 
   useEffect(() => { load(); }, [load]);
@@ -108,6 +109,23 @@ function RecommendationsPage({ user, mode, onCardClick }) {
             })() && (
               <span style={{ fontSize: 11, color: "#eab308", fontWeight: 500, display: "flex", alignItems: "center", gap: 3 }}>
                 <AlertCircle size={12} /> Profile changed — refresh recommended
+              </span>
+            )}
+            {staleness && staleness.staleness !== "fresh" && staleness.staleness !== "never" && (
+              <span style={{
+                fontSize: 11, fontWeight: 500, display: "flex", alignItems: "center", gap: 3,
+                padding: "2px 8px", borderRadius: 10,
+                background: staleness.plays_since_refresh >= 20 ? "rgba(239,68,68,0.12)" :
+                  staleness.plays_since_refresh >= 5 ? "rgba(249,115,22,0.12)" : "rgba(245,158,11,0.12)",
+                color: staleness.plays_since_refresh >= 20 ? "#ef4444" :
+                  staleness.plays_since_refresh >= 5 ? "#f97316" : "#f59e0b",
+              }}>
+                <Play size={10} /> {staleness.plays_since_refresh} new play{staleness.plays_since_refresh !== 1 ? "s" : ""}
+              </span>
+            )}
+            {staleness && staleness.staleness === "fresh" && (
+              <span style={{ fontSize: 11, color: "#10b981", display: "flex", alignItems: "center", gap: 3 }}>
+                ✓ Up to date
               </span>
             )}
             <button

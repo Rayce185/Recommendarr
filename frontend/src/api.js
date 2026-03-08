@@ -127,6 +127,7 @@ const api = {
   cacheClear: (scope = "all") => authFetch(`${API_BASE}/system/settings/cache/clear?scope=${scope}`, { method: "POST" }).then(r => r.json()),
   refreshStart: () => authFetch(`${API_BASE}/cache/refresh`, { method: "POST" }).then(r => r.json()),
   refreshStatus: () => authFetch(`${API_BASE}/cache/refresh/status`).then(r => r.json()),
+  myStaleness: () => authFetch(`${API_BASE}/cache/my-staleness`).then(r => r.json()),
   getOverrides: (u) => authFetch(`${API_BASE}/users/${u}/profile/overrides`).then(r => r.json()),
   saveOverrides: (u, data) => authFetch(`${API_BASE}/users/${u}/profile/overrides`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
