@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from "react";
-import { Film, X, Loader2, RefreshCw, Menu, LogIn, LogOut, Eye } from "lucide-react";
-import navItems from "./navConfig.js";
-import { api, API_BASE } from "./api.js";
-import { posterUrl } from "./utils.js";
+import { Film, Loader2, LogIn, Eye } from "lucide-react";
+import { api } from "./api.js";
 import "./styles/index.css";
 import { LoadingState } from "./components/StateDisplays.jsx";
 import DetailModal from "./components/DetailModal.jsx";
@@ -10,6 +8,8 @@ import { ToastContainer, useToast } from "./components/Toast.jsx";
 import { useAuth } from "./hooks/useAuth.js";
 import { useRefresh } from "./hooks/useRefresh.js";
 import { useDetailModal } from "./hooks/useDetailModal.js";
+import Sidebar from "./components/Sidebar.jsx";
+
 const RecommendationsPage = lazy(() => import("./pages/RecommendationsPage.jsx"));
 const MoodPage = lazy(() => import("./pages/MoodPage.jsx"));
 const TrendingPage = lazy(() => import("./pages/TrendingPage.jsx"));
@@ -25,9 +25,8 @@ const ListImportPage = lazy(() => import("./pages/ListImportPage.jsx"));
 const PulsePage = lazy(() => import("./pages/PulsePage.jsx"));
 const CalendarPage = lazy(() => import("./pages/CalendarPage.jsx"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage.jsx"));
-import NotificationBell from "./components/NotificationBell.jsx";
-import ThemeToggle from "./components/ThemeToggle.jsx";
 const WorldCinemaPage = lazy(() => import("./pages/WorldCinemaPage.jsx"));
+const DiscoveryFeedPage = lazy(() => import("./pages/DiscoveryFeedPage.jsx"));
 
 export default function Recommendarr() {
   // ── Hash-based routing ──────────────────────────────────────
@@ -43,14 +42,12 @@ export default function Recommendarr() {
   const setView = useCallback((newView, subtab) => {
     setViewRaw(newView);
     setHashSubtab(subtab || null);
-    const hash = subtab ? `${newView}/${subtab}` : newView;
-    window.location.hash = hash;
+    window.location.hash = subtab ? `${newView}/${subtab}` : newView;
   }, []);
 
   const setSubtab = useCallback((subtab) => {
     setHashSubtab(subtab);
-    const hash = subtab ? `${view}/${subtab}` : view;
-    window.location.hash = hash;
+    window.location.hash = subtab ? `${view}/${subtab}` : view;
   }, [view]);
 
   useEffect(() => {
@@ -64,7 +61,6 @@ export default function Recommendarr() {
   }, []);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  // Escape closes mobile menu
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape" && mobileMenuOpen) setMobileMenuOpen(false); };
     window.addEventListener("keydown", handler);
@@ -76,7 +72,7 @@ export default function Recommendarr() {
     api("/api/v1/health").then(d => d?.version && setAppVersion(d.version)).catch(() => {});
   }, []);
 
-  // ── Toast + Auth + Refresh hooks ──────────────────────────
+  // ── Toast + Auth + Refresh + Detail hooks ─────────────────
   const { toasts, addToast } = useToast();
   const {
     authUser, authLoading, loginLoading,
@@ -94,164 +90,50 @@ export default function Recommendarr() {
     openDetail, closeModal, handleRequest, handleFeedback: handleModalFeedback,
   } = useDetailModal(selectedUser, addToast);
 
-  // ── Wrap logout to also reset view ──────────────────────────
   const handleLogout = useCallback(() => {
     authLogout();
     setView("tonight");
   }, [authLogout, setView]);
 
-
-
-  let currentSection = "";
-
+  // ── Page router ─────────────────────────────────────────────
   const renderPage = () => {
     switch (view) {
-      case "tonight":
-      case "grab":
-      case "rediscover":
+      case "tonight": case "grab": case "rediscover":
         return <RecommendationsPage user={selectedUser} mode={view} onCardClick={openDetail} />;
-      case "mood":
-        return <MoodPage user={selectedUser} onCardClick={openDetail} />;
-      case "trending":
-        return <TrendingPage onCardClick={openDetail} subtab={hashSubtab} onSubtabChange={setSubtab} />;
-      case "collections":
-        return <CollectionsPage user={selectedUser} onCardClick={openDetail} />;
-      case "group":
-        return <GroupNightPage user={selectedUser} allUsers={allUsers} onCardClick={openDetail} />;
-      case "browse":
-        return <BrowsePage onCardClick={openDetail} />;
-      case "world-cinema":
-        return <WorldCinemaPage user={selectedUser} onCardClick={openDetail} />;
-      case "watchlist":
-        return <WatchlistPage user={selectedUser} onCardClick={openDetail} />;
-      case "profile":
-        return <TasteProfilePage user={selectedUser} />;
-      case "wrapped":
-        return <WrappedPage user={selectedUser} />;
-      case "social":
-        return <SocialPage user={selectedUser} />;
-      case "history":
-        return <HistoryPage user={selectedUser} onCardClick={openDetail} />;
-      case "pulse":
-        return <PulsePage isAdmin={authUser?.is_admin} />;
-      case "calendar":
-        return <CalendarPage onCardClick={openDetail} />;
-      case "import":
-        return <ListImportPage onCardClick={openDetail} />;
-      case "admin":
-        return <AdminPage subtab={hashSubtab} onSubtabChange={setSubtab} user={authUser?.username} />;
-      default:
-        return <RecommendationsPage user={selectedUser} mode="tonight" onCardClick={openDetail} />;
+      case "mood":       return <MoodPage user={selectedUser} onCardClick={openDetail} />;
+      case "trending":   return <TrendingPage onCardClick={openDetail} subtab={hashSubtab} onSubtabChange={setSubtab} />;
+      case "collections": return <CollectionsPage user={selectedUser} onCardClick={openDetail} />;
+      case "group":      return <GroupNightPage user={selectedUser} allUsers={allUsers} onCardClick={openDetail} />;
+      case "browse":     return <BrowsePage onCardClick={openDetail} />;
+      case "world-cinema": return <WorldCinemaPage user={selectedUser} onCardClick={openDetail} />;
+      case "watchlist":  return <WatchlistPage user={selectedUser} onCardClick={openDetail} />;
+      case "profile":    return <TasteProfilePage user={selectedUser} />;
+      case "wrapped":    return <WrappedPage user={selectedUser} />;
+      case "social":     return <SocialPage user={selectedUser} />;
+      case "history":    return <HistoryPage user={selectedUser} onCardClick={openDetail} />;
+      case "pulse":      return <PulsePage isAdmin={authUser?.is_admin} />;
+      case "calendar":   return <CalendarPage onCardClick={openDetail} />;
+      case "feed":       return <DiscoveryFeedPage user={selectedUser} onCardClick={openDetail} />;
+      case "import":     return <ListImportPage onCardClick={openDetail} />;
+      case "admin":      return <AdminPage subtab={hashSubtab} onSubtabChange={setSubtab} user={authUser?.username} />;
+      default:           return <RecommendationsPage user={selectedUser} mode="tonight" onCardClick={openDetail} />;
     }
   };
 
   return (
     <>
-
       <div className="app-layout">
-        {/* Mobile hamburger */}
-        <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(o => !o)}>
-          {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
-        <div className={`sidebar-overlay ${mobileMenuOpen ? 'open' : ''}`} onClick={() => setMobileMenuOpen(false)} />
+        <Sidebar
+          view={view} setView={setView}
+          mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen}
+          authUser={authUser} authLoading={authLoading} loginLoading={loginLoading}
+          handlePlexLogin={handlePlexLogin} handleLogout={handleLogout}
+          viewAsUser={viewAsUser} setViewAsUser={setViewAsUser} allUsers={allUsers}
+          refreshing={refreshing} refreshProgress={refreshProgress}
+          lastRefreshAt={lastRefreshAt} refreshEstimateMs={refreshEstimateMs}
+          handleRefresh={handleRefresh} appVersion={appVersion}
+        />
 
-        {/* Sidebar */}
-        <nav className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
-          <div className="sidebar-brand">
-            <div className="logo-icon"><Film size={16} /></div>
-            <h1>Recommendarr</h1>
-            {authUser && <NotificationBell onNavigate={v => { setView(v); setMobileMenuOpen(false); }} />}
-          </div>
-          <div className="sidebar-user">
-            {authLoading ? (
-              <div className="auth-loading"><Loader2 size={16} className="spin" /> Checking session...</div>
-            ) : authUser ? (
-              <>
-              <div className="auth-user-info">
-                {authUser.thumb ? (
-                  <img src={authUser.thumb} alt="" className="auth-avatar" />
-                ) : (
-                  <div className="auth-avatar-placeholder">{(authUser.username || "?")[0].toUpperCase()}</div>
-                )}
-                <div className="auth-user-details">
-                  <span className="auth-username">{authUser.username}{authUser.is_admin ? " ★" : ""}</span>
-                  <button className="auth-logout-btn" onClick={handleLogout}><LogOut size={13} /> Sign Out</button>
-                </div>
-              </div>
-              {authUser.is_admin && allUsers.length > 0 && (
-                <div className="view-as-switcher">
-                  <label><Eye size={10} /> View as</label>
-                  <select value={viewAsUser || ""} onChange={e => setViewAsUser(e.target.value || null)}>
-                    <option value="">Myself ({authUser.username})</option>
-                    {allUsers.filter(u => u.username !== authUser.username).map(u => (
-                      <option key={u.username} value={u.username}>{u.friendly_name || u.username}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              </>
-            ) : (
-              <button className="plex-login-btn" onClick={handlePlexLogin} disabled={loginLoading}>
-                {loginLoading ? <><Loader2 size={15} className="spin" /> Connecting...</> : <><LogIn size={15} /> Sign in with Plex</>}
-              </button>
-            )}
-          </div>
-          <div className="sidebar-nav">
-            {navItems.map(item => {
-              const showSection = item.section !== currentSection;
-              if (showSection) currentSection = item.section;
-              return (
-                <div key={item.id}>
-                  {showSection && <div className="nav-section-label">{item.section}</div>}
-                  <div
-                    className={`nav-item ${view === item.id ? 'active' : ''}`}
-                    onClick={() => { setView(item.id); setMobileMenuOpen(false); }}
-                  >
-                    <item.icon size={17} />
-                    {item.label}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {authUser && (
-            <div className="refresh-section">
-              <button
-                className={`refresh-btn ${refreshing ? "refreshing" : ""}`}
-                onClick={handleRefresh}
-                disabled={refreshing}
-              >
-                {refreshing ? (
-                  <><Loader2 size={14} className="spin" /> Refreshing...</>
-                ) : (
-                  <><RefreshCw size={14} /> Refresh{refreshEstimateMs ? ` (~${Math.ceil(refreshEstimateMs / 1000)}s)` : ""}</>
-                )}
-              </button>
-              {refreshing && refreshProgress && (
-                <div className="refresh-progress">
-                  <div className="refresh-progress-bar">
-                    <div className="refresh-progress-fill" style={{ width: `${(refreshProgress.step / refreshProgress.total) * 100}%` }} />
-                  </div>
-                  <div className="refresh-progress-label">
-                    <span>{refreshProgress.label}</span>
-                    <span>{refreshProgress.step}/{refreshProgress.total}</span>
-                  </div>
-                </div>
-              )}
-              {!refreshing && lastRefreshAt && (
-                <div className="refresh-last">
-                  Last: {new Date(lastRefreshAt).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}
-                </div>
-              )}
-            </div>
-          )}
-          <div className="sidebar-footer">
-            <span>Recommendarr v{appVersion}</span>
-            <ThemeToggle />
-          </div>
-        </nav>
-
-        {/* Main */}
         <main className="main-content">
           {isViewingAsOther && (
             <div className="view-as-banner">
@@ -276,24 +158,15 @@ export default function Recommendarr() {
         </main>
       </div>
 
-      {/* Detail Modal */}
       {modalItem && (
         <DetailModal
-          item={modalItem}
-          detail={modalDetail}
-          loading={modalLoading}
-          onClose={closeModal}
-          onRequest={handleRequest}
-          requesting={requesting}
-          requestResult={requestResult}
-          onFeedback={handleModalFeedback}
-          user={selectedUser}
+          item={modalItem} detail={modalDetail} loading={modalLoading}
+          onClose={closeModal} onRequest={handleRequest}
+          requesting={requesting} requestResult={requestResult}
+          onFeedback={handleModalFeedback} user={selectedUser}
         />
       )}
-
-      {/* Toasts */}
       <ToastContainer toasts={toasts} />
     </>
   );
 }
-
