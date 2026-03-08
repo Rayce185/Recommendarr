@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Activity, RefreshCw, Loader2, Sparkles, Clock, Trash2,
   TrendingUp, Award, Film, Star, Calendar, Zap, AlertCircle } from "lucide-react";
 import { api } from "../api.js";
+import "../styles/pulse.css";
 
 const EVENT_ICONS = {
   trend: TrendingUp, release: Film, award: Award,
@@ -18,6 +19,7 @@ function PulsePage({ isAdmin }) {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState(null);
   const [error, setError] = useState(null);
+  const [typeFilter, setTypeFilter] = useState("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -120,12 +122,39 @@ function PulsePage({ isAdmin }) {
         </div>
       )}
 
-      {/* Theme cards */}
-      <div className="pulse-activity-grid">
-        {themes.map(theme => (
-          <ThemeCard key={theme.id} theme={theme} isAdmin={isAdmin} onDeactivate={handleDeactivate} />
-        ))}
-      </div>
+      {/* Type filter */}
+      {themes.length > 0 && (() => {
+        const types = [...new Set(themes.map(t => t.event_type))].sort();
+        const filtered = typeFilter === "all" ? themes : themes.filter(t => t.event_type === typeFilter);
+        const highCount = themes.filter(t => t.priority === "high").length;
+        return (
+          <>
+            <div className="pulse-summary">
+              <span className="pulse-summary-stat"><Activity size={13} /> <strong>{themes.length}</strong> active themes</span>
+              {highCount > 0 && <span className="pulse-summary-stat"><Star size={13} color="#ef4444" /> <strong>{highCount}</strong> high priority</span>}
+            </div>
+            <div className="pulse-filter-bar">
+              <button className={`pulse-filter-chip ${typeFilter === "all" ? "active" : ""}`}
+                onClick={() => setTypeFilter("all")}>All ({themes.length})</button>
+              {types.map(t => {
+                const Icon = EVENT_ICONS[t] || TrendingUp;
+                const count = themes.filter(th => th.event_type === t).length;
+                return (
+                  <button key={t} className={`pulse-filter-chip ${typeFilter === t ? "active" : ""}`}
+                    onClick={() => setTypeFilter(t)}>
+                    <Icon size={12} /> {t.replace("_", " ")} ({count})
+                  </button>
+                );
+              })}
+            </div>
+            <div className="pulse-activity-grid">
+              {filtered.map(theme => (
+                <ThemeCard key={theme.id} theme={theme} isAdmin={isAdmin} onDeactivate={handleDeactivate} />
+              ))}
+            </div>
+          </>
+        );
+      })()}
       </div>
     </>
   );
