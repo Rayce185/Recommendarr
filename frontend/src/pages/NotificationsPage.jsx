@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Bell, Calendar, Star, AlertTriangle, Film, Tv, X,
-  CheckCheck, RotateCcw, Filter,
+  CheckCheck, RotateCcw, Filter, Users,
 } from "lucide-react";
 import { api } from "../api.js";
 
@@ -9,6 +9,7 @@ const TYPE_META = {
   calendar: { icon: Calendar, label: "Releasing Soon", color: "#3b82f6" },
   milestone: { icon: Star, label: "Milestones", color: "#f59e0b" },
   system: { icon: AlertTriangle, label: "System", color: "#ef4444" },
+  group_night: { icon: Users, label: "Group Night", color: "#8b5cf6" },
 };
 
 const PRIORITY_COLORS = { high: "#ef4444", normal: "#f59e0b", low: "#6b7280" };
@@ -97,6 +98,7 @@ export default function NotificationsPage({ onNavigate }) {
             { key: "calendar", label: "Calendar" },
             { key: "milestone", label: "Milestones" },
             { key: "system", label: "System" },
+            { key: "group_night", label: "Group Night" },
           ].map((f) => (
             <button
               key={f.key}
@@ -106,7 +108,7 @@ export default function NotificationsPage({ onNavigate }) {
               {f.label}
               {f.key !== "all" && data?.counts?.[f.key === "milestone" ? "milestones" : f.key] > 0 && (
                 <span className="notif-filter-count">
-                  {data.counts[f.key === "milestone" ? "milestones" : f.key]}
+                  {data.counts[f.key === "milestone" ? "milestones" : f.key === "group_night" ? "group_nights" : f.key]}
                 </span>
               )}
             </button>
