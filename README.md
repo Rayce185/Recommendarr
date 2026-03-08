@@ -14,14 +14,20 @@ A self-hosted media recommendation engine for Plex. Learns from viewing behavior
 
 ## Features
 
-- **5 Recommendation Modes**: Watch Tonight, Worth Grabbing, Rediscover, Mood Match, Group Night
+- **6 Recommendation Modes**: Watch Tonight, Worth Grabbing, Rediscover, Mood Match, Group Night, Discovery Feed
 - **AI-Powered Explanations**: Optional LLM generates natural language "why we picked this" for each recommendation
 - **Smart Mood Matching**: Natural language mood input ("just got dumped, distract me, no romcoms") parsed into genre/keyword weights — with LLM enhancement when configured
 - **Multi-Source Trending**: Global TMDB, by country, by streaming provider, new releases, anime
 - **Collection Tracking**: Detects partially watched franchises (John Wick, MCU, etc.) with completion progress and one-click requests for missing parts
 - **Group Night**: Multi-user taste intersection — find what everyone will enjoy
 - **Plex Wrapped**: Per-user viewing statistics and insights
-- **Social Layer**: Taste overlap scores and server-wide trending
+- **Social Layer**: Taste overlap scores, server-wide trending, and friend system
+- **Friend System**: Request/accept/decline friends, activity feed (what friends watch), friend suggestions based on taste overlap, privacy controls
+- **Group Night Friends**: Quick-select friends in Group Night user picker
+- **Genre Filters**: Filter trending results by genre across all tabs
+- **User-Preferred Countries**: Auto-detected from watch history language distribution — quick-pick chips in By Country tab
+- **Series Progress**: Completion progress bars on TV recommendation cards
+- **Discovery Feed**: Personalized weekly mix based on taste profile
 - **World Cinema Map**: Geographic discovery with taste matching
 - **Cultural Pulse**: RSS-powered trending theme detection
 - **Coming Soon Calendar**: TMDB + Radarr/Sonarr release tracking
