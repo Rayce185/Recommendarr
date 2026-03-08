@@ -3,6 +3,7 @@
 import logging
 from fastapi import APIRouter, Query
 from app.services.factory import get_stack
+from app.clients.tmdb_models import parse_discover_result
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -88,7 +89,7 @@ async def browse_discover(
 
     results = []
     for r in raw:
-        parsed = stack.tmdb._parse_result(r, media_type)
+        parsed = parse_discover_result(r, media_type)
         tmdb_id = parsed.tmdb_id
         label = "movie" if media_type == "movie" else "show"
         in_library = bool(stack.plex._tmdb_map.get(f"{label}:{tmdb_id}")) if stack.plex else False

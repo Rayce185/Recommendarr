@@ -114,9 +114,14 @@ class RefreshScheduler:
 
         if sched.last_run_at:
             try:
-                last = sched.last_run_at.astimezone(server_tz) if sched.last_run_at.tzinfo else sched.last_run_at
+                if sched.last_run_at.tzinfo:
+                    last = sched.last_run_at.astimezone(server_tz)
+                else:
+                    # Assume naive timestamps are UTC (stored by datetime.now(timezone.utc).replace(tzinfo=None))
+                    from zoneinfo import ZoneInfo
+                    last = sched.last_run_at.replace(tzinfo=timezone.utc).astimezone(server_tz)
             except Exception:
-                last = sched.last_run_at
+                last = today_scheduled - timedelta(days=1)  # Safe fallback: allow run
             if last >= today_scheduled:
                 return False
 

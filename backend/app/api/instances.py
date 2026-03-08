@@ -39,6 +39,15 @@ class InstanceInput(BaseModel):
 async def list_instances(user: TokenPayload = Depends(get_current_user)):
     """List all registered Radarr/Sonarr instances with their config and status."""
     stack = get_stack()
+
+    # Hot-reload configs if registry is empty (startup timing issue)
+    if len(stack.registry.configs) == 0:
+        from app.services.instance_registry import load_instance_configs
+        configs = load_instance_configs()
+        if configs:
+            stack.registry.build_from_configs(configs)
+            logger.info(f"Hot-reloaded {len(configs)} instance configs into registry")
+
     instances = []
     for cfg in stack.registry.configs:
         client = stack.registry.get(cfg.name)
