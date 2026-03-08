@@ -76,7 +76,7 @@ const api = {
   collections: (u) => authFetch(`${API_BASE}/recommend/${u}/collections`).then(r => r.json()),
   collectionFor: (tmdbId) => authFetch(`${API_BASE}/collection/for/${tmdbId}`).then(r => { if (r.status === 204) return null; return r.json(); }),
   whyNot: (tmdbId, username, mediaType = "movie") => authFetch(`${API_BASE}/why-not/${tmdbId}?username=${encodeURIComponent(username)}&media_type=${mediaType}`).then(r => { if (!r.ok) throw new Error("Analysis failed"); return r.json(); }),
-  calendar: (days = 90, mediaType = "all", source = "all") => authFetch(`${API_BASE}/calendar?days=${days}&media_type=${mediaType}&source=${source}`).then(r => r.json()),
+  calendar: (days = 90, mediaType = "all", source = "all", startDate = null) => authFetch(`${API_BASE}/calendar?days=${days}&media_type=${mediaType}&source=${source}${startDate ? `&start_date=${startDate}` : ""}`).then(r => r.json()),
   exportProfile: (username) => authFetch(`${API_BASE}/users/${encodeURIComponent(username)}/profile/export`).then(r => r.json()),
   importProfile: (username, data, mode = "merge") => authFetch(`${API_BASE}/users/${encodeURIComponent(username)}/profile/import`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ data, mode }) }).then(r => r.json()),
   discoveryFeed: (username, refresh = false) => authFetch(`${API_BASE}/discover/feed/${encodeURIComponent(username)}${refresh ? "?refresh=true" : ""}`).then(r => r.json()),

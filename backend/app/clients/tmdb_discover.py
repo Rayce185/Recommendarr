@@ -165,3 +165,54 @@ async def discover_upcoming(
         })
     results = [parse_discover_result(r, media_type) for r in d.get("results", [])]
     return results, d.get("total_pages", 1)
+
+
+async def discover_recent(
+    get_fn: GetFn,
+    media_type: str = "movie",
+    days_back: int = 30,
+) -> list[dict]:
+    """Recently released titles — movies/TV that came out in the last N days.
+
+    Returns raw dicts (not TMDBDiscoverResult) for direct use in calendar.
+    """
+    now = datetime.utcnow()
+    date_from = (now - timedelta(days=days_back)).strftime("%Y-%m-%d")
+    date_to = now.strftime("%Y-%m-%d")
+    if media_type == "movie":
+        d = await get_fn("/discover/movie", {
+            "sort_by": "primary_release_date.desc",
+            "primary_release_date.gte": date_from,
+            "primary_release_date.lte": date_to,
+            "page": 1,
+            "vote_count.gte": 10,
+            "with_release_type": "2|3",
+        })
+    else:
+        d = await get_fn("/discover/tv", {
+            "sort_by": "first_air_date.desc",
+            "first_air_date.gte": date_from,
+            "first_air_date.lte": date_to,
+            "page": 1,
+            "vote_count.gte": 5,
+        })
+    items = []
+    for r in d.get("results", []):
+        tmdb_id = r.get("id")
+        if not tmdb_id:
+            continue
+        rd = r.get("release_date") or r.get("first_air_date")
+        poster = r.get("poster_path")
+        items.append({
+            "tmdb_id": tmdb_id,
+            "title": r.get("title") or r.get("name") or "Unknown",
+            "release_date": rd,
+            "media_type": media_type,
+            "poster": f"https://image.tmdb.org/t/p/w300{poster}" if poster else None,
+            "overview": r.get("overview", ""),
+            "vote_average": r.get("vote_average", 0),
+            "popularity": r.get("popularity", 0),
+            "source": "tmdb",
+            "monitored": False,
+        })
+    return items

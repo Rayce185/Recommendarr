@@ -57,10 +57,13 @@ async def get_calendar(
     media_type: str = Query("all", pattern="^(all|movie|tv)$"),
     source: str = Query("all", pattern="^(all|tmdb|monitored)$"),
     page: int = Query(1, ge=1, le=20),
+    start_date: str = Query(None, description="Start date YYYY-MM-DD (default: today)"),
 ):
-    """Coming Soon calendar — combines TMDB upcoming with Radarr/Sonarr monitored items."""
+    """Coming Soon calendar — combines TMDB upcoming with Radarr/Sonarr monitored items.
+    Use start_date to look back (e.g. first of month) to fill past days in month view.
+    """
     cache = get_cache()
-    cache_key = f"calendar:{days}:{media_type}:{source}:{page}"
+    cache_key = f"calendar:{days}:{media_type}:{source}:{page}:{start_date or 'now'}"
     cached = cache.get_generic(cache_key)
     if cached:
         return cached
@@ -114,7 +117,7 @@ async def get_calendar(
     if source in ("all", "monitored"):
         try:
             if media_type in ("all", "movie"):
-                arr_movies = await stack.radarr.get_calendar(days)
+                arr_movies = await stack.radarr.get_calendar(days, start_date=start_date)
         except Exception as e:
             logger.debug("Radarr calendar: %s", e)
 
@@ -124,10 +127,28 @@ async def get_calendar(
                 try:
                     client = stack.registry.get(name)
                     if client and hasattr(client, "get_calendar"):
-                        eps = await client.get_calendar(days)
+                        eps = await client.get_calendar(days, start_date=start_date)
                         arr_tv.extend(eps)
                 except Exception as e:
                     logger.debug("Sonarr %s calendar: %s", name, e)
+
+
+    # ── Fetch TMDB recent releases (past portion of range) ───
+    if stack.tmdb and source in ("all", "tmdb") and start_date:
+        try:
+            from datetime import timedelta
+            sd = datetime.strptime(start_date, "%Y-%m-%d")
+            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            if sd < today:
+                days_back = (today - sd).days
+                if media_type in ("all", "movie"):
+                    recent_movies = await stack.tmdb.discover_recent("movie", days_back)
+                    tmdb_movies.extend(recent_movies)
+                if media_type in ("all", "tv"):
+                    recent_tv = await stack.tmdb.discover_recent("tv", days_back)
+                    tmdb_tv.extend(recent_tv)
+        except Exception as e:
+            logger.debug("TMDB recent fetch failed: %s", e)
 
     # ── Normalize dates ──────────────────────────────────────
     for item in tmdb_movies + tmdb_tv + arr_movies + arr_tv:

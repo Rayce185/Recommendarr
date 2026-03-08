@@ -124,11 +124,11 @@ class RadarrClient:
             data = resp.json()
             return len(data) > 0 if isinstance(data, list) else bool(data)
 
-    async def get_calendar(self, days_ahead: int = 90) -> list[dict]:
-        """Get upcoming movies from Radarr calendar (monitored items with future releases)."""
+    async def get_calendar(self, days_ahead: int = 90, start_date: str | None = None) -> list[dict]:
+        """Get movies from Radarr calendar. Optionally specify start_date (YYYY-MM-DD)."""
         from datetime import datetime, timedelta
-        start = datetime.utcnow().strftime("%Y-%m-%d")
-        end = (datetime.utcnow() + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+        start = start_date or datetime.utcnow().strftime("%Y-%m-%d")
+        end = (datetime.strptime(start, "%Y-%m-%d") + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
         try:
             async with httpx.AsyncClient(timeout=15) as c:
                 r = await c.get(

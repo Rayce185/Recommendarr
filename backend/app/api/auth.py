@@ -10,7 +10,7 @@ Endpoints:
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel
 
 from app.auth.plex_oauth import get_plex_user, check_server_access
@@ -18,6 +18,68 @@ from app.auth.jwt_handler import create_token, TokenPayload, get_current_user
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+
+async def _warm_user_caches(username: str):
+    """Background task: pre-generate expensive caches on login."""
+    import asyncio
+    try:
+        from app.services.factory import get_stack
+        from app.services.cache import get_cache
+        from app.services.wrapped import build_wrapped
+
+        stack = get_stack()
+        cache = get_cache()
+
+        # Resolve user_id
+        users = await stack.tautulli.get_users()
+        user_id = None
+        for u in users:
+            if (u.get("username", "") or u.get("friendly_name", "")) == username:
+                user_id = str(u.get("user_id", ""))
+                break
+        if not user_id:
+            return
+
+        # Warm wrapped cache
+        cache_key = f"wrapped:{username}:current"
+        if cache.get_generic(cache_key) is None:
+            try:
+                result = await build_wrapped(stack.tautulli, user_id, username)
+                cache.set_generic(cache_key, result, ttl=3600)
+                logger.debug(f"Warmed wrapped cache for {username}")
+            except Exception as e:
+                logger.debug(f"Wrapped warmup failed for {username}: {e}")
+
+        # Warm social overlap cache
+        from app.services.social import get_taste_overlaps
+        social_key = f"social:overlap:{username}:all"
+        if cache.get_generic(social_key) is None:
+            try:
+                overlaps = await get_taste_overlaps(
+                    profiler=stack.profiler,
+                    tautulli=stack.tautulli,
+                    username=username,
+                    domain="all",
+                )
+                result = {
+                    "username": username, "domain": "all",
+                    "overlaps": [
+                        {"username": o.username, "friendly_name": o.friendly_name,
+                         "thumb": o.thumb, "overlap_pct": o.overlap_pct,
+                         "shared_genres": o.shared_genres, "unique_to_them": o.unique_to_them}
+                        for o in overlaps
+                    ],
+                    "count": len(overlaps),
+                }
+                cache.set_generic(social_key, result, ttl=1800)
+                logger.debug(f"Warmed social cache for {username}")
+            except Exception as e:
+                logger.debug(f"Social warmup failed for {username}: {e}")
+
+    except Exception as e:
+        logger.debug(f"Cache warmup failed for {username}: {e}")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -27,7 +89,7 @@ class PlexAuthRequest(BaseModel):
 
 
 @router.post("/plex")
-async def auth_plex(body: PlexAuthRequest):
+async def auth_plex(body: PlexAuthRequest, bg: BackgroundTasks):
     """Authenticate with a Plex auth token (from frontend OAuth flow).
 
     Same pattern as Overseerr's POST /auth/plex:
@@ -74,6 +136,8 @@ async def auth_plex(body: PlexAuthRequest):
     )
 
     logger.info(f"Login successful: {plex_user.username} (admin={plex_user.is_server_owner})")
+
+    bg.add_task(_warm_user_caches, plex_user.username)
 
     return {
         "token": token,

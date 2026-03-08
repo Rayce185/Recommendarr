@@ -271,3 +271,6 @@ class TMDBClient:
 
     async def discover_upcoming(self, media_type="movie", days_ahead=90, page=1):
         return await tmdb_discover.discover_upcoming(self._get, media_type, days_ahead, page)
+
+    async def discover_recent(self, media_type="movie", days_back=30):
+        return await tmdb_discover.discover_recent(self._get, media_type, days_back)

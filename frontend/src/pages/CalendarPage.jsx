@@ -91,14 +91,14 @@ export default function CalendarPage({ onCardClick }) {
     setViewYear(y); setViewMonth(m); setSelectedDay(null);
   };
 
-  // Calculate days ahead to cover the viewed month
+  // Fetch calendar data covering the full viewed month (including past days)
   useEffect(() => {
+    const monthStart = new Date(viewYear, viewMonth, 1);
     const monthEnd = new Date(viewYear, viewMonth + 1, 0);
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    const daysAhead = Math.max(30, Math.ceil((monthEnd - now) / 86400000) + 1);
-    if (daysAhead < 0) { setItems([]); setLoading(false); return; } // Past month
+    const totalDays = Math.ceil((monthEnd - monthStart) / 86400000) + 1;
+    const startDate = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-01`;
     setLoading(true);
-    api.calendar(Math.min(daysAhead, 365), mediaType, source)
+    api.calendar(Math.min(totalDays, 365), mediaType, source, startDate)
       .then(d => setItems(d.items || []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
