@@ -1,5 +1,6 @@
 """Social layer API — taste overlap and server-wide stats."""
 
+import asyncio
 from fastapi import APIRouter, Query, HTTPException
 from app.services.factory import get_stack
 from app.services.social import get_taste_overlaps, get_server_stats
@@ -26,12 +27,12 @@ async def get_user_taste_overlaps(
     stack = get_stack()
 
     try:
-        overlaps = await get_taste_overlaps(
+        overlaps = await asyncio.wait_for(get_taste_overlaps(
             profiler=stack.profiler,
             tautulli=stack.tautulli,
             username=username,
             domain=domain,
-        )
+        ), timeout=30.0)
         result = {
             "username": username,
             "domain": domain,

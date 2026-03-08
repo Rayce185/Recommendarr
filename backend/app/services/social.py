@@ -4,6 +4,7 @@ Computes taste similarity between users based on genre affinities,
 keyword overlap, and collaborative filtering signals.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from collections import Counter
@@ -82,30 +83,38 @@ async def get_taste_overlaps(profiler, tautulli, username: str, domain: str = "a
     if not ref_profile or not ref_profile.genres:
         return []
 
-    overlaps = []
-    for u in users:
-        other = u.get("username", "")
-        if not other or other == username or not u.get("is_active", 0):
-            continue
+    # Parallel profile building for all active users (was sequential O(n))
+    active_users = [
+        u for u in users
+        if u.get("username") and u["username"] != username and u.get("is_active", 0)
+    ]
 
+    async def _compute_one(u):
+        other = u["username"]
         try:
-            other_profile = await profiler.build_profile(other, domain=domain)
+            other_profile = await asyncio.wait_for(
+                profiler.build_profile(other, domain=domain), timeout=10.0,
+            )
             if not other_profile or not other_profile.genres:
-                continue
-
+                return None
             pct, shared, unique = compute_genre_overlap(ref_profile, other_profile)
-
-            overlaps.append(TasteOverlap(
+            return TasteOverlap(
                 username=other,
                 friendly_name=u.get("friendly_name", other),
                 thumb=u.get("thumb", ""),
                 overlap_pct=pct,
                 shared_genres=shared,
                 unique_to_them=unique,
-            ))
+            )
         except Exception as e:
             logger.warning(f"Failed to compute overlap for {other}: {e}")
+            return None
 
+    results = await asyncio.gather(
+        *[_compute_one(u) for u in active_users],
+        return_exceptions=True,
+    )
+    overlaps = [r for r in results if isinstance(r, TasteOverlap)]
     overlaps.sort(key=lambda o: o.overlap_pct, reverse=True)
     return overlaps
 
