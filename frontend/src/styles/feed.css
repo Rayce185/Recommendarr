@@ -1,0 +1,53 @@
+/* ── Discovery Feed ────────────────────────────────────────────── */
+
+.feed-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.feed-section {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.feed-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.feed-section-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.feed-section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.feed-section-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+
+.feed-grid {
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+}
+
+@media (max-width: 600px) {
+  .feed-section {
+    padding: 1rem;
+    border-radius: 8px;
+  }
+  .feed-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  }
+}
