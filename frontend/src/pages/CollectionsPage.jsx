@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Layers, ChevronDown, CheckCircle2, Film, XCircle } from "lucide-react";
+import { Layers, ChevronDown, CheckCircle2, Film, XCircle, Loader2 } from "lucide-react";
 import Skeleton from "../components/Skeleton.jsx";
 import { api } from "../api.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
@@ -9,13 +9,22 @@ function CollectionsPage({ user, onCardClick }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState(null);
+  const [computing, setComputing] = useState(false);
 
   const load = useCallback(() => {
     if (!user?.username) return;
     setLoading(true);
     setError(null);
     api.collections(user.username)
-      .then(d => setData(d))
+      .then(d => {
+        setData(d);
+        if (d?.computing) {
+          setComputing(true);
+          setTimeout(() => { setComputing(false); load(); }, 15000);
+        } else {
+          setComputing(false);
+        }
+      })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, [user?.username]);
@@ -34,6 +43,14 @@ function CollectionsPage({ user, onCardClick }) {
         <p>{collections.length} franchise{collections.length !== 1 ? "s" : ""} with missing entries</p>
       </div>
       <div className="page-body">
+        {computing && (
+          <div style={{ padding: "12px 16px", borderRadius: 8, marginBottom: 16,
+            background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)",
+            display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem", color: "var(--accent)" }}>
+            <Loader2 size={14} className="spin" />
+            Scanning your library for franchise collections — this only happens once. Auto-refreshing in 15 seconds...
+          </div>
+        )}
         {collections.length === 0 ? (
           <EmptyState icon={Layers} title="All caught up!" message="You've completed every franchise in your watch history." />
         ) : (

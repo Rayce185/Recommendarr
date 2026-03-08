@@ -56,9 +56,18 @@ async def get_collections(
         return {"username": username, "collections": sqlite_data, "total": len(sqlite_data), "cached": True, "stale": not is_fresh}
 
     # L3: Full TMDB scan (cold start — only happens once per user ever)
-    collections = await stack._collection_svc.get_user_collections(username)
-    coll_list = _format_collections(collections)
+    try:
+        collections = await asyncio.wait_for(
+            stack._collection_svc.get_user_collections(username),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        # Start background computation and return empty with flag
+        asyncio.create_task(_refresh_collections_bg(username, stack, cache))
+        return {"username": username, "collections": [], "total": 0, "computing": True,
+                "message": "Collection scan started — reload in a minute for results"}
 
+    coll_list = _format_collections(collections)
     cache.set_collections(username, coll_list)
     stack._collection_svc._persist_results(username, coll_list)
 
