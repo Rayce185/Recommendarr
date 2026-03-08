@@ -104,7 +104,7 @@ export default function Recommendarr() {
       case "mood":       return <MoodPage user={selectedUser} onCardClick={openDetail} />;
       case "trending":   return <TrendingPage onCardClick={openDetail} subtab={hashSubtab} onSubtabChange={setSubtab} />;
       case "collections": return <CollectionsPage user={selectedUser} onCardClick={openDetail} />;
-      case "group":      return <GroupNightPage user={selectedUser} allUsers={allUsers} onCardClick={openDetail} />;
+      case "group":      return <GroupNightPage user={selectedUser} allUsers={allUsers} onCardClick={openDetail} shareCode={hashSubtab} onSubtabChange={setSubtab} />;
       case "browse":     return <BrowsePage onCardClick={openDetail} />;
       case "world-cinema": return <WorldCinemaPage user={selectedUser} onCardClick={openDetail} />;
       case "watchlist":  return <WatchlistPage user={selectedUser} onCardClick={openDetail} />;

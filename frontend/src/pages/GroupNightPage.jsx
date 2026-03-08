@@ -1,8 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Users, Sparkles, Loader2, CheckCircle2, Pencil, X } from "lucide-react";
+/* GroupNightPage — Collaborative recommendations + shareable sessions
+ * Copyright (c) 2026 VAASSEN GmbH / Ray Vaassen
+ */
+import { useState, useEffect, useRef } from "react";
+import { Users, Sparkles, Loader2, CheckCircle2, Pencil, X, Share2 } from "lucide-react";
 import { api } from "../api.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
 import MediaCard from "../components/MediaCard.jsx";
+import ShareGroupModal from "../components/ShareGroupModal.jsx";
+import SharedGroupView from "../components/SharedGroupView.jsx";
 
 function NicknameEditor({ username, nickname, onSave, onCancel }) {
   const [val, setVal] = useState(nickname || "");
@@ -19,7 +24,7 @@ function NicknameEditor({ username, nickname, onSave, onCancel }) {
   );
 }
 
-function GroupNightPage({ user, allUsers, onCardClick }) {
+function GroupNightPage({ user, allUsers, onCardClick, shareCode, onSubtabChange }) {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [domain, setDomain] = useState("all");
   const [items, setItems] = useState([]);
@@ -28,16 +33,17 @@ function GroupNightPage({ user, allUsers, onCardClick }) {
   const [meta, setMeta] = useState(null);
   const [nicknames, setNicknames] = useState({});
   const [editingNick, setEditingNick] = useState(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   useEffect(() => {
-    if (user?.username && selectedUsers.length === 0) setSelectedUsers([user.username]);
-  }, [user?.username]);
+    if (!shareCode && user?.username && selectedUsers.length === 0) setSelectedUsers([user.username]);
+  }, [user?.username, shareCode]);
 
   useEffect(() => {
-    if (user?.username) {
+    if (!shareCode && user?.username) {
       api.getNicknames(user.username).then(d => setNicknames(d.nicknames || {})).catch(() => {});
     }
-  }, [user?.username]);
+  }, [user?.username, shareCode]);
 
   const displayName = (u) => {
     const name = typeof u === "string" ? u : (u.friendly_name || u.username);
@@ -69,6 +75,17 @@ function GroupNightPage({ user, allUsers, onCardClick }) {
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   };
+
+  useEffect(() => {
+    if (!shareCode && items.length === 0 && selectedUsers.length >= 2 && meta === null) return;
+    // No-op — media type change reload removed since there's no mediaType state here
+  }, [shareCode]);
+
+  /* If a share code is in the URL, show the shared session view */
+  if (shareCode) {
+    return <SharedGroupView code={shareCode} onCardClick={onCardClick}
+      onBack={() => onSubtabChange?.(null)} />;
+  }
 
   const sortedUsers = [...(allUsers || [])].sort((a, b) => {
     if (a.username === user?.username) return -1;
@@ -151,7 +168,13 @@ function GroupNightPage({ user, allUsers, onCardClick }) {
           <>
             <div className="group-results-header">
               <span className="group-results-count">{items.length} picks for {selectedUsers.length} people</span>
-              <span className="group-results-hint">Scored so nobody hates the pick — 70% worst-case, 30% average appeal</span>
+              <div className="group-results-actions">
+                <span className="group-results-hint">70% worst-case, 30% average appeal</span>
+                <button className="btn btn-secondary btn-sm group-share-btn"
+                  onClick={() => setShowShareModal(true)}>
+                  <Share2 size={14} /> Share
+                </button>
+              </div>
             </div>
             <div className="card-grid">
               {items.map((item, i) => (
@@ -184,6 +207,11 @@ function GroupNightPage({ user, allUsers, onCardClick }) {
           <EmptyState icon={Users} title="No group picks found" message="Try selecting different users or changing the content filter." />
         )}
       </div>
+
+      {showShareModal && (
+        <ShareGroupModal picks={items} participants={selectedUsers} domain={domain}
+          nicknames={nicknames} onClose={() => setShowShareModal(false)} />
+      )}
     </>
   );
 }

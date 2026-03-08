@@ -150,3 +150,17 @@ class RegionalTrending(Base):
     in_library: Mapped[bool] = mapped_column(Boolean, default=False)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+
+
+class GroupNightSession(Base):
+    """Shareable group night recommendation session."""
+    __tablename__ = "group_night_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(8), unique=True, nullable=False, index=True)
+    creator: Mapped[str] = mapped_column(String(200), nullable=False)
+    participants: Mapped[str] = mapped_column(Text, nullable=False)  # JSON list
+    domain: Mapped[str] = mapped_column(String(20), default="all")
+    picks: Mapped[str] = mapped_column(Text, nullable=False)  # JSON list
+    title: Mapped[Optional[str]] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

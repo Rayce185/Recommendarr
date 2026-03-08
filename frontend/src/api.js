@@ -185,6 +185,11 @@ const api = {
   },
   recHistoryStats: (u) => authFetch(`${API_BASE}/users/${u}/rec-history/stats`).then(r => r.json()),
   recHistoryInteraction: (u, tmdbId, interaction) => authFetch(`${API_BASE}/users/${u}/rec-history/${tmdbId}/interaction?interaction=${interaction}`, { method: "POST" }).then(r => r.json()),
+
+  /* Group Night sessions */
+  createGroupSession: (data) => authFetch(`${API_BASE}/group-night/sessions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Create failed"); return d; })),
+  getGroupSession: (code) => authFetch(`${API_BASE}/group-night/sessions/${code}`).then(r => r.json()),
+  listGroupSessions: (limit = 10) => authFetch(`${API_BASE}/group-night/sessions?limit=${limit}`).then(r => r.json()),
 };
 
 export { api, API_BASE };
