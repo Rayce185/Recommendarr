@@ -24,6 +24,7 @@ class ServarrMovie:
     poster_path: Optional[str]
     has_file: bool
     quality: Optional[str]
+    added_at: Optional[str] = None
     tags: list[int] = field(default_factory=list)
 
 
@@ -47,4 +48,5 @@ class ServarrSeries:
     status: Optional[str]
     season_count: int
     episode_count: int
+    added_at: Optional[str] = None
     tags: list[int] = field(default_factory=list)

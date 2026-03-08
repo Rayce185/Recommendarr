@@ -189,3 +189,19 @@ async def get_reddit_buzz_endpoint(
         "total": len(items),
         "sources": available_subs,
     }
+
+
+# ── Discovery Feed ───────────────────────────────────────────────
+
+@router.get("/discover/feed/{username}")
+async def get_discovery_feed(username: str, refresh: bool = False):
+    """Generate a personalized 'Your Weekly Mix' feed with themed sections."""
+    from app.services.discovery_feed import generate_feed
+    from app.services.cache import get_cache
+
+    if refresh:
+        cache = get_cache()
+        cache.invalidate_generic(f"feed:{username}")
+
+    feed = await generate_feed(username)
+    return feed

@@ -62,6 +62,7 @@ class SonarrClient:
                 season_count=stats.get("seasonCount", 0),
                 episode_count=stats.get("totalEpisodeCount", 0),
                 tags=s.get("tags", []),
+                added_at=s.get("added"),
             ))
         return series
 

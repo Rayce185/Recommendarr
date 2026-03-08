@@ -51,6 +51,7 @@ async def get_library_candidates(
                 "directors": [],
                 "cast": [],
                 "popularity": m.popularity if hasattr(m, 'popularity') else 0,
+                "added_at": m.added_at,
             })
 
     if domain in ("all", "tv"):
@@ -76,6 +77,7 @@ async def get_library_candidates(
                 "directors": [],
                 "cast": [],
                 "popularity": 0,
+                "added_at": s.added_at if hasattr(s, "added_at") else None,
             })
 
     if domain in ("all", "anime"):
@@ -98,6 +100,7 @@ async def get_library_candidates(
                 "directors": [],
                 "cast": [],
                 "popularity": 0,
+                "added_at": s.added_at if hasattr(s, "added_at") else None,
             })
 
     enrich_candidates_from_cache(candidates)

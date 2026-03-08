@@ -59,6 +59,7 @@ class RadarrClient:
                 studio=m.get("studio"), original_language=lang_name,
                 poster_path=poster, has_file=m.get("hasFile", False),
                 quality=quality, tags=m.get("tags", []),
+                added_at=m.get("added"),
             ))
         return movies
 
