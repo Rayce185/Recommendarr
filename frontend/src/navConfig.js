@@ -1,4 +1,5 @@
 import {
+  Newspaper,
   Play, Download, RefreshCw, Sparkles, TrendingUp, Search, Globe,
   Layers, Users, Bookmark, Upload, Activity, CalendarDays,
   Heart, BarChart3, Settings, History,
@@ -8,6 +9,7 @@ const navItems = [
   { id: "tonight", label: "Watch Tonight", icon: Play, section: "Recommendations" },
   { id: "grab", label: "Worth Grabbing", icon: Download, section: "Recommendations" },
   { id: "rediscover", label: "Rediscover", icon: RefreshCw, section: "Recommendations" },
+  { id: "feed", label: "Your Weekly Mix", icon: Newspaper, section: "Recommendations" },
   { id: "mood", label: "Mood Match", icon: Sparkles, section: "Discovery" },
   { id: "trending", label: "Trending", icon: TrendingUp, section: "Discovery" },
   { id: "browse", label: "Browse & Search", icon: Search, section: "Discovery" },
