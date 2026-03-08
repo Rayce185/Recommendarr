@@ -154,7 +154,7 @@ class SonarrClient:
                 r = await c.get(
                     f"{self.url}/api/v3/calendar",
                     headers=self.headers,
-                    params={"start": start, "end": end, "unmonitored": "false"},
+                    params={"start": start, "end": end, "unmonitored": "false", "includeSeries": "true"},
                 )
                 r.raise_for_status()
                 items = r.json()

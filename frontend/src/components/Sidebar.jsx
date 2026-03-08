@@ -88,7 +88,7 @@ function Sidebar({
               {refreshing ? (
                 <><Loader2 size={14} className="spin" /> Refreshing...</>
               ) : (
-                <><RefreshCw size={14} /> Refresh{refreshEstimateMs ? ` (~${Math.ceil(refreshEstimateMs / 1000)}s)` : ""}</>
+                <><RefreshCw size={14} /> Refresh All{refreshEstimateMs ? ` (~${Math.ceil(refreshEstimateMs / 1000)}s)` : ""}</>
               )}
             </button>
             {refreshing && refreshProgress && (
