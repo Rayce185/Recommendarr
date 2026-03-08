@@ -110,38 +110,47 @@ async def mode_worth_grabbing(engine, req: RecommendationRequest) -> list[Recomm
             )
             candidates.append(await discover_to_candidate(item, "trending", resolver))
 
-    # Source 2: Discover by top genres
+    # Source 2: Discover by top genres (movies + TV)
     top_genres = profile.top_genres(3)
-    if not engine._genre_cache.get("movie"):
-        await resolve_genre_ids([], "movie", engine.tmdb, engine.seerr, engine._genre_cache)
-    reverse_map = {v: k for k, v in engine._genre_cache.get("movie", {}).items()}
-    for ga in top_genres:
-        genre_id = reverse_map.get(ga.genre)
-        if genre_id:
-            if engine.tmdb:
-                discovered = await engine.tmdb.discover_by_genre(genre_id, "movie", 1)
-            else:
-                discovered = await engine.seerr.discover_movies(page=1, genre=genre_id)
-            for item in discovered[:10]:
-                if item.tmdb_id not in exclude:
-                    resolver = lambda gids, mt: resolve_genre_ids(
-                        gids, mt, engine.tmdb, engine.seerr, engine._genre_cache
-                    )
-                    candidates.append(await discover_to_candidate(item, "discover", resolver))
+    for mt in ("movie", "tv"):
+        if not engine._genre_cache.get(mt):
+            await resolve_genre_ids([], mt, engine.tmdb, engine.seerr, engine._genre_cache)
+        reverse_map = {v: k for k, v in engine._genre_cache.get(mt, {}).items()}
+        for ga in top_genres:
+            genre_id = reverse_map.get(ga.genre)
+            if genre_id and engine.tmdb:
+                discovered = await engine.tmdb.discover_by_genre(genre_id, mt, 1)
+                for item in discovered[:10]:
+                    if item.tmdb_id not in exclude:
+                        resolver = lambda gids, mtype: resolve_genre_ids(
+                            gids, mtype, engine.tmdb, engine.seerr, engine._genre_cache
+                        )
+                        candidates.append(await discover_to_candidate(item, "discover", resolver))
 
-    # Source 3: Similar to high-completion watched titles
+    # Source 3: Trending page 2
+    if engine.tmdb and len(candidates) < 40:
+        trending_p2, _ = await engine.tmdb.get_trending("all", "week", 2)
+        for item in trending_p2:
+            if item.tmdb_id not in exclude:
+                resolver = lambda gids, mtype: resolve_genre_ids(
+                    gids, mtype, engine.tmdb, engine.seerr, engine._genre_cache
+                )
+                candidates.append(await discover_to_candidate(item, "trending", resolver))
+
+    # Source 4: Similar to high-completion watched titles (movies + TV)
     history = await engine.tautulli.get_history(user_id=req._uid, limit=3000)
     seeds = [e for e in history if e.tmdb_id and e.completion_pct >= 85]
-    seeds = random.sample(seeds, min(3, len(seeds))) if seeds else []
+    seeds = random.sample(seeds, min(5, len(seeds))) if seeds else []
     for seed in seeds:
+        mt = seed.media_type if seed.media_type in ("movie", "tv") else "movie"
         if engine.tmdb:
-            similar = await engine.tmdb.get_similar(seed.tmdb_id, "movie", 1)
+            similar = await engine.tmdb.get_similar(seed.tmdb_id, mt, 1)
         else:
-            similar = await engine.seerr.get_similar(seed.tmdb_id, "movie", 1)
+            similar = await engine.seerr.get_similar(seed.tmdb_id, mt, 1)
         for item in similar[:8]:
             if item.tmdb_id not in exclude:
-                resolver = lambda gids, mt: resolve_genre_ids(
-                    gids, mt, engine.tmdb, engine.seerr, engine._genre_cache
+                resolver = lambda gids, mtype: resolve_genre_ids(
+                    gids, mtype, engine.tmdb, engine.seerr, engine._genre_cache
                 )
                 candidates.append(await discover_to_candidate(item, "similar", resolver))
 

@@ -16,10 +16,33 @@ from app.services.rec_library import get_library_candidates
 from app.services.rec_types import Recommendation
 from app.api.rec_helpers import img_url
 
+
+async def _get_library_candidates(stack):
+    """Get library candidates from cache or rebuild on the fly."""
+    cache = get_cache()
+    candidates = cache.get_library("all")
+    if candidates:
+        return candidates
+    # Cache expired — rebuild from Radarr/Sonarr
+    try:
+        from app.services.rec_library import get_library_candidates
+        candidates = await get_library_candidates(
+            stack.radarr if stack.registry.get_by_type("radarr") else None,
+            stack.sonarr_tv if (stack.registry.get("sonarr_tv") or stack.registry.get_default_for("tv")) else None,
+            stack.sonarr_anime if stack.registry.get("sonarr_anime") else None,
+            "all",
+        )
+        if candidates:
+            cache.set_library("all", candidates)
+        return candidates or []
+    except Exception as e:
+        logger.warning(f"Library rebuild for feed failed: {e}")
+        return []
+
 logger = logging.getLogger(__name__)
 
 FEED_CACHE_TTL = 86400  # 24 hours
-SECTION_SIZE = 6
+SECTION_SIZE = 8
 
 
 async def _resolve_user_id(stack, username: str) -> str | None:
@@ -76,7 +99,7 @@ async def _fresh_picks(stack, username: str) -> Optional[dict]:
         if not profile:
             return None
 
-        candidates = cache.get_library("all")
+        candidates = await _get_library_candidates(stack)
         if not candidates:
             return None
 
@@ -85,12 +108,20 @@ async def _fresh_picks(stack, username: str) -> Optional[dict]:
         if hasattr(profile, "top_genres") and profile.genres:
             top_genres = {g.genre for g in profile.top_genres(8)}
 
-        # Sort by added_at descending (recently added first)
+        # Get watched set to filter
+        watched_ids = set()
+        if stack.tautulli:
+            tautulli_id = await _resolve_user_id(stack, username)
+            if tautulli_id:
+                history = await stack.tautulli.get_history(user_id=tautulli_id, limit=500)
+                watched_ids = {h.tmdb_id for h in history if h.tmdb_id}
+
+        # Sort by added_at descending (recently added first), exclude watched
         recent = sorted(
-            [c for c in candidates if c.get("added_at")],
+            [c for c in candidates if c.get("added_at") and c.get("tmdb_id") not in watched_ids],
             key=lambda c: c["added_at"],
             reverse=True,
-        )[:100]  # top 100 most recent
+        )[:100]  # top 100 most recent unwatched
 
         # Score by genre overlap with taste profile, fall back to rating
         if top_genres:
@@ -126,7 +157,7 @@ async def _hidden_gems(stack, username: str) -> Optional[dict]:
     """High-rated library items that are underwatched."""
     try:
         cache = get_cache()
-        candidates = cache.get_library("all")
+        candidates = await _get_library_candidates(stack)
         if not candidates:
             return None
 
@@ -189,22 +220,30 @@ async def _because_you_liked(stack, username: str) -> Optional[dict]:
         if not history:
             return None
 
-        # Find recent well-rated movie/show
+        # Find recent well-rated movie/show (resolve tmdb_id if needed)
         anchor = None
-        for h in history:
-            if h.tmdb_id and h.completion_pct and h.completion_pct > 75:
-                # Look up rating from TMDB cache or detail
+        high_completion = [h for h in history if h.completion_pct and h.completion_pct > 75][:20]
+        for h in high_completion:
+            tmdb_id = h.tmdb_id
+            if not tmdb_id:
                 try:
-                    detail = await stack.tmdb.get_detail(h.tmdb_id, h.media_type or "movie")
-                    if detail and detail.get("vote_average", 0) >= 6.5:
-                        anchor = {
-                            "tmdb_id": h.tmdb_id,
-                            "title": h.title or detail.get("title", "Unknown"),
-                            "media_type": h.media_type or "movie",
-                        }
-                        break
+                    tmdb_id = await stack.tautulli.resolve_tmdb_id(h.item_key, h.media_type or "movie")
                 except Exception:
                     continue
+            if not tmdb_id:
+                continue
+            try:
+                mt = h.media_type if h.media_type in ("movie", "tv") else "movie"
+                detail = await stack.tmdb.get_detail(tmdb_id, mt)
+                if detail and detail.get("vote_average", 0) >= 6.5:
+                    anchor = {
+                        "tmdb_id": tmdb_id,
+                        "title": detail.get("title", "Unknown"),
+                        "media_type": mt,
+                    }
+                    break
+            except Exception:
+                continue
 
         if not anchor:
             return None
