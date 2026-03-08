@@ -70,6 +70,7 @@ from app.api import setup, webhooks
 from app.api import group_night
 from app.api import admin_users
 from app.api import series_progress
+from app.api import friends
 
 app.include_router(health.router,                prefix="/api/v1", tags=["system"])
 app.include_router(users.router,                 prefix="/api/v1", tags=["users"])
@@ -98,6 +99,7 @@ app.include_router(calendar.router,              prefix="/api/v1", tags=["calend
 app.include_router(profile_transfer.router, prefix="/api/v1", tags=["profile"])
 app.include_router(notifications.router,      prefix="/api/v1", tags=["notifications"])
 app.include_router(history.router,            prefix="/api/v1", tags=["history"])
+app.include_router(friends.router,            prefix="/api/v1", tags=["social"])
 app.include_router(setup.router,             prefix="/api/v1", tags=["setup"])
 app.include_router(webhooks.router,          prefix="/api/v1", tags=["webhooks"])
 app.include_router(group_night.router,       prefix="/api/v1", tags=["group-night"])

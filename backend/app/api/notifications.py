@@ -22,64 +22,6 @@ router = APIRouter()
 FEEDBACK_MILESTONES = [10, 25, 50, 100, 250, 500]
 
 
-def _calendar_notifications(stack, days=7) -> list[dict]:
-    """Items releasing within the next N days (from Radarr/Sonarr)."""
-    import asyncio
-    notifications = []
-    now = datetime.utcnow()
-    cutoff = now + timedelta(days=days)
-
-    async def _fetch():
-        items = []
-        try:
-            items.extend(await stack.radarr.get_calendar(days))
-        except Exception:
-            pass
-        for name in ("sonarr_tv", "sonarr_anime"):
-            try:
-                client = stack.registry.get(name)
-                if client and hasattr(client, "get_calendar"):
-                    items.extend(await client.get_calendar(days))
-            except Exception:
-                pass
-        return items
-
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # We're inside an async context already — can't nest run
-            import concurrent.futures
-            # Just return empty; the async endpoint will call us properly
-            return []
-        items = asyncio.run(_fetch())
-    except RuntimeError:
-        return []
-
-    for item in items:
-        rd = item.get("release_date")
-        if not rd:
-            continue
-        try:
-            dt = datetime.strptime(rd.split("T")[0], "%Y-%m-%d")
-            if now <= dt <= cutoff:
-                days_until = (dt - now).days
-                notifications.append({
-                    "type": "calendar",
-                    "priority": "high" if days_until <= 1 else "normal",
-                    "title": item.get("title", "Unknown"),
-                    "message": "Releases today!" if days_until == 0 else f"Releasing in {days_until} day{'s' if days_until != 1 else ''}",
-                    "tmdb_id": item.get("tmdb_id"),
-                    "media_type": item.get("media_type", "movie"),
-                    "release_date": rd.split("T")[0],
-                    "icon": "calendar",
-                })
-        except (ValueError, TypeError):
-            continue
-
-    notifications.sort(key=lambda x: x.get("release_date", "9999"))
-    return notifications
-
-
 def _feedback_notifications(username: str) -> list[dict]:
     """Milestone notifications based on feedback count."""
     store = get_feedback_store()
@@ -146,6 +88,29 @@ def _group_night_notifications(username: str, days=7) -> list[dict]:
         logger.debug("Group night notifications error: %s", e)
         return []
 
+
+def _friend_request_notifications(username: str) -> list[dict]:
+    """Pending incoming friend requests."""
+    try:
+        from app.services.friends import get_pending_requests
+        pending = get_pending_requests(username)
+        return [
+            {
+                "type": "friend_request",
+                "priority": "normal",
+                "title": f"Friend Request",
+                "message": f"{r['display_name']} wants to be your friend",
+                "icon": "user-plus",
+                "username": r["username"],
+                "thumb": r.get("thumb", ""),
+            }
+            for r in pending.get("incoming", [])
+        ]
+    except Exception as e:
+        logger.debug("Friend request notifications error: %s", e)
+        return []
+
+
 @router.get("/notifications")
 async def get_notifications(
     user: TokenPayload = Depends(get_current_user),
@@ -208,10 +173,13 @@ async def get_notifications(
     # ── System health ────────────────────────────────────────
     system = _service_notifications(stack)
 
+    # ── Friend requests ──────────────────────────────────
+    friend_reqs = _friend_request_notifications(username)
+
     # ── Group Night invites ────────────────────────────────
     group_nights = _group_night_notifications(username)
 
-    all_notifs = calendar_items + milestones + system + group_nights
+    all_notifs = calendar_items + milestones + system + friend_reqs + group_nights
 
     # Add stable IDs and filter dismissed
     for n in all_notifs:
@@ -231,6 +199,7 @@ async def get_notifications(
             "calendar": len(calendar_items),
             "milestones": len(milestones),
             "system": len(system),
+            "friend_requests": len(friend_reqs),
             "group_nights": len(group_nights),
             "high_priority": sum(1 for n in all_notifs if n.get("priority") == "high"),
         },
