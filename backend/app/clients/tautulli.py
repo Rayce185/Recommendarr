@@ -221,3 +221,66 @@ class TautulliClient(IWatchHistoryProvider):
         """Parse a single Tautulli history record."""
         from app.clients.tautulli_parsers import parse_history_record
         return parse_history_record(r)
+
+    async def get_episode_counts_by_series(
+        self, user_id: str, limit: int = 5000,
+    ) -> dict[str, dict]:
+        """Get unique episode counts per series for a user.
+
+        Returns {grandparent_rating_key: {
+            "title": str, "unique_episodes": int,
+            "tmdb_id": int|None, "rating_keys": set
+        }}
+        """
+        series_map: dict[str, dict] = {}
+        page_size = 200
+        start = 0
+
+        while start < limit:
+            params = {
+                "length": page_size, "start": start,
+                "user_id": user_id, "media_type": "episode",
+                "order_column": "date", "order_dir": "desc",
+            }
+            data = await self._get("get_history", params)
+            records = data.get("data", [])
+            if not records:
+                break
+
+            for r in records:
+                gp_key = str(r.get("grandparent_rating_key", ""))
+                ep_key = str(r.get("rating_key", ""))
+                if not gp_key or not ep_key:
+                    continue
+
+                if gp_key not in series_map:
+                    series_map[gp_key] = {
+                        "title": r.get("grandparent_title", ""),
+                        "tmdb_id": None,
+                        "rating_keys": set(),
+                    }
+                    # Try to extract TMDB ID from grandparent guids
+                    guids = r.get("grandparent_guids") or r.get("guids") or []
+                    for g in (guids if isinstance(guids, list) else []):
+                        if isinstance(g, str) and g.startswith("tmdb://"):
+                            try:
+                                series_map[gp_key]["tmdb_id"] = int(
+                                    g.replace("tmdb://", "")
+                                )
+                            except ValueError:
+                                pass
+                            break
+
+                series_map[gp_key]["rating_keys"].add(ep_key)
+
+            start += page_size
+            total = data.get("recordsFiltered", 0) or data.get("recordsTotal", 0)
+            if start >= total:
+                break
+
+        # Convert sets to counts
+        for entry in series_map.values():
+            entry["unique_episodes"] = len(entry["rating_keys"])
+            del entry["rating_keys"]
+
+        return series_map
