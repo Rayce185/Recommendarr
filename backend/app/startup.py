@@ -256,6 +256,8 @@ async def lifespan(app: FastAPI):
     logger.info("=== Recommendarr ready ===")
 
     asyncio.create_task(_warm_profiles())
+    from app.services.tmdb_enrichment import run_tmdb_enrichment
+    asyncio.create_task(run_tmdb_enrichment())
 
     from app.services.scheduler import get_scheduler
     scheduler = get_scheduler()
