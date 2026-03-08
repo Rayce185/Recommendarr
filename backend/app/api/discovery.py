@@ -224,6 +224,12 @@ _LANG_TO_COUNTRY = {
 async def get_user_countries(username: str):
     """Get country suggestions based on user's watch history languages."""
     from app.services.factory import get_stack
+    from app.services.cache import get_cache
+    cache = get_cache()
+    cache_key = f"user_countries:{username}"
+    cached = cache.get_generic(cache_key)
+    if cached is not None:
+        return cached
     stack = get_stack()
     if not stack.profiler:
         return {"countries": []}
@@ -245,4 +251,6 @@ async def get_user_countries(username: str):
                 "watch_count": lang_aff.watch_count,
                 "score": lang_aff.score,
             })
-    return {"countries": countries[:8]}
+    result = {"countries": countries[:8]}
+    cache.set_generic(cache_key, result, ttl=3600)  # 1 hour
+    return result
