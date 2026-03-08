@@ -4,6 +4,7 @@ GET /notifications — returns categorized notifications for the current user.
 No persistent event store: all notifications are computed from live data.
 """
 
+import json
 import logging
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query
@@ -11,6 +12,8 @@ from fastapi import APIRouter, Depends, Query
 from app.auth.jwt_handler import TokenPayload, get_current_user
 from app.services.feedback import get_feedback_store
 from app.services.factory import get_stack
+from app.database import get_db
+from app.models import GroupNightSession
 from app.services.cache import get_cache
 
 logger = logging.getLogger(__name__)
@@ -123,6 +126,26 @@ def _service_notifications(stack) -> list[dict]:
     return notifications
 
 
+
+def _group_night_notifications(username: str, days=7) -> list[dict]:
+    """Recent group night sessions where user is invited."""
+    try:
+        from sqlalchemy import select
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        with get_db() as db:
+            rows = db.execute(select(GroupNightSession).where(
+                GroupNightSession.created_at >= cutoff, GroupNightSession.creator != username,
+                GroupNightSession.participants.contains(f'"{username}"')
+            )).scalars().all()
+        return [{"type": "group_night", "priority": "normal",
+            "title": r.title or f"Group Night from {r.creator}",
+            "message": f"{r.creator} shared {len(json.loads(r.picks))} picks with you",
+            "icon": "users", "link": f"#group/{r.code}", "code": r.code,
+        } for r in rows]
+    except Exception as e:
+        logger.debug("Group night notifications error: %s", e)
+        return []
+
 @router.get("/notifications")
 async def get_notifications(
     user: TokenPayload = Depends(get_current_user),
@@ -185,7 +208,10 @@ async def get_notifications(
     # ── System health ────────────────────────────────────────
     system = _service_notifications(stack)
 
-    all_notifs = calendar_items + milestones + system
+    # ── Group Night invites ────────────────────────────────
+    group_nights = _group_night_notifications(username)
+
+    all_notifs = calendar_items + milestones + system + group_nights
 
     # Add stable IDs and filter dismissed
     for n in all_notifs:
@@ -205,6 +231,7 @@ async def get_notifications(
             "calendar": len(calendar_items),
             "milestones": len(milestones),
             "system": len(system),
+            "group_nights": len(group_nights),
             "high_priority": sum(1 for n in all_notifs if n.get("priority") == "high"),
         },
     }
