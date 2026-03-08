@@ -45,7 +45,7 @@ function BuzzCard({ item, onCardClick }) {
   );
 }
 
-function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
+function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange, username }) {
   const [subtab, setSubtabRaw] = useState(initialSubtab || "global");
   const setSubtab = (t) => { setSubtabRaw(t); onSubtabChange?.(t); };
   const [items, setItems] = useState([]);
@@ -70,10 +70,14 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
   const [genres, setGenres] = useState([]);
   const [genreId, setGenreId] = useState(null);
 
+  // User's preferred countries from watch history
+  const [userCountries, setUserCountries] = useState([]);
+
   useEffect(() => {
     api.trendingCountries().then(d => setCountries(d.countries || [])).catch(() => {});
     api.trendingGenres().then(d => setGenres(d.genres || [])).catch(() => {});
-  }, []);
+    if (username) api.userCountries(username).then(d => setUserCountries(d.countries || [])).catch(() => {});
+  }, [username]);
 
   useEffect(() => {
     if (subtab === "streaming") {
@@ -155,11 +159,28 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
             </div>
 
             {subtab === "country" && (
-              <div className="filter-group">
-                <label>Country</label>
-                <CustomSelect value={region} onChange={setRegion}
-                  options={countries.map(c => ({ value: c.code, label: c.name }))} />
-              </div>
+              <>
+                {userCountries.length > 0 && (
+                  <div className="filter-group user-country-chips">
+                    <label>Your Countries</label>
+                    <div className="country-chips">
+                      {userCountries.map(c => (
+                        <button key={c.code}
+                          className={`country-chip ${region === c.code ? "active" : ""}`}
+                          onClick={() => setRegion(c.code)}
+                          title={`${c.watch_count} titles watched`}>
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="filter-group">
+                  <label>Country</label>
+                  <CustomSelect value={region} onChange={setRegion}
+                    options={countries.map(c => ({ value: c.code, label: c.name }))} />
+                </div>
+              </>
             )}
 
             {subtab === "streaming" && (

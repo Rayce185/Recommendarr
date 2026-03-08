@@ -20,6 +20,7 @@ from app.services.taste_models import (
     SIGNAL_WEIGHTS,
     GenreAffinity,
     KeywordAffinity,
+    LanguageAffinity,
     PersonnelAffinity,
     TasteProfile,
     DEFAULT_LIBRARY_DOMAINS,
@@ -182,6 +183,7 @@ class TasteProfiler:
         personnel_scores: dict[str, dict] = defaultdict(
             lambda: {"score": 0.0, "count": 0, "completions": [], "role": ""}
         )
+        language_counts: dict[str, int] = defaultdict(int)
         total_watched = 0
         total_hours = 0.0
         completions = []
@@ -237,8 +239,12 @@ class TasteProfiler:
                 cast_names = meta.get("cast", [])
                 director_names = meta.get("directors", [])
 
-            # Animation → Anime reclassification (Japanese origin)
+            # Track original language distribution
             orig_lang = enrich_cache.get(item_key, {}).get("original_language")
+            if orig_lang:
+                language_counts[orig_lang] += 1
+
+            # Animation → Anime reclassification (Japanese origin)
             processed_genres = [
                 "Anime" if g == "Animation" and orig_lang == "ja" else g
                 for g in genres
@@ -270,8 +276,18 @@ class TasteProfiler:
                 p["completions"].append(best_completion)
                 p["role"] = "actor"
 
-        return normalize_taste_vectors(
+        profile = normalize_taste_vectors(
             genre_scores, keyword_scores, personnel_scores,
             username, domain, total_watched, total_hours,
             completions, rewatch_count,
         )
+
+        # Build language distribution
+        max_lang = max(language_counts.values(), default=1) or 1
+        profile.languages = sorted(
+            [LanguageAffinity(language=lang, watch_count=cnt,
+                              score=round(cnt / max_lang, 3))
+             for lang, cnt in language_counts.items()],
+            key=lambda l: l.watch_count, reverse=True,
+        )
+        return profile

@@ -206,3 +206,43 @@ async def get_genre_list():
         key=lambda g: g["name"],
     )
     return {"genres": genres}
+
+
+# ISO 639-1 language → most common TMDB country code
+_LANG_TO_COUNTRY = {
+    "en": "US", "ja": "JP", "ko": "KR", "zh": "CN", "fr": "FR",
+    "de": "DE", "es": "ES", "it": "IT", "pt": "BR", "ru": "RU",
+    "hi": "IN", "th": "TH", "tr": "TR", "pl": "PL", "nl": "NL",
+    "sv": "SE", "da": "DK", "no": "NO", "fi": "FI", "cs": "CZ",
+    "hu": "HU", "ro": "RO", "el": "GR", "ar": "SA", "he": "IL",
+    "id": "ID", "ms": "MY", "vi": "VN", "tl": "PH", "uk": "UA",
+    "cn": "CN", "ta": "IN", "te": "IN", "ml": "IN",
+}
+
+
+@router.get("/discover/user-countries/{username}")
+async def get_user_countries(username: str):
+    """Get country suggestions based on user's watch history languages."""
+    from app.services.factory import get_stack
+    stack = get_stack()
+    if not stack.profiler:
+        return {"countries": []}
+    try:
+        profile = await stack.profiler.build_profile(username, domain="all")
+    except Exception:
+        return {"countries": []}
+    # Map languages to countries, skip unknowns
+    seen = set()
+    countries = []
+    for lang_aff in profile.top_languages(15):
+        code = _LANG_TO_COUNTRY.get(lang_aff.language)
+        if code and code not in seen:
+            seen.add(code)
+            # Find country name from COUNTRY_OPTIONS
+            name = next((c["name"] for c in COUNTRY_OPTIONS if c["code"] == code), code)
+            countries.append({
+                "code": code, "name": name,
+                "watch_count": lang_aff.watch_count,
+                "score": lang_aff.score,
+            })
+    return {"countries": countries[:8]}

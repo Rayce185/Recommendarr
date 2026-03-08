@@ -57,6 +57,7 @@ const api = {
     return authFetch(`${API_BASE}/discover/trending?${params}`).then(r => r.json());
   },
   trendingGenres: () => authFetch(`${API_BASE}/discover/genres`).then(r => r.json()),
+  userCountries: (username) => authFetch(`${API_BASE}/discover/user-countries/${encodeURIComponent(username)}`).then(r => r.json()),
   trendingCountries: () => authFetch(`${API_BASE}/discover/countries`).then(r => r.json()),
   trendingProviders: (region = "CH") => authFetch(`${API_BASE}/discover/providers?country=${region}`).then(r => r.json()),
   buzz: (subs) => authFetch(`${API_BASE}/discover/buzz${subs ? '?subreddits=' + encodeURIComponent(subs) : ''}`).then(r => r.json()),

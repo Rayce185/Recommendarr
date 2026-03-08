@@ -42,6 +42,14 @@ class KeywordAffinity:
 
 
 @dataclass
+class LanguageAffinity:
+    """Original language distribution from watch history."""
+    language: str       # ISO 639-1 code (en, ja, ko, etc.)
+    watch_count: int = 0
+    score: float = 0.0  # Normalized 0.0-1.0
+
+
+@dataclass
 class PersonnelAffinity:
     """Director/actor preference from watch patterns."""
     name: str
@@ -66,9 +74,14 @@ class TasteProfile:
     genres: list[GenreAffinity] = field(default_factory=list)
     keywords: list[KeywordAffinity] = field(default_factory=list)
     personnel: list[PersonnelAffinity] = field(default_factory=list)
+    # Language distribution
+    languages: list[LanguageAffinity] = field(default_factory=list)
     # Negative signals
     avoided_genres: list[GenreAffinity] = field(default_factory=list)
     avoided_keywords: list[KeywordAffinity] = field(default_factory=list)
+
+    def top_languages(self, n: int = 10) -> list[LanguageAffinity]:
+        return sorted(self.languages, key=lambda l: l.score, reverse=True)[:n]
 
     def top_genres(self, n: int = 8) -> list[GenreAffinity]:
         return sorted(self.genres, key=lambda g: g.score, reverse=True)[:n]
@@ -167,6 +180,9 @@ def normalize_taste_vectors(
         ))
 
     avg_completion = sum(completions) / len(completions) if completions else 0.0
+
+    # Language distribution (passed in from profiler)
+    languages_list = []  # Populated separately by profiler
 
     return TasteProfile(
         user_id=username, username=username, domain=domain,
