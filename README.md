@@ -46,6 +46,32 @@ A self-hosted media recommendation engine for Plex. Learns from viewing behavior
 - **Dark/Light Theme**: OS preference detection with manual override
 - **Mobile Responsive**: Works on phones, tablets, and desktops
 
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/watch-tonight.png" alt="Watch Tonight"/><br/><b>Watch Tonight</b> — Personalized recommendations with poster art and explanations</td>
+<td width="50%"><img src="docs/screenshots/trending.png" alt="Trending"/><br/><b>Trending</b> — Global and per-country trending with genre filters</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/discovery-feed.png" alt="Discovery Feed"/><br/><b>Discovery Feed</b> — Personalized weekly mix based on taste profile</td>
+<td><img src="docs/screenshots/browse.png" alt="Browse"/><br/><b>Browse & Search</b> — Full-text search with advanced filters</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/mood-match.png" alt="Mood Match"/><br/><b>Mood Match</b> — Natural language mood input with AI enhancement</td>
+<td><img src="docs/screenshots/detail-modal.png" alt="Detail Modal"/><br/><b>Title Details</b> — Rich overlay with cast, ratings, streaming availability</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/world-cinema.png" alt="World Cinema"/><br/><b>World Cinema</b> — Geographic discovery with taste matching</td>
+<td><img src="docs/screenshots/calendar.png" alt="Calendar"/><br/><b>Coming Soon</b> — TMDB + Radarr/Sonarr release calendar</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/taste-profile.png" alt="Taste Profile"/><br/><b>Taste Profile</b> — Auto-generated from watch history with manual tuning</td>
+<td><img src="docs/screenshots/mobile.png" width="200" alt="Mobile"/><br/><b>Mobile</b> — Fully responsive on phones and tablets</td>
+</tr>
+</table>
+
 ## Quick Start
 
 ### Docker (recommended)
