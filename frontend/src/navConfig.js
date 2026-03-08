@@ -1,7 +1,7 @@
 import {
   Newspaper,
   Play, Download, RefreshCw, Sparkles, TrendingUp, Search, Globe,
-  Layers, Users, Bookmark, Upload, Activity, CalendarDays,
+  Layers, Users, Bookmark, Upload, Activity, CalendarDays, Bell,
   Heart, BarChart3, Settings, History,
 } from "lucide-react";
 
@@ -20,6 +20,7 @@ const navItems = [
   { id: "import", label: "List Import", icon: Upload, section: "Discovery" },
   { id: "pulse", label: "Cultural Pulse", icon: Activity, section: "Discovery" },
   { id: "calendar", label: "Coming Soon", icon: CalendarDays, section: "Discovery" },
+  { id: "notifications", label: "Notifications", icon: Bell, section: "Profile" },
   { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
   { id: "wrapped", label: "Plex Wrapped", icon: BarChart3, section: "Profile" },
   { id: "social", label: "Social", icon: Users, section: "Profile" },

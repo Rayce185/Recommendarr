@@ -8,6 +8,7 @@ Three sections per user, cached for 24 hours:
 
 import logging
 import random
+from datetime import date
 from dataclasses import asdict
 from typing import Optional
 
@@ -220,8 +221,8 @@ async def _because_you_liked(stack, username: str) -> Optional[dict]:
         if not history:
             return None
 
-        # Find recent well-rated movie/show (resolve tmdb_id if needed)
-        anchor = None
+        # Collect valid anchors then rotate daily via date-based seed
+        anchors = []
         high_completion = [h for h in history if h.completion_pct and h.completion_pct > 75][:20]
         for h in high_completion:
             tmdb_id = h.tmdb_id
@@ -236,17 +237,22 @@ async def _because_you_liked(stack, username: str) -> Optional[dict]:
                 mt = h.media_type if h.media_type in ("movie", "tv") else "movie"
                 detail = await stack.tmdb.get_detail(tmdb_id, mt)
                 if detail and detail.get("vote_average", 0) >= 6.5:
-                    anchor = {
+                    anchors.append({
                         "tmdb_id": tmdb_id,
                         "title": detail.get("title", "Unknown"),
                         "media_type": mt,
-                    }
-                    break
+                    })
+                    if len(anchors) >= 10:
+                        break
             except Exception:
                 continue
 
-        if not anchor:
+        if not anchors:
             return None
+
+        # Pick anchor based on day-of-year + username for daily rotation
+        day_seed = hash(username + date.today().isoformat()) % len(anchors)
+        anchor = anchors[day_seed]
 
         # Get similar titles
         similar = await stack.tmdb.get_similar(anchor["tmdb_id"], anchor["media_type"])

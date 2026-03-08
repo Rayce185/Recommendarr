@@ -134,9 +134,15 @@ export default function NotificationBell({ onNavigate }) {
               })
             )}
           </div>
-          {data?.notifications?.length > 0 && (
-            <div className="notification-footer">
-              {data.counts?.calendar > 0 && <span>{data.counts.calendar} releasing soon</span>}
+          <div className="notification-footer">
+            <button
+              onClick={() => { setOpen(false); if (onNavigate) onNavigate("notifications"); }}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: "var(--accent)", fontSize: 11, fontWeight: 500,
+              }}
+            >View all</button>
+            {data?.notifications?.length > 0 && (
               <button
                 onClick={() => {
                   api.dismissAllNotifications().then(() => {
@@ -148,8 +154,8 @@ export default function NotificationBell({ onNavigate }) {
                   color: "var(--text-muted)", fontSize: 11, textDecoration: "underline",
                 }}
               >Clear all</button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>

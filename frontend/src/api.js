@@ -83,6 +83,7 @@ const api = {
   notifications: () => authFetch(`${API_BASE}/notifications`).then(r => r.json()),
   dismissNotification: (id) => authFetch(`${API_BASE}/notifications/dismiss`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }).then(r => r.json()),
   dismissAllNotifications: () => authFetch(`${API_BASE}/notifications/dismiss-all`, { method: "POST" }).then(r => r.json()),
+  clearDismissedNotifications: () => authFetch(`${API_BASE}/notifications/dismissed`, { method: "DELETE" }).then(r => r.json()),
   groupRecommend: (username, users, opts = {}) => {
     const params = new URLSearchParams({ users: users.join(","), limit: opts.limit || 30 });
     if (opts.domain && opts.domain !== "all") params.set("domain", opts.domain);
