@@ -148,9 +148,7 @@ class RadarrClient:
                             or m.get("inCinemas")
                         ),
                         "media_type": "movie",
-                        "poster": f"https://image.tmdb.org/t/p/w300{m['images'][0]['remoteUrl'].split('/t/p/')[1]}"
-                            if m.get("images") and m["images"][0].get("remoteUrl") and "/t/p/" in m["images"][0].get("remoteUrl", "")
-                            else None,
+                        "poster": m["images"][0].get("remoteUrl") if m.get("images") and m["images"][0].get("remoteUrl") else None,
                         "source": "radarr",
                         "status": m.get("status", ""),
                         "monitored": True,

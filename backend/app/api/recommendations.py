@@ -17,6 +17,7 @@ from app.config import settings
 from app.services.cache import get_cache
 from app.services.recommender import RecommendationRequest, Recommendation
 from app.services.ai_mood import parse_mood_ai
+from app.services.mood_mapper import mood_to_explanation
 from app.api.rec_helpers import rec_to_dict
 
 logger = logging.getLogger(__name__)
