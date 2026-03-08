@@ -61,7 +61,7 @@ function Sidebar({
           )}
         </div>
         <div className="sidebar-nav">
-          {navItems.map(item => {
+          {navItems.filter(item => item.section !== "Admin" || authUser?.is_admin).map(item => {
             const showSection = item.section !== currentSection;
             if (showSection) currentSection = item.section;
             return (

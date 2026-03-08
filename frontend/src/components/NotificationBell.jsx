@@ -100,19 +100,54 @@ export default function NotificationBell({ onNavigate }) {
                       <div className="notification-title">{n.title}</div>
                       <div className="notification-message">{n.message}</div>
                     </div>
-                    {n.media_type && (
-                      <div className="notification-type">
-                        {n.media_type === "movie" ? <Film size={11} /> : <Tv size={11} />}
-                      </div>
-                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                      {n.media_type && (
+                        <div className="notification-type">
+                          {n.media_type === "movie" ? <Film size={11} /> : <Tv size={11} />}
+                        </div>
+                      )}
+                      <button
+                        className="notification-dismiss"
+                        title="Dismiss"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          api.dismissNotification(n.id).then(() => {
+                            setData(prev => prev ? {
+                              ...prev,
+                              notifications: prev.notifications.filter((_, j) => j !== i),
+                              counts: { ...prev.counts, total: Math.max(0, prev.counts.total - 1) },
+                            } : prev);
+                          }).catch(() => {});
+                        }}
+                        style={{
+                          background: "none", border: "none", cursor: "pointer", padding: 2,
+                          color: "var(--text-muted)", opacity: 0.5, transition: "opacity 0.15s",
+                        }}
+                        onMouseEnter={e => e.target.style.opacity = "1"}
+                        onMouseLeave={e => e.target.style.opacity = "0.5"}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
                   </div>
                 );
               })
             )}
           </div>
-          {data?.counts?.total > 0 && (
+          {data?.notifications?.length > 0 && (
             <div className="notification-footer">
-              {data.counts.calendar > 0 && <span>{data.counts.calendar} releasing soon</span>}
+              {data.counts?.calendar > 0 && <span>{data.counts.calendar} releasing soon</span>}
+              <button
+                onClick={() => {
+                  api.dismissAllNotifications().then(() => {
+                    setData(prev => prev ? { ...prev, notifications: [], counts: { total: 0, calendar: 0, milestones: 0, system: 0, high_priority: 0 } } : prev);
+                  }).catch(() => {});
+                }}
+                style={{
+                  marginLeft: "auto", background: "none", border: "none", cursor: "pointer",
+                  color: "var(--text-muted)", fontSize: 11, textDecoration: "underline",
+                }}
+              >Clear all</button>
             </div>
           )}
         </div>

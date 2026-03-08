@@ -2,6 +2,18 @@ import { useState } from "react";
 import { Monitor, RefreshCw, Globe, CheckCircle2, Loader2, Clock, Sparkles } from "lucide-react";
 import { api } from "../../api.js";
 
+const PREF_DESCRIPTIONS = {
+  rec_count: "Number of recommendations to generate per mode (higher = slower but more variety)",
+  freshness_weight: "How much to prioritize recent content over older titles (0=ignore, 1=strong bias)",
+  diversity_weight: "How much to vary genres and styles in results (0=pure taste match, 1=maximum variety)",
+  include_anime: "Include anime titles in all recommendation modes",
+  include_adult: "Include adult-rated (18+) content in results",
+  auto_request: "Automatically send grab-mode recommendations to Radarr/Sonarr via Seerr",
+  language: "Default content language filter for recommendations",
+  watchlist_sort: "Default sort order for the Watchlist page",
+  watchlist_filter: "Default media type filter for the Watchlist page",
+};
+
 const WATCHLIST_SORTS = [
   { value: "added_desc", label: "Recently Added" },
   { value: "added_asc", label: "Oldest Added" },
@@ -40,7 +52,9 @@ export default function PrefsTab({
                   default_device_id: e.target.value,
                   default_device_name: dev?.name || "",
                 }));
-              } catch (err) { console.error("Failed to save device preference:", err); }
+                setPrefsSaving("device");
+                setTimeout(() => setPrefsSaving(false), 1500);
+              } catch (err) { console.error("Failed to save device preference:", err); setPrefsSaving(false); }
             }}
           >
             <option value="">\u2014 No device selected \u2014</option>
@@ -61,6 +75,7 @@ export default function PrefsTab({
         {devicesList.length > 0 && (
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
             {devicesList.length} device{devicesList.length !== 1 ? "s" : ""} online
+            {prefsSaving === "device" && <span style={{ marginLeft: 8, color: "var(--green)", fontWeight: 600 }}><CheckCircle2 size={11} style={{ verticalAlign: -1 }} /> Saved!</span>}
           </div>
         )}
       </div>
@@ -150,6 +165,7 @@ export default function PrefsTab({
               <div className="pref-row" key={key}>
                 <div>
                   <span className="pref-label">{key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
+                  {PREF_DESCRIPTIONS[key] && <div style={{ fontSize: 11, color: "var(--text-dim, var(--text-muted))", marginTop: 2, opacity: 0.7 }}>{PREF_DESCRIPTIONS[key]}</div>}
                   <span className={`pref-source ${info.source}`}>{info.source}</span>
                 </div>
                 <div className="pref-control">

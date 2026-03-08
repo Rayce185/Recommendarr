@@ -65,25 +65,21 @@ function PulsePage({ isAdmin }) {
   }
 
   return (
-    <div style={{ padding: "0 4px" }}>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
-            <Activity size={20} /> Cultural Pulse
-          </h2>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "6px 0 0" }}>
-            Trending themes from entertainment news — powered by AI analysis of RSS feeds
-          </p>
+    <>
+      <div className="page-header">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2><Activity size={20} style={{ verticalAlign: "text-bottom", marginRight: 6 }} />Cultural Pulse</h2>
+          {isAdmin && (
+            <button onClick={handleRefresh} disabled={refreshing}
+              className="btn btn-secondary" style={{ padding: "6px 10px", fontSize: 12 }}>
+              {refreshing ? <><Loader2 size={13} className="spinning" /> Refreshing...</> :
+               <><RefreshCw size={13} /> Refresh Pulse</>}
+            </button>
+          )}
         </div>
-        {isAdmin && (
-          <button onClick={handleRefresh} disabled={refreshing}
-            className="btn btn-secondary" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}>
-            {refreshing ? <><Loader2 size={13} className="spinning" /> Refreshing...</> :
-             <><RefreshCw size={13} /> Refresh Pulse</>}
-          </button>
-        )}
+        <p>AI-detected themes from entertainment news and RSS feeds that influence your recommendations</p>
       </div>
+      <div className="page-body">
 
       {/* Refresh result banner */}
       {refreshResult && (
@@ -130,7 +126,8 @@ function PulsePage({ isAdmin }) {
           <ThemeCard key={theme.id} theme={theme} isAdmin={isAdmin} onDeactivate={handleDeactivate} />
         ))}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 

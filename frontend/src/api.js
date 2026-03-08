@@ -81,6 +81,8 @@ const api = {
   importProfile: (username, data, mode = "merge") => authFetch(`${API_BASE}/users/${encodeURIComponent(username)}/profile/import`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ data, mode }) }).then(r => r.json()),
   discoveryFeed: (username, refresh = false) => authFetch(`${API_BASE}/discover/feed/${encodeURIComponent(username)}${refresh ? "?refresh=true" : ""}`).then(r => r.json()),
   notifications: () => authFetch(`${API_BASE}/notifications`).then(r => r.json()),
+  dismissNotification: (id) => authFetch(`${API_BASE}/notifications/dismiss`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }).then(r => r.json()),
+  dismissAllNotifications: () => authFetch(`${API_BASE}/notifications/dismiss-all`, { method: "POST" }).then(r => r.json()),
   groupRecommend: (username, users, opts = {}) => {
     const params = new URLSearchParams({ users: users.join(","), limit: opts.limit || 30 });
     if (opts.domain && opts.domain !== "all") params.set("domain", opts.domain);

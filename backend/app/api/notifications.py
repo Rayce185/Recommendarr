@@ -186,6 +186,15 @@ async def get_notifications(
     system = _service_notifications(stack)
 
     all_notifs = calendar_items + milestones + system
+
+    # Add stable IDs and filter dismissed
+    for n in all_notifs:
+        n["id"] = _notif_id(n)
+    from app.services.settings_store import get_settings_store
+    store = get_settings_store()
+    dismissed = set(store.get(f"dismissed_notifs:{user.username}") or [])
+    all_notifs = [n for n in all_notifs if n["id"] not in dismissed]
+
     priority_order = {"high": 0, "normal": 1, "low": 2}
     all_notifs.sort(key=lambda x: priority_order.get(x.get("priority", "low"), 9))
 
@@ -201,3 +210,63 @@ async def get_notifications(
     }
     cache.set_generic(cache_key, result, ttl=cache.NOTIFICATIONS_TTL)
     return result
+
+
+@router.post("/notifications/dismiss")
+async def dismiss_notification(
+    body: dict,
+    user: TokenPayload = Depends(get_current_user),
+):
+    """Dismiss a notification so it won't show again."""
+    from app.services.settings_store import get_settings_store
+    store = get_settings_store()
+    key = f"dismissed_notifs:{user.username}"
+    dismissed = store.get(key) or []
+    notif_id = body.get("id")
+    if notif_id and notif_id not in dismissed:
+        dismissed.append(notif_id)
+        store.set(key, dismissed)
+    # Invalidate notification cache
+    cache = get_cache()
+    cache.delete_generic(f"notif:{user.username}")
+    return {"dismissed": len(dismissed)}
+
+
+@router.post("/notifications/dismiss-all")
+async def dismiss_all_notifications(
+    user: TokenPayload = Depends(get_current_user),
+):
+    """Dismiss all current notifications."""
+    from app.services.settings_store import get_settings_store
+    store = get_settings_store()
+    key = f"dismissed_notifs:{user.username}"
+    # Get current notifications to know what to dismiss
+    result = await get_notifications(user)
+    ids = [_notif_id(n) for n in result.get("notifications", [])]
+    store.set(key, ids)
+    cache = get_cache()
+    cache.delete_generic(f"notif:{user.username}")
+    return {"dismissed": len(ids)}
+
+
+@router.delete("/notifications/dismissed")
+async def clear_dismissed(
+    user: TokenPayload = Depends(get_current_user),
+):
+    """Clear dismissed list (show all notifications again)."""
+    from app.services.settings_store import get_settings_store
+    store = get_settings_store()
+    store.set(f"dismissed_notifs:{user.username}", [])
+    cache = get_cache()
+    cache.delete_generic(f"notif:{user.username}")
+    return {"cleared": True}
+
+
+def _notif_id(notif: dict) -> str:
+    """Generate a stable ID for a notification."""
+    parts = [notif.get("type", ""), notif.get("title", "")]
+    if notif.get("tmdb_id"):
+        parts.append(str(notif["tmdb_id"]))
+    if notif.get("release_date"):
+        parts.append(notif["release_date"])
+    return ":".join(parts)

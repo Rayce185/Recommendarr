@@ -113,7 +113,7 @@ function WorldCinemaPage({ user, onCardClick }) {
     <>
       <div className="page-header">
         <h2><Globe size={20} style={{ marginRight: 8 }} />World Cinema Map</h2>
-        <p>Explore film cultures worldwide — matched to your taste</p>
+        <p>Discover films and shows from around the world. Countries are ranked by how well their popular titles match your taste profile — click any country to browse its top-rated content.</p>
       </div>
       <div className="page-body">
 
