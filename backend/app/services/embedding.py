@@ -162,18 +162,6 @@ class EmbeddingService:
             resp.raise_for_status()
             return resp.json()
 
-    # ── Full pipeline: DB → embed → ChromaDB ─────────────────────
-
-    async def embed_library(
-        self,
-        db: "AsyncSession",
-        media_type: str = "movie",
-        batch_size: int = 20,
-        progress_callback=None,
-    ) -> dict:
-        """Embed all cached TMDB items — delegates to embedding_library module."""
-        from app.services.embedding_library import embed_library
-        return await embed_library(self, db, media_type, batch_size, progress_callback)
 
     async def embed_text_query(self, text: str) -> list[float]:
         """Embed a user query (for Mood Match, search, etc.)."""
