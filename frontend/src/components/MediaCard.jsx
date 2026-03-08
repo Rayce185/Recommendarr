@@ -3,7 +3,7 @@ import { api, authFetch, API_BASE } from "../api.js";
 import { posterUrl, scorePercent, scoreColor } from "../utils.js";
 
 function MediaCard({ item, onClick, onFeedback }) {
-  const poster = posterUrl(item.poster_url);
+  const poster = posterUrl(item.poster_url || item.poster_path);
   const sc = item.score != null ? scorePercent(item.score) : null;
   const typeColor = item.media_type === "movie" ? "var(--blue)" : "var(--purple)";
 

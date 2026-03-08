@@ -9,7 +9,7 @@ import WhyNotPanel from "./WhyNotPanel.jsx";
 
 function DetailModal({ item, detail, loading: detailLoading, onClose, onRequest, requesting, requestResult, onFeedback, user }) {
   const d = detail || item;
-  const poster = posterUrl(d.poster_url || item.poster_url, "w500");
+  const poster = posterUrl(d.poster_url || item.poster_url || d.poster_path || item.poster_path, "w500");
   const backdrop = d.backdrop_url ? fixPosterUrl(d.backdrop_url) : null;
   const hasTrailer = d.trailer_url;
   const [collectionData, setCollectionData] = useState(null);
