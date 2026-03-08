@@ -12,6 +12,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative;
 }
 .cal-month-nav button {
   background: var(--bg-card);
@@ -252,3 +253,32 @@
   .calendar-filters { gap: 10px; }
   .calendar-filters select { width: 100%; }
 }
+
+/* ── Month/Year Picker ──────────────────────────── */
+.cal-month-clickable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.cal-month-clickable:hover { color: var(--accent); }
+
+.month-picker {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  z-index: 100; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px; min-width: 220px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.month-picker-year-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; font-weight: 600; font-size: 0.95rem;
+}
+.month-picker-year-nav button {
+  background: none; border: none; color: var(--text-secondary); cursor: pointer;
+  padding: 4px 6px; border-radius: 4px;
+}
+.month-picker-year-nav button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.month-picker-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.month-picker-btn {
+  background: none; border: 1px solid transparent; color: var(--text-secondary);
+  padding: 6px 4px; border-radius: 6px; cursor: pointer; font-size: 0.82rem;
+  transition: all 0.15s;
+}
+.month-picker-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.month-picker-active { background: var(--accent) !important; color: #fff !important; font-weight: 600; }
+.month-picker-today { border-color: var(--accent); }

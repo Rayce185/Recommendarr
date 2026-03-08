@@ -7,8 +7,11 @@ CONTAINER="Recommendarr"
 IMAGE="recommendarr:latest"
 PORT="30800:5055"
 DATA_VOL="/mnt/user/system/appdata/recommendarr:/app/data:rw"
+REPO_DIR="/mnt/user/system/recommendarr-repo"
 
-echo "=== Building ${IMAGE} ==="
+cd "${REPO_DIR}"
+
+echo "=== Building ${IMAGE} (multi-stage: frontend + backend) ==="
 docker build -t "${IMAGE}" . 2>&1 | tail -5
 
 echo "=== Stopping ${CONTAINER} ==="
@@ -21,7 +24,7 @@ docker run -d \
   --restart unless-stopped \
   -p "${PORT}" \
   -v "${DATA_VOL}" \
-  --env-file "$(dirname "$0")/deploy.env" \
+  --env-file "${REPO_DIR}/deploy.env" \
   "${IMAGE}"
 
 echo "=== Waiting for health check ==="
