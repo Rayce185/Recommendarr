@@ -11,7 +11,8 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Optional
 
 from app.auth.jwt_handler import TokenPayload, get_current_user
-from app.services.rec_history import get_history, get_history_stats, mark_interaction
+from app.services.rec_history import mark_interaction
+from app.services.rec_history_queries import get_history, get_history_stats
 
 logger = logging.getLogger(__name__)
 
