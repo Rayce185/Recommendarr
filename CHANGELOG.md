@@ -68,7 +68,7 @@ personalized, explainable recommendations.
 - SQLite database for persistent state
 - Modular codebase — all files under 300 lines, zero dead code, zero import errors
 - 46+ REST API endpoints with JWT authentication
-- Multi-platform Docker images (amd64 + arm64)
+- Docker image (amd64, arm64 planned)
 - Docker Hub: `rayce185/recommendarr`
 - GitHub Container Registry: `ghcr.io/rayce185/recommendarr`
 
