@@ -190,6 +190,10 @@ const api = {
   createGroupSession: (data) => authFetch(`${API_BASE}/group-night/sessions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Create failed"); return d; })),
   getGroupSession: (code) => authFetch(`${API_BASE}/group-night/sessions/${code}`).then(r => r.json()),
   listGroupSessions: (limit = 10) => authFetch(`${API_BASE}/group-night/sessions?limit=${limit}`).then(r => r.json()),
+
+  /* Admin user management */
+  userStaleness: () => authFetch(`${API_BASE}/admin/users/staleness`).then(r => r.json()),
+  warmUser: (username) => authFetch(`${API_BASE}/admin/users/${encodeURIComponent(username)}/warm`, { method: "POST" }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Warm failed"); return d; })),
 };
 
 export { api, API_BASE };

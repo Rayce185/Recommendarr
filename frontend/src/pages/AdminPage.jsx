@@ -9,6 +9,7 @@ import ConfigTab from "./admin/ConfigTab.jsx";
 import PrefsTab from "./admin/PrefsTab.jsx";
 import ServarrTab from "./admin/ServarrTab.jsx";
 import RoutingTab from "./admin/RoutingTab.jsx";
+import UsersTab from "./admin/UsersTab.jsx";
 
 function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser }) {
   const [settingsTab, setSettingsTabRaw] = useState(initialSubtab || "services");
@@ -140,6 +141,7 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
     { id: "config", label: "Configuration", icon: Settings },
     { id: "servarr", label: "Servarr", icon: Server },
     { id: "routing", label: "Routing", icon: Shuffle },
+    { id: "users", label: "Users", icon: Users },
     { id: "prefs", label: "Preferences", icon: SlidersHorizontal },
   ];
 
@@ -250,6 +252,8 @@ function AdminPage({ subtab: initialSubtab, onSubtabChange, user: currentUser })
         {settingsTab === "servarr" && <ServarrTab />}
 
         {settingsTab === "routing" && <RoutingTab />}
+
+        {settingsTab === "users" && <UsersTab />}
 
         {settingsTab === "prefs" && (
           <PrefsTab

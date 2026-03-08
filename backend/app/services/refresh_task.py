@@ -199,6 +199,7 @@ async def run_refresh(job_id: str, username: str):
 
         total_ms = int((time.time() - start) * 1000)
         cache.set_last_refresh(total_ms)
+        cache.set_user_refresh(username)
         await queue.put(RefreshStep(total, total, "Complete", total_ms, done=True))
         logger.info(f"Refresh complete in {total_ms}ms for user={username}")
 

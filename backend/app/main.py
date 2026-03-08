@@ -68,6 +68,7 @@ from app.api import notifications
 from app.api import history
 from app.api import setup, webhooks
 from app.api import group_night
+from app.api import admin_users
 
 app.include_router(health.router,                prefix="/api/v1", tags=["system"])
 app.include_router(users.router,                 prefix="/api/v1", tags=["users"])
@@ -99,6 +100,7 @@ app.include_router(history.router,            prefix="/api/v1", tags=["history"]
 app.include_router(setup.router,             prefix="/api/v1", tags=["setup"])
 app.include_router(webhooks.router,          prefix="/api/v1", tags=["webhooks"])
 app.include_router(group_night.router,       prefix="/api/v1", tags=["group-night"])
+app.include_router(admin_users.router,       prefix="/api/v1", tags=["admin"])
 
 # ── Static files (frontend) ──────────────────────────────────────
 

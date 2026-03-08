@@ -46,6 +46,7 @@ class RecommendationCache:
         self._profiles: dict[str, CacheEntry] = {}
         self._generic: dict[str, CacheEntry] = {}
         self._stats = {"hits": 0, "misses": 0}
+        self._user_refresh_at: dict[str, float] = {}  # username → epoch
         self._last_refresh_ms: int = 0
         self._last_refresh_at: str = ""
         self._step_durations: dict[str, int] = {}
@@ -208,6 +209,20 @@ class RecommendationCache:
 
     def get_step_durations(self) -> dict[str, int]:
         return dict(self._step_durations)
+
+    # ── Per-user refresh tracking ────────────────────────────────
+
+    def set_user_refresh(self, username: str):
+        """Record that a user's caches were refreshed now."""
+        self._user_refresh_at[username] = time.time()
+
+    def get_user_refresh_at(self, username: str) -> Optional[float]:
+        """Get epoch timestamp of last refresh for a user."""
+        return self._user_refresh_at.get(username)
+
+    def get_all_user_refreshes(self) -> dict[str, float]:
+        """Get all per-user refresh timestamps."""
+        return dict(self._user_refresh_at)
 
     def get_recs_age(self, username: str, mode: str, domain: str) -> float | None:
         """Return age in seconds of cached recs, or None if not cached."""
