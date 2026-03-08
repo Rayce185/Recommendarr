@@ -3,6 +3,7 @@
 Extracted from rec_modes.py for §7.7 compliance.
 """
 
+import asyncio
 import logging
 import random
 from collections import defaultdict
@@ -67,6 +68,8 @@ async def mode_rediscover(engine, req: RecommendationRequest) -> list[Recommenda
     )
     pre_candidates = pre_candidates[:req.limit * 3]
 
+    # Resolve TMDB IDs in parallel batches (was sequential — major bottleneck)
+    needs_resolve = []
     candidates = []
     for c in pre_candidates:
         tmdb_id = c["tmdb_id"]
@@ -74,16 +77,34 @@ async def mode_rediscover(engine, req: RecommendationRequest) -> list[Recommenda
             cached_tmdb = cache.get_tmdb_id(c["item_key"])
             if cached_tmdb is not None:
                 tmdb_id = cached_tmdb
-            else:
-                try:
-                    tmdb_id = await engine.tautulli.resolve_tmdb_id(c["item_key"], c["media_type"])
-                    cache.set_tmdb_id(c["item_key"], tmdb_id)
-                except Exception:
-                    pass
-        if not tmdb_id or tmdb_id in req.exclude_tmdb_ids:
-            continue
-        c["tmdb_id"] = tmdb_id
-        candidates.append(c)
+        if tmdb_id:
+            if tmdb_id not in req.exclude_tmdb_ids:
+                c["tmdb_id"] = tmdb_id
+                candidates.append(c)
+        else:
+            needs_resolve.append(c)
+
+    # Parallel TMDB ID resolution for unresolved items (batches of 10)
+    async def _resolve_one(c):
+        try:
+            tid = await asyncio.wait_for(
+                engine.tautulli.resolve_tmdb_id(c["item_key"], c["media_type"]),
+                timeout=5.0,
+            )
+            if tid:
+                cache.set_tmdb_id(c["item_key"], tid)
+                c["tmdb_id"] = tid
+                return c
+        except Exception:
+            pass
+        return None
+
+    for batch_start in range(0, min(len(needs_resolve), 30), 10):
+        batch = needs_resolve[batch_start:batch_start + 10]
+        resolved = await asyncio.gather(*[_resolve_one(c) for c in batch])
+        for c in resolved:
+            if c and c["tmdb_id"] not in req.exclude_tmdb_ids:
+                candidates.append(c)
 
     candidates = apply_filters(candidates, req)
     candidates = candidates[:req.limit * 2]

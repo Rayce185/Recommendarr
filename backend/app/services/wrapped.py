@@ -5,6 +5,7 @@ access title, year, thumb, section_id and other display fields.
 No Seerr enrichment needed — all data comes from Tautulli/Plex.
 """
 
+import asyncio
 import logging
 from collections import Counter
 from datetime import datetime, timezone
@@ -39,15 +40,14 @@ async def build_wrapped(tautulli, user_id: str, username: str, year: int = None)
         "10": "Anime", "15": "Anime", "17": "Anime",
     }
 
-    filtered = []
-    for sid, section_name in sections.items():
+    # Parallel fetch — all sections concurrently instead of sequentially
+    async def _fetch_section(sid, section_name):
         try:
             raw_data = await tautulli._get("get_history", {
-                "user_id": user_id,
-                "section_id": sid,
-                "length": 5000,
+                "user_id": user_id, "section_id": sid, "length": 5000,
             })
             records = raw_data.get("data", []) if isinstance(raw_data, dict) else []
+            results = []
             for r in records:
                 started = r.get("started")
                 if started:
@@ -57,11 +57,22 @@ async def build_wrapped(tautulli, user_id: str, username: str, year: int = None)
                             r["_dt"] = dt
                             r["_section"] = section_name
                             r["_section_id"] = sid
-                            filtered.append(r)
+                            results.append(r)
                     except (ValueError, TypeError):
                         pass
+            return results
         except Exception as e:
             logger.warning(f"Failed to fetch history for section {sid}: {e}")
+            return []
+
+    section_results = await asyncio.gather(
+        *[_fetch_section(sid, name) for sid, name in sections.items()],
+        return_exceptions=True,
+    )
+    filtered = []
+    for result in section_results:
+        if isinstance(result, list):
+            filtered.extend(result)
 
     if not filtered:
         return {"empty": True, "year": target_year, "username": username}

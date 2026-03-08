@@ -4,6 +4,7 @@ All endpoints use the service stack (Tautulli + Seerr + Radarr/Sonarr)
 through the RecommendationEngine orchestrator.
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -110,7 +111,11 @@ async def get_recommendations(
         return cached_response
 
     try:
-        recs = await stack.engine.recommend(req)
+        recs = await asyncio.wait_for(
+            stack.engine.recommend(req), timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(504, f"Recommendations timed out after 30s — try again or switch mode")
     except Exception as e:
         raise HTTPException(500, f"Recommendation engine error: {str(e)}")
 
