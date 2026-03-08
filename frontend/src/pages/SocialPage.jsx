@@ -3,6 +3,7 @@ import { Users, TrendingUp, Heart, Loader2, UserPlus } from "lucide-react";
 import { authFetch, API_BASE } from "../api.js";
 import { LoadingState, ErrorState } from "../components/StateDisplays.jsx";
 import FriendsPanel from "../components/FriendsPanel.jsx";
+import FriendActivityFeed from "../components/FriendActivityFeed.jsx";
 
 function SocialPage({ user }) {
   const [tab, setTab] = useState("overview");
@@ -65,6 +66,7 @@ function SocialPage({ user }) {
 
   const tabs = [
     { id: "overview", label: "Overview" },
+    { id: "activity", label: "Activity" },
     { id: "friends", label: "Friends" },
   ];
 
@@ -96,6 +98,7 @@ function SocialPage({ user }) {
           onRetry={loadOverview} friendUsernames={friendUsernames} pendingUsernames={pendingUsernames}
           sendingTo={sendingTo} onSendRequest={sendFriendRequest} currentUser={user?.username}
         />}
+        {tab === "activity" && <FriendActivityFeed user={user} />}
         {tab === "friends" && <FriendsPanel user={user} />}
       </div>
     </>

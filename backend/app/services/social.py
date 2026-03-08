@@ -145,3 +145,62 @@ async def get_server_stats(tautulli) -> dict:
         "recent_unique_viewers": unique_viewers,
         "server_trending": server_trending,
     }
+
+
+async def get_friend_activity(tautulli, friend_usernames: list[str], limit: int = 50) -> list[dict]:
+    """Get recent watch activity filtered to a set of friend usernames.
+
+    Uses a single server-wide history pull (efficient) then filters.
+    Returns chronologically-ordered activity items.
+    """
+    if not friend_usernames:
+        return []
+
+    friend_set = set(friend_usernames)
+
+    # Pull more than needed since we're filtering
+    raw = await tautulli._get("get_history", {
+        "length": min(limit * 5, 500),
+        "order_column": "date",
+        "order_dir": "desc",
+    })
+    records = raw.get("data", []) if isinstance(raw, dict) else []
+
+    activity = []
+    seen_keys = set()  # Deduplicate by user+rating_key
+
+    for r in records:
+        username = r.get("user", "")
+        if username not in friend_set:
+            continue
+
+        rating_key = str(r.get("rating_key", ""))
+        dedup_key = f"{username}:{rating_key}"
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+
+        media_type = r.get("media_type", "movie")
+        title = r.get("full_title") or r.get("title", "Unknown")
+        thumb = r.get("thumb", "")
+        year = r.get("year", "")
+        completed = float(r.get("percent_complete", 0))
+        stopped = r.get("stopped", 0)
+
+        activity.append({
+            "username": username,
+            "friendly_name": r.get("friendly_name", username),
+            "user_thumb": r.get("user_thumb", ""),
+            "title": title,
+            "media_type": media_type,
+            "year": year,
+            "thumb": thumb,
+            "percent_complete": round(completed, 1),
+            "watched_at": stopped,
+            "rating_key": rating_key,
+        })
+
+        if len(activity) >= limit:
+            break
+
+    return activity

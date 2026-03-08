@@ -94,3 +94,33 @@ async def update_my_privacy(
     if not result.get("ok"):
         raise HTTPException(400, result.get("error", "Failed"))
     return result
+
+
+@router.get("/friends/activity")
+async def get_friend_activity_feed(
+    limit: int = 30,
+    user: TokenPayload = Depends(get_current_user),
+):
+    """Get recent watch activity from the current user's friends."""
+    from app.services.social import get_friend_activity
+    from app.services.factory import get_stack
+    from app.services.cache import get_cache
+
+    cache = get_cache()
+    cache_key = f"friend_activity:{user.username}"
+    cached = cache.get_generic(cache_key)
+    if cached is not None:
+        return cached
+
+    friend_list = get_friends(user.username)
+    friend_usernames = [f["username"] for f in friend_list]
+
+    if not friend_usernames:
+        return {"activity": [], "friend_count": 0}
+
+    stack = get_stack()
+    activity = await get_friend_activity(stack.tautulli, friend_usernames, limit=limit)
+
+    result = {"activity": activity, "friend_count": len(friend_usernames)}
+    cache.set_generic(cache_key, result, ttl=300)  # 5 min cache
+    return result

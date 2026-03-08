@@ -3,7 +3,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { Users, Sparkles, Loader2, CheckCircle2, Pencil, X, Share2 } from "lucide-react";
-import { api } from "../api.js";
+import { api, authFetch, API_BASE } from "../api.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";
 import MediaCard from "../components/MediaCard.jsx";
 import ShareGroupModal from "../components/ShareGroupModal.jsx";
@@ -33,6 +33,7 @@ function GroupNightPage({ user, allUsers, onCardClick, shareCode, onSubtabChange
   const [error, setError] = useState(null);
   const [meta, setMeta] = useState(null);
   const [nicknames, setNicknames] = useState({});
+  const [friendUsernames, setFriendUsernames] = useState([]);
   const [editingNick, setEditingNick] = useState(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
@@ -43,6 +44,7 @@ function GroupNightPage({ user, allUsers, onCardClick, shareCode, onSubtabChange
   useEffect(() => {
     if (!shareCode && user?.username) {
       api.getNicknames(user.username).then(d => setNicknames(d.nicknames || {})).catch(() => {});
+      authFetch(`${API_BASE}/friends`).then(r => r.json()).then(d => setFriendUsernames((d.friends || []).map(f => f.username))).catch(() => {});
     }
   }, [user?.username, shareCode]);
 
@@ -65,6 +67,11 @@ function GroupNightPage({ user, allUsers, onCardClick, shareCode, onSubtabChange
       prev.includes(username) ? prev.filter(u => u !== username) : [...prev, username]);
   };
 
+  const selectFriends = () => {
+    if (friendUsernames.length === 0) return;
+    const withSelf = user?.username ? [user.username, ...friendUsernames.filter(f => f !== user.username)] : friendUsernames;
+    setSelectedUsers(withSelf);
+  };
   const selectAll = () => setSelectedUsers((allUsers || []).map(u => u.username));
   const selectNone = () => setSelectedUsers(user?.username ? [user.username] : []);
 
@@ -109,6 +116,7 @@ function GroupNightPage({ user, allUsers, onCardClick, shareCode, onSubtabChange
             <span className="group-selector-label">Who's watching?</span>
             <span className="group-selector-count">{selectedUsers.length} selected</span>
             <div className="group-selector-actions">
+              {friendUsernames.length > 0 && <button className="btn-text" onClick={selectFriends}>Friends</button>}
               <button className="btn-text" onClick={selectAll}>All</button>
               <button className="btn-text" onClick={selectNone}>Reset</button>
             </div>

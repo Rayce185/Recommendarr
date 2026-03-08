@@ -62,3 +62,29 @@
 
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ── Friend Activity Feed ─────────────────────────────────────── */
+.friend-activity-list { display: flex; flex-direction: column; }
+.friend-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.04));
+  font-size: 13px;
+}
+.friend-activity-item:last-child { border-bottom: none; }
+.friend-activity-avatar { flex-shrink: 0; }
+.friend-activity-body { flex: 1; min-width: 0; }
+.friend-activity-user { font-weight: 600; color: var(--text); }
+.friend-activity-action { color: var(--text-muted); margin: 0 4px; }
+.friend-activity-title { color: var(--accent); font-weight: 500; }
+.friend-activity-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
