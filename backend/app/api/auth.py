@@ -152,8 +152,10 @@ async def auth_plex(body: PlexAuthRequest, bg: BackgroundTasks):
 
 
 @router.get("/me")
-async def me(user: TokenPayload = Depends(get_current_user)):
+async def me(user: TokenPayload = Depends(get_current_user), bg: BackgroundTasks = BackgroundTasks()):
     """Return the current authenticated user from JWT."""
+    # Warm caches on session restore (fire-and-forget, only if not cached yet)
+    bg.add_task(_warm_user_caches, user.username)
     return {
         "plex_user_id": user.plex_user_id,
         "username": user.username,

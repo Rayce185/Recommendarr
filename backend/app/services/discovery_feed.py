@@ -5,7 +5,6 @@ Three sections per user, cached for 24 hours:
   2. Hidden Gems — high-rated but underwatched library items
   3. Because You Liked [X] — similar to a recent favorite
 """
-
 import logging
 import random
 from datetime import date
@@ -294,10 +293,8 @@ def _to_feed_item(candidate: dict) -> dict:
         "title": candidate.get("title", "Unknown"),
         "year": candidate.get("year"),
         "media_type": candidate.get("media_type", "movie"),
-        "poster_path": candidate.get("poster_path"),
-        "poster_url": img_url(candidate.get("poster_path"), "w342"),
+        "poster_path": candidate.get("poster_path"), "poster_url": img_url(candidate.get("poster_path"), "w342"),
         "vote_average": candidate.get("vote_average"),
         "overview": candidate.get("overview", ""),
-        "genres": candidate.get("genres", []),
-        "in_library": candidate.get("in_library", False),
+        "genres": candidate.get("genres", []), "in_library": candidate.get("in_library", False),
     }
