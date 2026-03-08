@@ -8,6 +8,7 @@ import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplay
 import MediaCard from "../components/MediaCard.jsx";
 import ShareGroupModal from "../components/ShareGroupModal.jsx";
 import SharedGroupView from "../components/SharedGroupView.jsx";
+import PastGroupSessions from "../components/PastGroupSessions.jsx";
 
 function NicknameEditor({ username, nickname, onSave, onCancel }) {
   const [val, setVal] = useState(nickname || "");
@@ -206,6 +207,8 @@ function GroupNightPage({ user, allUsers, onCardClick, shareCode, onSubtabChange
         {!loading && !error && items.length === 0 && meta && (
           <EmptyState icon={Users} title="No group picks found" message="Try selecting different users or changing the content filter." />
         )}
+
+        <PastGroupSessions nicknames={nicknames} onSubtabChange={onSubtabChange} />
       </div>
 
       {showShareModal && (
