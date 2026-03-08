@@ -70,3 +70,28 @@ async def get_server_overview():
         return result
     except Exception as e:
         raise HTTPException(500, f"Failed to get server stats: {e}")
+
+
+# ── Friend Nicknames ─────────────────────────────────────────────
+
+@router.get("/users/{username}/nicknames")
+async def get_nicknames(username: str):
+    """Get user's custom nicknames for other users."""
+    from app.services.user_prefs import UserPrefsService
+    prefs = UserPrefsService()
+    return {"nicknames": prefs.get(username, "friend_nicknames", {})}
+
+
+@router.put("/users/{username}/nicknames")
+async def set_nicknames(username: str, body: dict = {}):
+    """Set user's custom nicknames. Body: {nicknames: {username: nickname}}."""
+    from app.services.user_prefs import UserPrefsService
+    raw = body.get("nicknames", {}) if isinstance(body, dict) else {}
+    # Sanitize: max 50 chars per nickname, max 50 entries
+    clean = {}
+    for k, v in list(raw.items())[:50]:
+        if isinstance(k, str) and isinstance(v, str):
+            clean[k] = v[:50]
+    prefs = UserPrefsService()
+    prefs.set(username, "friend_nicknames", clean)
+    return {"nicknames": clean}

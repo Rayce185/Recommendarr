@@ -201,3 +201,31 @@
   .group-results-header { flex-direction: column; gap: 4px; }
 }
 
+
+/* Nickname editor */
+.group-nickname-editor {
+  display: flex; align-items: center; gap: 4px;
+  flex: 1; min-width: 0;
+}
+.group-nickname-editor input {
+  flex: 1; min-width: 60px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 2px 6px;
+  font-size: 0.8rem;
+}
+.btn-icon-tiny {
+  background: none; border: none; padding: 2px;
+  color: rgba(255,255,255,0.5); cursor: pointer;
+  display: flex; align-items: center;
+}
+.btn-icon-tiny:hover { color: var(--accent); }
+
+.group-nick-badge {
+  margin-left: 4px;
+  color: rgba(255,255,255,0.25);
+  display: inline-flex; align-items: center;
+}
+.group-user-chip:hover .group-nick-badge { color: var(--accent); }

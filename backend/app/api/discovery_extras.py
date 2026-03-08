@@ -205,3 +205,31 @@ async def get_discovery_feed(username: str, refresh: bool = False):
 
     feed = await generate_feed(username)
     return feed
+
+
+# ── World Cinema Pinned Countries ────────────────────────────────
+
+@router.get("/discover/world-cinema/pinned")
+async def get_pinned_countries(
+    username: str = Query(..., description="Username"),
+):
+    """Get user's pinned countries for world cinema map."""
+    from app.services.user_prefs import UserPrefsService
+    prefs = UserPrefsService()
+    pinned = prefs.get(username, "world_cinema_pinned", [])
+    return {"pinned": pinned}
+
+
+@router.put("/discover/world-cinema/pinned")
+async def set_pinned_countries(
+    username: str = Query(..., description="Username"),
+    body: dict = {},
+):
+    """Set user's pinned countries (list of ISO 2-letter codes in body.countries)."""
+    from app.services.user_prefs import UserPrefsService
+    from app.services.world_cinema import COUNTRY_MAP
+    countries = body.get("countries", []) if isinstance(body, dict) else []
+    valid = [c.upper() for c in countries if isinstance(c, str) and c.upper() in COUNTRY_MAP][:10]
+    prefs = UserPrefsService()
+    prefs.set(username, "world_cinema_pinned", valid)
+    return {"pinned": valid}

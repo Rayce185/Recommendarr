@@ -18,6 +18,33 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _both_or_single(stack, media_type, source, **kw):
+    """Fetch both movies+TV when media_type='all', else single type."""
+    if media_type == "all":
+        import asyncio
+        if source == "country":
+            m_coro = stack.tmdb.discover_by_country(kw["region"], "movie", kw.get("page", 1))
+            t_coro = stack.tmdb.discover_by_country(kw["region"], "tv", kw.get("page", 1))
+        elif source == "provider":
+            m_coro = stack.tmdb.discover_by_provider(kw["provider_id"], kw.get("region", "CH"), "movie", kw.get("page", 1))
+            t_coro = stack.tmdb.discover_by_provider(kw["provider_id"], kw.get("region", "CH"), "tv", kw.get("page", 1))
+        else:  # new_releases
+            m_coro = stack.tmdb.discover_new_releases(kw.get("days", 90), "movie", kw.get("page", 1))
+            t_coro = stack.tmdb.discover_new_releases(kw.get("days", 90), "tv", kw.get("page", 1))
+        (m_res, m_pages), (t_res, t_pages) = await asyncio.gather(m_coro, t_coro)
+        # Interleave by popularity
+        combined = sorted(m_res + t_res, key=lambda r: getattr(r, "popularity", 0), reverse=True)
+        return combined[:20], max(m_pages, t_pages)
+    mt = media_type
+    if source == "country":
+        return await stack.tmdb.discover_by_country(kw["region"], mt, kw.get("page", 1))
+    elif source == "provider":
+        return await stack.tmdb.discover_by_provider(kw["provider_id"], kw.get("region", "CH"), mt, kw.get("page", 1))
+    else:
+        return await stack.tmdb.discover_new_releases(kw.get("days", 90), mt, kw.get("page", 1))
+
+
+
 # ── Trending ─────────────────────────────────────────────────────
 
 @router.get("/discover/trending")
@@ -78,16 +105,16 @@ async def get_trending(
                 mt = media_type if media_type != "all" else "all"
                 results, total_pages = await stack.tmdb.get_trending(mt, "week", page)
         elif source == "country":
-            mt = media_type if media_type != "all" else "movie"
-            results, total_pages = await stack.tmdb.discover_by_country(region, mt, page)
+            results, total_pages = await _both_or_single(
+                stack, media_type, "country", region=region, page=page)
         elif source == "provider":
             if not provider_id:
                 raise HTTPException(400, "provider_id required for source=provider")
-            mt = media_type if media_type != "all" else "movie"
-            results, total_pages = await stack.tmdb.discover_by_provider(provider_id, region, mt, page)
+            results, total_pages = await _both_or_single(
+                stack, media_type, "provider", region=region, page=page, provider_id=provider_id)
         elif source == "new_releases":
-            mt = media_type if media_type != "all" else "movie"
-            results, total_pages = await stack.tmdb.discover_new_releases(days, mt, page)
+            results, total_pages = await _both_or_single(
+                stack, media_type, "new_releases", page=page, days=days)
         else:
             results, total_pages = [], 0
 
