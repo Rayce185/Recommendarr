@@ -63,6 +63,7 @@ export default function Recommendarr() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // Escape closes mobile menu
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape" && mobileMenuOpen) setMobileMenuOpen(false); };
@@ -70,7 +71,6 @@ export default function Recommendarr() {
     return () => window.removeEventListener("keydown", handler);
   }, [mobileMenuOpen]);
 
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [appVersion, setAppVersion] = useState("…");
   useEffect(() => {
     api("/api/v1/health").then(d => d?.version && setAppVersion(d.version)).catch(() => {});
