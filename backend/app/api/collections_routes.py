@@ -117,18 +117,30 @@ async def get_collection_for_movie(
 
     Returns collection info with per-part watched/library status.
     Returns 204 (no content) if the movie is not part of a collection.
+    Uses generic cache (5 min TTL) to avoid repeated Radarr/Tautulli calls.
     """
+    cache = get_cache()
+    cache_key = f"collfor:{user.username}:{tmdb_id}"
+    cached = cache.get_generic(cache_key)
+    if cached is not None:
+        if cached == "__none__":
+            from fastapi.responses import Response
+            return Response(status_code=204)
+        return cached
+
     stack = get_stack()
     if not stack.tmdb:
         raise HTTPException(503, "TMDB not configured")
 
     coll_info = await stack.tmdb.get_movie_collection_id(tmdb_id)
     if not coll_info:
+        cache.set_generic(cache_key, "__none__", ttl=300)
         from fastapi.responses import Response
         return Response(status_code=204)
 
     coll = await stack.tmdb.get_collection(coll_info["id"])
     if not coll:
+        cache.set_generic(cache_key, "__none__", ttl=300)
         from fastapi.responses import Response
         return Response(status_code=204)
 
@@ -171,7 +183,7 @@ async def get_collection_for_movie(
     total = len(parts)
     poster_url = f"https://image.tmdb.org/t/p/w342{coll['poster_path']}" if coll.get("poster_path") else None
 
-    return {
+    result = {
         "collection_id": coll["collection_id"],
         "name": coll["name"],
         "poster_url": poster_url,
@@ -183,3 +195,5 @@ async def get_collection_for_movie(
         "parts": parts,
         "missing": missing,
     }
+    cache.set_generic(cache_key, result, ttl=300)
+    return result
