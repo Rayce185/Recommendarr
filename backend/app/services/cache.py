@@ -8,6 +8,9 @@ Caches:
 
 import logging
 import time
+
+# Module-level TTL constants for cross-module use
+DATA_LAYER_TTL = 1800  # 30 min — Radarr library IDs, watched sets, collection results
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
