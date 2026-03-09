@@ -148,6 +148,12 @@ class RecommendationCache:
         )
         logger.debug(f"Cache SET generic:{key} (TTL={ttl or self.GENERIC_TTL}s)")
 
+    def delete_generic(self, key: str):
+        """Delete a single generic cache entry by exact key."""
+        if key in self._generic:
+            del self._generic[key]
+            logger.debug(f"Cache DELETE generic:{key}")
+
     def invalidate_generic(self, prefix: str = ""):
         """Invalidate generic cache entries, optionally filtered by key prefix."""
         if prefix:
