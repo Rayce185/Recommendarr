@@ -114,6 +114,23 @@ async def _warm_profiles():
         except Exception as e:
             logger.debug(f"Library warming skipped: {e}")
 
+        # Pre-warm data-layer caches (Radarr library IDs + per-user watched IDs)
+        # Eliminates ~20s cold-start on collection-for-movie endpoint
+        try:
+            _start = time.monotonic()
+            movies = await s.radarr.get_all_movies()
+            library_ids = [m.tmdb_id for m in movies if m.tmdb_id]
+            cache.set_generic("_radarr_library_ids", library_ids, ttl=300)
+            from app.services.factory import resolve_user_id as _resolve_uid
+            for username in active:
+                uid = _resolve_uid(username)
+                history = await s.tautulli.get_history(user_id=None, limit=10000)
+                watched = [e.tmdb_id for e in history if e.user_id == uid and e.media_type == "movie" and e.tmdb_id]
+                cache.set_generic(f"_watched_ids:{username}", watched, ttl=300)
+            logger.info(f"Data-layer cache warmed: {len(library_ids)} library IDs, {len(active)} users ({time.monotonic()-_start:.1f}s)")
+        except Exception as e:
+            logger.debug(f"Data-layer warming skipped: {e}")
+
         # Enrich TVDB poster URLs with TMDB paths
         try:
             candidates = cache.get_library("all") or []
