@@ -90,6 +90,8 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange, user
   }, [subtab, providerRegion]);
 
   const load = useCallback(() => {
+    // Guard: skip load if streaming tab without a provider yet
+    if (subtab === "streaming" && !providerId) return;
     setLoading(true);
     setError(null);
 

@@ -40,7 +40,7 @@ const api = {
   },
   lazyExplain: (u, mode) => authFetch(`${API_BASE}/recommend/${u}/explain?mode=${mode}`, { method: "POST" }).then(r => r.json()),
   moodPresets: () => authFetch(`${API_BASE}/mood/presets`).then(r => r.json()),
-  moodParse: (q) => authFetch(`${API_BASE}/mood/parse?q=${encodeURIComponent(q)}`).then(r => r.json()),
+  moodParse: (q) => authFetch(`${API_BASE}/mood/parse?text=${encodeURIComponent(q)}`).then(r => r.json()),
   detail: (id, mediaType = "movie") => authFetch(`${API_BASE}/detail/${id}?media_type=${mediaType}`).then(r => r.json()),
   filterOptions: () => authFetch(`${API_BASE}/filters/options`).then(r => r.json()),
   watchlistAdd: (tmdbId, mediaType) => authFetch(`${API_BASE}/watchlist/add/${tmdbId}?media_type=${mediaType}`, { method: "POST" }).then(r => r.json()),
