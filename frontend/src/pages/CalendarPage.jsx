@@ -23,8 +23,8 @@ function getMonthGrid(year, month) {
 
 function DayCell({ cell, dateKey, items, isToday, isSelected, onClick }) {
   const dayItems = items || [];
-  const show = dayItems.slice(0, 3);
-  const extra = dayItems.length - 3;
+  const show = dayItems.slice(0, 4);
+  const extra = dayItems.length - 4;
   return (
     <div className={`cal-day ${cell.current ? "" : "cal-day-dim"} ${isToday ? "cal-day-today" : ""} ${isSelected ? "cal-day-selected" : ""} ${dayItems.length > 0 ? "cal-day-has-items" : ""}`}
       onClick={() => dayItems.length > 0 && onClick?.(dateKey)}>
@@ -32,7 +32,7 @@ function DayCell({ cell, dateKey, items, isToday, isSelected, onClick }) {
       {show.length > 0 && (
         <div className="cal-day-posters">
           {show.map((item, i) => (
-            <div key={i} className="cal-day-thumb" title={item.title}>
+            <div key={i} className="cal-day-thumb" data-tooltip={item.title}>
               {item.poster ? <img src={item.poster} alt="" /> : <div className="cal-thumb-empty">{item.media_type === "movie" ? "M" : "T"}</div>}
               {item.monitored && <div className="cal-thumb-dot" />}
             </div>
