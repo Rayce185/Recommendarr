@@ -144,13 +144,22 @@ async def get_collection_for_movie(
         from fastapi.responses import Response
         return Response(status_code=204)
 
-    # Cross-reference with library + watch status
-    movies = await stack.radarr.get_all_movies()
-    library_tmdb = {m.tmdb_id for m in movies if m.tmdb_id}
+    # Cross-reference with library + watch status (shared cached sets — 5min TTL)
+    library_tmdb = cache.get_generic("_radarr_library_ids")
+    if library_tmdb is None:
+        movies = await stack.radarr.get_all_movies()
+        library_tmdb = [m.tmdb_id for m in movies if m.tmdb_id]
+        cache.set_generic("_radarr_library_ids", library_tmdb, ttl=300)
+    library_tmdb = set(library_tmdb)
 
     uid = resolve_user_id(user.username)
-    history = await stack.tautulli.get_history(user_id=None, limit=10000)
-    user_watched = {e.tmdb_id for e in history if e.user_id == uid and e.media_type == "movie" and e.tmdb_id}
+    watched_key = f"_watched_ids:{user.username}"
+    user_watched = cache.get_generic(watched_key)
+    if user_watched is None:
+        history = await stack.tautulli.get_history(user_id=None, limit=10000)
+        user_watched = [e.tmdb_id for e in history if e.user_id == uid and e.media_type == "movie" and e.tmdb_id]
+        cache.set_generic(watched_key, user_watched, ttl=300)
+    user_watched = set(user_watched)
 
     parts = []
     watched_count = 0
