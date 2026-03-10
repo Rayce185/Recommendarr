@@ -1,8 +1,8 @@
 /* PastGroupSessions — List past shared group night sessions
  * Copyright (c) 2026 VAASSEN GmbH / Ray Vaassen
  */
-import { useState, useEffect } from "react";
-import { Clock, Share2, Users, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { useState } from "react";
+import { Clock, Users, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { api } from "../api.js";
 
 function timeAgo(isoStr) {

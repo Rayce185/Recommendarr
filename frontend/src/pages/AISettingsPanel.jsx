@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, Save, CheckCircle2, XCircle, Sparkles, Eye, EyeOff, RefreshCw, Trash2, ChevronDown, Zap, AlertCircle } from "lucide-react";
+import { Loader2, Save, CheckCircle2, XCircle, Sparkles, Eye, EyeOff, RefreshCw, ChevronDown, Zap, AlertCircle } from "lucide-react";
 import { api } from "../api.js";
 
 function AISettingsPanel() {

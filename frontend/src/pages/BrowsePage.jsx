@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Film, Tv, Loader2, Star, X, Eye, Library } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Search, Loader2, Star, X, Eye, Library } from "lucide-react";
 import { api } from "../api.js";
 import Skeleton from "../components/Skeleton.jsx";
 import { posterUrl } from "../utils.js";

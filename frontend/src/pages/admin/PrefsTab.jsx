@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Monitor, RefreshCw, Globe, CheckCircle2, Loader2, Clock, Sparkles } from "lucide-react";
 import { api } from "../../api.js";
 

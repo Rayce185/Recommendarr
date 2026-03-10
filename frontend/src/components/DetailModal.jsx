@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useModalA11y } from "../hooks/useModalA11y.js";
 import { X, Star, Clock, Play, Download, ExternalLink, ThumbsUp, ThumbsDown, Bookmark,
   CheckCircle2, XCircle, Film, Layers, ChevronDown, Loader2, Eye, Heart, MapPin, Sparkles } from "lucide-react";

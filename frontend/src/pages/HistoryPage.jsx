@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { History, Film, Tv, Clock, ThumbsUp, EyeOff, ChevronLeft, ChevronRight, Filter } from "lucide-react";
+import { History, Film, Tv, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../api.js";
 import { posterUrl, scorePercent, scoreColor } from "../utils.js";
 import { LoadingState, EmptyState, ErrorState } from "../components/StateDisplays.jsx";

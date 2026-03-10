@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { CheckCircle2, XCircle, AlertCircle, X, Activity } from "lucide-react";
+import { CheckCircle2, XCircle, Activity } from "lucide-react";
 
 function useToast() {
   const [toasts, setToasts] = useState([]);

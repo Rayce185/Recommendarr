@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Users, TrendingUp, Heart, Loader2, UserPlus } from "lucide-react";
+import { Users, TrendingUp, Heart, UserPlus } from "lucide-react";
 import { authFetch, API_BASE } from "../api.js";
 import { LoadingState, ErrorState } from "../components/StateDisplays.jsx";
 import FriendsPanel from "../components/FriendsPanel.jsx";

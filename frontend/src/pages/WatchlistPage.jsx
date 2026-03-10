@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Bookmark, Loader2, Film, Tv, ChevronDown, RefreshCw, Play, CheckCircle2, Monitor, XCircle, Eye } from "lucide-react";
+import { Bookmark, Loader2, Film, RefreshCw, Play, CheckCircle2, Monitor, XCircle, Eye } from "lucide-react";
 import { api } from "../api.js";
 import Skeleton from "../components/Skeleton.jsx";
 import { posterUrl } from "../utils.js";
