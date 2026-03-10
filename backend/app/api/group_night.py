@@ -110,6 +110,18 @@ async def create_session(
         db.commit()
         db.refresh(session)
         logger.info(f"Group night session created: {code} by {username}")
+
+        # Push notification to invited participants — best-effort
+        try:
+            from app.services.push_triggers import notify_group_night_invite
+            import asyncio
+            asyncio.ensure_future(notify_group_night_invite(
+                creator=username, participants=body.participants,
+                code=code, title=body.title,
+            ))
+        except Exception:
+            pass
+
         return {"code": code, "url": f"/group-night/{code}"}
 
 

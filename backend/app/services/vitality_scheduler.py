@@ -261,6 +261,13 @@ async def recalculate_vitality(force: bool = False) -> dict:
             scored, zone_counts, transitions,
         )
 
+        # Push notification for new sunset items — best-effort
+        try:
+            from app.services.push_triggers import notify_sunset_votes_needed
+            await notify_sunset_votes_needed(transitions)
+        except Exception:
+            pass
+
         return {
             "items_scored": scored,
             "zones": zone_counts,
