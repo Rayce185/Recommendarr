@@ -77,6 +77,8 @@ from app.api import group_night
 from app.api import admin_users
 from app.api import series_progress
 from app.api import friends
+from app.api import library_health
+from app.api import library_health_admin
 
 app.include_router(health.router,                prefix="/api/v1", tags=["system"])
 app.include_router(users.router,                 prefix="/api/v1", tags=["users"])
@@ -111,6 +113,8 @@ app.include_router(webhooks.router,          prefix="/api/v1", tags=["webhooks"]
 app.include_router(group_night.router,       prefix="/api/v1", tags=["group-night"])
 app.include_router(admin_users.router,       prefix="/api/v1", tags=["admin"])
 app.include_router(series_progress.router, prefix="/api/v1", tags=["users"])
+app.include_router(library_health.router,    prefix="/api/v1", tags=["library-health"])
+app.include_router(library_health_admin.router, prefix="/api/v1", tags=["library-health"])
 
 # ── Static files (frontend) ──────────────────────────────────────
 

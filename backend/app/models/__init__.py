@@ -36,3 +36,7 @@ from app.models.admin import (  # noqa: F401
     AppSetting, UserPreference, RoutingRule, RequestLog, AiSetting,
     RefreshSchedule,
 )
+
+from app.models.library_health import (  # noqa: F401
+    VitalityScore, SunsetItem, SunsetVote, KickedItem,
+)
