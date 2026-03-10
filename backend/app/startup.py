@@ -22,14 +22,16 @@ logger = logging.getLogger("recommendarr")
 async def _probe_services(stack) -> dict[str, bool]:
     """Probe all upstream services and return status map."""
     probes = {}
-    for name, client in [
-        ("tautulli", stack.tautulli),
-        ("seerr", stack.seerr),
-        ("radarr", stack.radarr),
-        ("sonarr_tv", stack.sonarr_tv),
-        ("sonarr_anime", stack.sonarr_anime),
-    ]:
+    service_getters = [
+        ("tautulli", lambda: stack.tautulli),
+        ("seerr", lambda: stack.seerr),
+        ("radarr", lambda: stack.radarr),
+        ("sonarr_tv", lambda: stack.sonarr_tv),
+        ("sonarr_anime", lambda: stack.sonarr_anime),
+    ]
+    for name, getter in service_getters:
         try:
+            client = getter()
             probes[name] = await client.test_connection()
         except Exception:
             probes[name] = False
@@ -50,11 +52,12 @@ async def _init_plex(stack, probes: dict):
                 if not stack.plex.machine_id:
                     await stack.plex.init()
                 tvdb_to_tmdb: dict[int, int] = {}
-                for sonarr_name, sonarr_client in [
-                    ("sonarr_tv", stack.sonarr_tv),
-                    ("sonarr_anime", stack.sonarr_anime),
+                for sonarr_name, sonarr_getter in [
+                    ("sonarr_tv", lambda: stack.sonarr_tv),
+                    ("sonarr_anime", lambda: stack.sonarr_anime),
                 ]:
                     try:
+                        sonarr_client = sonarr_getter()
                         all_series = await sonarr_client.get_all_series()
                         for s in all_series:
                             if s.tvdb_id and s.tmdb_id:

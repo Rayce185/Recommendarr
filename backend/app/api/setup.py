@@ -32,13 +32,14 @@ async def setup_status():
 
     # 2. Integrations configured — key services reachable?
     integrations = {}
-    for name, client in [
-        ("tautulli", stack.tautulli),
-        ("radarr", stack.radarr),
-        ("sonarr_tv", stack.sonarr_tv),
-        ("seerr", stack.seerr),
+    for name, getter in [
+        ("tautulli", lambda: stack.tautulli),
+        ("radarr", lambda: stack.radarr),
+        ("sonarr_tv", lambda: stack.sonarr_tv),
+        ("seerr", lambda: stack.seerr),
     ]:
         try:
+            client = getter()
             integrations[name] = await client.test_connection()
         except Exception:
             integrations[name] = False

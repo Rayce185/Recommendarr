@@ -26,13 +26,21 @@ async def health_check():
     """Service health — probes all upstream APIs with latency."""
     stack = get_stack()
 
-    probes = [
-        ("tautulli", stack.tautulli),
-        ("seerr", stack.seerr),
-        ("radarr", stack.radarr),
-        ("sonarr_tv", stack.sonarr_tv),
-        ("sonarr_anime", stack.sonarr_anime),
+    service_getters = [
+        ("tautulli", lambda: stack.tautulli),
+        ("seerr", lambda: stack.seerr),
+        ("radarr", lambda: stack.radarr),
+        ("sonarr_tv", lambda: stack.sonarr_tv),
+        ("sonarr_anime", lambda: stack.sonarr_anime),
     ]
+
+    # Resolve clients safely (some may not be configured)
+    probes = []
+    for name, getter in service_getters:
+        try:
+            probes.append((name, getter()))
+        except Exception:
+            pass  # skip unconfigured services
 
     # Probe Plex if configured
     if stack.plex:

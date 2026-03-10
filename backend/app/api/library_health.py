@@ -13,6 +13,7 @@ from sqlalchemy import select
 
 from app.auth.jwt_handler import TokenPayload, get_current_user
 from app.database import get_db
+from app.models.core import User
 from app.models.library_health import VitalityScore, SunsetItem, SunsetVote
 
 logger = logging.getLogger(__name__)
@@ -119,8 +120,13 @@ async def get_sunset_items(user: TokenPayload = Depends(get_current_user)):
             ).scalars().all()
             for v in vscores:
                 vitality_map[(v.tmdb_id, v.media_type)] = v
+            # Resolve plex_user_id to internal user.id for FK match
+            user_row = db.execute(
+                select(User).where(User.plex_user_id == user.plex_user_id)
+            ).scalar_one_or_none()
+            internal_user_id = user_row.id if user_row else -1
             user_votes = db.execute(
-                select(SunsetVote).where(SunsetVote.user_id == user.plex_user_id)
+                select(SunsetVote).where(SunsetVote.user_id == internal_user_id)
             ).scalars().all()
             for uv in user_votes:
                 vote_map[(uv.tmdb_id, uv.media_type)] = uv.vote

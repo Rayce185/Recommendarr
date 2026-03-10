@@ -12,6 +12,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.core import User
 from app.models.library_health import VitalityScore, SunsetItem, SunsetVote
 from app.services.vitality_scoring import DEFAULT_THRESHOLDS
 
@@ -161,7 +162,7 @@ def _resolve_votes(db: Session, item: SunsetItem, thresholds: dict) -> str:
 
 
 def cast_vote(
-    tmdb_id: int, media_type: str, user_id: int, vote: str,
+    tmdb_id: int, media_type: str, plex_user_id: int, vote: str,
 ) -> dict:
     """Cast or update a user's vote on a sunset item.
 
@@ -172,6 +173,14 @@ def cast_vote(
 
     db = get_db()
     try:
+        # Resolve plex_user_id to internal user.id (FK target)
+        user_row = db.execute(
+            select(User).where(User.plex_user_id == plex_user_id)
+        ).scalar_one_or_none()
+        if not user_row:
+            raise ValueError("User not found")
+        user_id = user_row.id
+
         # Verify item is in voting state
         item = db.execute(
             select(SunsetItem).where(
