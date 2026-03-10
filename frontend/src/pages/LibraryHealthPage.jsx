@@ -35,7 +35,7 @@ function LibraryHealthPage({ subtab: initialSubtab, onSubtabChange, user }) {
   const tabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
     { id: "sunset", label: "Sunset Zone", icon: Sunset, badge: stats?.zones?.sunset },
-    { id: "graveyard", label: "Graveyard", icon: Skull, badge: stats?.zones?.dead },
+    { id: "graveyard", label: "Graveyard", icon: Skull, badge: stats?.items_kicked },
     ...(isAdmin ? [{ id: "admin", label: "Admin", icon: Shield }] : []),
   ];
 
@@ -62,7 +62,7 @@ function LibraryHealthPage({ subtab: initialSubtab, onSubtabChange, user }) {
     <>
       <div className="page-header">
         <h2><HeartPulse size={20} /> Library Health</h2>
-        <p>{stats?.total_items || 0} items tracked &middot; Vitality scoring {stats?.scoring_active ? "active" : "pending"}</p>
+        <p>{stats?.total_items || 0} items tracked &middot; {stats?.scored_items || 0} scored &middot; avg vitality {stats?.avg_score ?? "—"}</p>
       </div>
       <div className="page-body">
         <div className="settings-tabs">
