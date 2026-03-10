@@ -47,6 +47,14 @@ def process_zone_transitions(
         ).scalars().all()
     }
 
+    # ALL sunset items regardless of status — prevents duplicate inserts
+    all_sunset_keys = {
+        (r.tmdb_id, r.media_type)
+        for r in db.execute(
+            select(SunsetItem.tmdb_id, SunsetItem.media_type)
+        ).all()
+    }
+
     for vs in scores:
         key = (vs.tmdb_id, vs.media_type)
         existing = active_sunsets.get(key)
@@ -63,7 +71,7 @@ def process_zone_transitions(
                 logger.info("Reprieved (recovered): %s [%s]", vs.title, vs.tmdb_id)
 
         elif vs.zone == "sunset":
-            if not existing:
+            if not existing and key not in all_sunset_keys:
                 # Check immunity
                 prev = db.execute(
                     select(SunsetItem).where(
@@ -97,7 +105,7 @@ def process_zone_transitions(
                 summary["auto_dead"] += 1
                 logger.info("Auto-approved (dead zone): %s [%s] score=%.1f",
                             vs.title, vs.tmdb_id, vs.composite_score)
-            elif not existing:
+            elif not existing and key not in all_sunset_keys:
                 # Dead item not yet in pipeline — fast-track
                 sunset = SunsetItem(
                     tmdb_id=vs.tmdb_id, media_type=vs.media_type,
