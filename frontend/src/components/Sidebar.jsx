@@ -9,7 +9,7 @@ function Sidebar({
   handlePlexLogin, handleLogout,
   viewAsUser, setViewAsUser, allUsers,
   refreshing, refreshProgress, lastRefreshAt, refreshEstimateMs, handleRefresh,
-  appVersion,
+  appVersion, navBadges = {},
 }) {
   let currentSection = "";
 
@@ -73,6 +73,7 @@ function Sidebar({
                 >
                   <item.icon size={17} />
                   {item.label}
+                  {navBadges[item.id] > 0 && <span className="nav-badge">{navBadges[item.id]}</span>}
                 </div>
               </div>
             );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { Film, Loader2, LogIn, Eye } from "lucide-react";
 import { api } from "./api.js";
 import "./styles/index.css";
@@ -63,6 +63,7 @@ export default function Recommendarr() {
   }, []);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [navBadges, setNavBadges] = useState({});
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape" && mobileMenuOpen) setMobileMenuOpen(false); };
     window.addEventListener("keydown", handler);
@@ -124,11 +125,25 @@ export default function Recommendarr() {
     }
   };
 
+  // Sidebar badge: fetch sunset count for Library Health nav item
+  useEffect(() => {
+    if (!authUser) { setNavBadges({}); return; }
+    const fetchBadges = () => {
+      api.healthStats().then(s => {
+        const sunset = s?.zones?.sunset || 0;
+        setNavBadges(prev => sunset !== prev["library-health"] ? { ...prev, "library-health": sunset } : prev);
+      }).catch(() => {});
+    };
+    fetchBadges();
+    const iv = setInterval(fetchBadges, 120000); // refresh every 2min
+    return () => clearInterval(iv);
+  }, [authUser]);
+
   return (
     <>
       <div className="app-layout">
         <Sidebar
-          view={view} setView={setView}
+          view={view} setView={setView} navBadges={navBadges}
           mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen}
           authUser={authUser} authLoading={authLoading} loginLoading={loginLoading}
           handlePlexLogin={handlePlexLogin} handleLogout={handleLogout}
