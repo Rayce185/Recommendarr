@@ -158,7 +158,7 @@ async def check_availability(
 
 @router.get("/config")
 async def get_health_config(admin: TokenPayload = Depends(_require_admin)):
-    """Current Kick-Vote configuration."""
+    """Current Kick-Vote configuration (flat keys for frontend)."""
     from app.services.vitality_scoring import DEFAULT_WEIGHTS, DEFAULT_THRESHOLDS
     from app.models.admin import AppSetting
     db = get_db()
@@ -168,8 +168,23 @@ async def get_health_config(admin: TokenPayload = Depends(_require_admin)):
         ).scalar_one_or_none()
         if row and row.value:
             cfg = json.loads(row.value) if isinstance(row.value, str) else row.value
-            return cfg
-        return {"weights": DEFAULT_WEIGHTS, "thresholds": DEFAULT_THRESHOLDS}
+        else:
+            cfg = {"weights": DEFAULT_WEIGHTS, "thresholds": DEFAULT_THRESHOLDS}
+
+        # Flatten nested → flat keys for frontend compatibility
+        w = cfg.get("weights", DEFAULT_WEIGHTS)
+        t = cfg.get("thresholds", DEFAULT_THRESHOLDS)
+        return {
+            "weight_recency": w.get("recency", 0.3),
+            "weight_velocity": w.get("velocity", 0.25),
+            "weight_breadth": w.get("breadth", 0.2),
+            "weight_rec_freq": w.get("rec_frequency", 0.1),
+            "weight_niche": w.get("niche", 0.15),
+            "threshold_healthy": t.get("healthy_min", 40),
+            "threshold_dead": t.get("sunset_min", 15),
+            "grace_period_days": t.get("grace_period_days", 7),
+            "vote_quorum": t.get("vote_quorum", 3),
+        }
     finally:
         db.close()
 
@@ -178,17 +193,36 @@ async def get_health_config(admin: TokenPayload = Depends(_require_admin)):
 async def update_health_config(
     config: dict, admin: TokenPayload = Depends(_require_admin),
 ):
-    """Update Kick-Vote configuration (weights + thresholds)."""
+    """Update Kick-Vote configuration (flat keys → nested storage)."""
     from app.models.admin import AppSetting
+    # Convert flat frontend keys to nested storage format
+    nested = {
+        "weights": {
+            "recency": config.get("weight_recency", 0.3),
+            "velocity": config.get("weight_velocity", 0.25),
+            "breadth": config.get("weight_breadth", 0.2),
+            "rec_frequency": config.get("weight_rec_freq", 0.1),
+            "niche": config.get("weight_niche", 0.15),
+        },
+        "thresholds": {
+            "healthy_min": config.get("threshold_healthy", 40),
+            "sunset_min": config.get("threshold_dead", 15),
+            "grace_period_days": config.get("grace_period_days", 7),
+            "vote_kick_pct": 0.6,
+            "vote_quorum": config.get("vote_quorum", 3),
+            "reprieve_immunity_days": 30,
+            "active_user_days": 90,
+        },
+    }
     db = get_db()
     try:
         row = db.execute(
             select(AppSetting).where(AppSetting.key == "kick_vote_config")
         ).scalar_one_or_none()
         if row:
-            row.value = json.dumps(config)
+            row.value = json.dumps(nested)
         else:
-            db.add(AppSetting(key="kick_vote_config", value=json.dumps(config)))
+            db.add(AppSetting(key="kick_vote_config", value=json.dumps(nested)))
         db.commit()
         return {"status": "updated"}
     except Exception:
@@ -203,11 +237,11 @@ async def update_health_config(
 def _kicked_to_dict(k: KickedItem) -> dict:
     return {
         "id": k.id, "tmdb_id": k.tmdb_id, "media_type": k.media_type,
-        "title": k.title, "poster_path": k.poster_path,
+        "title": k.title, "poster_url": k.poster_path,
         "year": k.year, "genres": k.genres, "overview": k.overview,
         "vitality_at_kick": round(k.vitality_at_kick, 1) if k.vitality_at_kick else None,
         "kicked_at": k.kicked_at.isoformat() if k.kicked_at else None,
         "kicked_by": k.kicked_by,
-        "redownload_eta_tier": k.redownload_eta_tier,
+        "redownload_eta": k.redownload_eta_tier,
         "servarr_type": k.servarr_type,
     }

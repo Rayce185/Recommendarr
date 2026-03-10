@@ -108,7 +108,32 @@ async def get_sunset_items(user: TokenPayload = Depends(get_current_user)):
             .where(SunsetItem.status == "voting")
             .order_by(SunsetItem.grace_expires_at.asc())
         ).scalars().all()
-        return {"items": [sunset_to_dict(r) for r in rows], "count": len(rows)}
+
+        # Batch-fetch vitality + user votes for sunset items only
+        tmdb_ids = [r.tmdb_id for r in rows]
+        vitality_map, vote_map = {}, {}
+        if tmdb_ids:
+            from sqlalchemy import or_, and_, tuple_
+            vscores = db.execute(
+                select(VitalityScore).where(VitalityScore.tmdb_id.in_(tmdb_ids))
+            ).scalars().all()
+            for v in vscores:
+                vitality_map[(v.tmdb_id, v.media_type)] = v
+            user_votes = db.execute(
+                select(SunsetVote).where(SunsetVote.user_id == user.plex_user_id)
+            ).scalars().all()
+            for uv in user_votes:
+                vote_map[(uv.tmdb_id, uv.media_type)] = uv.vote
+
+        items = []
+        for r in rows:
+            key = (r.tmdb_id, r.media_type)
+            items.append(sunset_to_dict(
+                r,
+                vitality=vitality_map.get(key),
+                user_vote=vote_map.get(key),
+            ))
+        return {"items": items, "count": len(items)}
     finally:
         db.close()
 
@@ -172,7 +197,7 @@ async def get_vote_tally(
 
 @router.get("/stats")
 async def get_health_stats(user: TokenPayload = Depends(get_current_user)):
-    """Dashboard summary: zone counts, kicked count, etc."""
+    """Dashboard summary: zone counts, scores, distribution."""
     from sqlalchemy import func as sqlfunc
     from app.models.library_health import KickedItem
     db = get_db()
@@ -182,6 +207,34 @@ async def get_health_stats(user: TokenPayload = Depends(get_current_user)):
             .group_by(VitalityScore.zone)
         ).all()
         zone_counts = {r[0]: r[1] for r in zones}
+        for z in ("healthy", "sunset", "dead"):
+            zone_counts.setdefault(z, 0)
+
+        total = sum(zone_counts.values())
+
+        agg = db.execute(
+            select(
+                sqlfunc.count(VitalityScore.id),
+                sqlfunc.avg(VitalityScore.composite_score),
+                sqlfunc.max(VitalityScore.calculated_at),
+            )
+        ).one()
+        scored_items = agg[0] or 0
+        avg_score = round(float(agg[1]), 1) if agg[1] is not None else None
+        last_scored_at = agg[2].isoformat() if agg[2] else None
+
+        distribution = []
+        for lo in range(0, 100, 10):
+            hi = lo + 10
+            cnt = db.execute(
+                select(sqlfunc.count(VitalityScore.id)).where(
+                    VitalityScore.composite_score >= lo,
+                    VitalityScore.composite_score < (hi if hi < 100 else 101),
+                )
+            ).scalar() or 0
+            distribution.append({
+                "range": f"{lo}-{hi}", "count": cnt, "min_score": lo,
+            })
 
         kicked_count = db.execute(
             select(sqlfunc.count(KickedItem.id))
@@ -200,7 +253,11 @@ async def get_health_stats(user: TokenPayload = Depends(get_current_user)):
 
         return {
             "zones": zone_counts,
-            "total_items": sum(zone_counts.values()),
+            "total_items": total,
+            "scored_items": scored_items,
+            "avg_score": avg_score,
+            "last_scored_at": last_scored_at,
+            "score_distribution": distribution,
             "items_voting": voting_count,
             "items_pending_admin": pending_count,
             "items_kicked": kicked_count,
@@ -214,7 +271,7 @@ async def get_health_stats(user: TokenPayload = Depends(get_current_user)):
 def vitality_to_dict(v: VitalityScore) -> dict:
     return {
         "tmdb_id": v.tmdb_id, "media_type": v.media_type,
-        "title": v.title, "poster_path": v.poster_path,
+        "title": v.title, "poster_url": v.poster_path,
         "composite_score": round(v.composite_score, 1),
         "signals": {
             "recency": round(v.recency_score, 1),
@@ -228,12 +285,24 @@ def vitality_to_dict(v: VitalityScore) -> dict:
     }
 
 
-def sunset_to_dict(s: SunsetItem) -> dict:
-    return {
+def sunset_to_dict(s: SunsetItem, vitality: "VitalityScore | None" = None,
+                   user_vote: str | None = None) -> dict:
+    d = {
         "tmdb_id": s.tmdb_id, "media_type": s.media_type,
-        "title": s.title, "poster_path": s.poster_path,
-        "status": s.status, "votes_keep": s.votes_keep, "votes_kick": s.votes_kick,
+        "title": s.title, "poster_url": s.poster_path,
+        "status": s.status, "keep_votes": s.votes_keep, "kick_votes": s.votes_kick,
         "entered_sunset_at": s.entered_sunset_at.isoformat() if s.entered_sunset_at else None,
         "grace_expires_at": s.grace_expires_at.isoformat() if s.grace_expires_at else None,
         "kick_method": s.kick_method,
+        "user_vote": user_vote,
     }
+    if vitality:
+        d["vitality_score"] = round(vitality.composite_score, 1)
+        d["signals"] = {
+            "recency": round(vitality.recency_score, 1),
+            "velocity": round(vitality.velocity_score, 1),
+            "breadth": round(vitality.breadth_score, 1),
+            "rec_frequency": round(vitality.rec_frequency_score, 1),
+            "niche": round(vitality.niche_score, 1),
+        }
+    return d
