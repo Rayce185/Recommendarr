@@ -1,6 +1,6 @@
 """AI Integration API — configure and test LLM/embedding providers."""
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
@@ -10,6 +10,7 @@ from app.services.ai_config import (
 )
 from app.services.ai_client import test_llm_connection, list_models
 from app.auth.jwt_handler import TokenPayload, get_current_user
+from app.middleware.rate_limit import limiter, AI_RATE
 
 
 def require_admin(user: TokenPayload = Depends(get_current_user)) -> TokenPayload:
@@ -84,7 +85,9 @@ class TestConnectionRequest(BaseModel):
 
 
 @router.post("/test")
+@limiter.limit(AI_RATE)
 async def test_ai_connection(
+    request: Request,
     body: TestConnectionRequest,
     admin: TokenPayload = Depends(require_admin),
 ):
@@ -100,7 +103,9 @@ async def test_ai_connection(
 
 
 @router.post("/models")
+@limiter.limit(AI_RATE)
 async def get_available_models(
+    request: Request,
     body: TestConnectionRequest,
     admin: TokenPayload = Depends(require_admin),
 ):

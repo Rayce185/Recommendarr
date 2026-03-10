@@ -15,21 +15,17 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.startup import lifespan
 
-# ── Logging ──────────────────────────────────────────────────────
+# ── Structured Logging (D2) ───────────────────────────────────────
 
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
+from app.middleware.logging_config import setup_logging, RequestIDMiddleware
+
+setup_logging(settings.log_level)
 
 # ── App ──────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="Recommendarr",
-    version="1.0.0",
+    version="1.1.0-dev",
     description="Personal media recommendation engine — SQLite + TMDB + ChromaDB RAG",
     lifespan=lifespan,
     docs_url="/api/docs" if settings.debug else None,
@@ -51,6 +47,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Rate Limiting (D1) ───────────────────────────────────────────
+
+from app.middleware.rate_limit import setup_rate_limiting
+
+setup_rate_limiting(app)
+
+# ── Request ID Middleware (D2) ────────────────────────────────────
+
+app.add_middleware(RequestIDMiddleware)
 
 # ── Mount API routers ────────────────────────────────────────────
 
