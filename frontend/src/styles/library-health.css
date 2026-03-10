@@ -1,0 +1,153 @@
+/* Library Health — Kick-Vote UI */
+
+/* Tab badges */
+.lh-tab-badge {
+  font-size: 10px; font-weight: 700; padding: 1px 6px;
+  border-radius: 8px; background: var(--accent); color: #fff; margin-left: 4px;
+}
+
+/* Zone bar */
+.lh-zone-bar {
+  display: flex; height: 8px; border-radius: 4px; overflow: hidden;
+  background: var(--surface); margin-bottom: 20px;
+}
+.lh-zone-seg { transition: width 0.4s ease; }
+.lh-zone-seg.healthy { background: var(--green); }
+.lh-zone-seg.sunset { background: #f59e0b; }
+.lh-zone-seg.dead { background: var(--red); }
+
+/* Stat values */
+.lh-stat-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.lh-stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.healthy-text { color: var(--green); }
+.sunset-text { color: #f59e0b; }
+.dead-text { color: var(--red); }
+
+/* Score distribution chart */
+.lh-distribution { margin-top: 20px; }
+.lh-distribution h4 { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; font-size: 14px; }
+.lh-dist-chart {
+  display: flex; gap: 3px; align-items: flex-end; height: 120px;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.lh-dist-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
+.lh-dist-fill { width: 100%; min-height: 2px; border-radius: 2px 2px 0 0; transition: height 0.4s ease; }
+.lh-dist-label { font-size: 9px; color: var(--text-muted); margin-top: 4px; white-space: nowrap; }
+
+/* Last run */
+.lh-last-run { font-size: 12px; color: var(--text-muted); margin-top: 16px; text-align: right; }
+
+/* Sunset cards */
+.lh-sunset-list, .lh-graveyard-list { display: flex; flex-direction: column; gap: 12px; }
+.lh-sunset-header-bar {
+  font-size: 13px; color: var(--text-muted); padding-bottom: 8px;
+  border-bottom: 1px solid var(--border); margin-bottom: 4px;
+}
+
+.lh-sunset-card, .lh-graveyard-card, .lh-pending-card {
+  display: flex; gap: 14px; padding: 14px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; transition: border-color 0.15s;
+}
+.lh-sunset-card:hover, .lh-graveyard-card:hover { border-color: var(--accent); }
+
+.lh-sunset-poster {
+  width: 80px; min-width: 80px; aspect-ratio: 2/3; border-radius: 6px;
+  overflow: hidden; background: var(--bg);
+}
+.lh-sunset-poster.small { width: 56px; min-width: 56px; }
+.lh-sunset-poster img { width: 100%; height: 100%; object-fit: cover; }
+
+.lh-sunset-info { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.lh-sunset-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lh-sunset-header h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.lh-year { color: var(--text-muted); font-weight: 400; }
+
+.lh-type-badge {
+  font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px;
+  color: #fff; display: inline-flex; align-items: center; gap: 3px;
+}
+
+/* Vitality bar */
+.lh-vitality-bar {
+  height: 6px; border-radius: 3px; background: rgba(255,255,255,0.06);
+  position: relative; overflow: visible;
+}
+.lh-vitality-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+.lh-vitality-label {
+  position: absolute; right: 0; top: -16px; font-size: 11px;
+  font-weight: 600; font-variant-numeric: tabular-nums;
+}
+
+/* Signals */
+.lh-sunset-signals { display: flex; gap: 6px; flex-wrap: wrap; }
+.lh-signal {
+  font-size: 10px; padding: 2px 6px; border-radius: 4px;
+  background: rgba(255,255,255,0.04); color: var(--text-muted);
+}
+
+/* Voting */
+.lh-sunset-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.lh-vote-row { display: flex; gap: 8px; }
+.lh-vote-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); font-size: 12px;
+  cursor: pointer; transition: all 0.15s;
+}
+.lh-vote-btn:hover:not(:disabled) { border-color: var(--text); color: var(--text); }
+.lh-vote-btn.keep.active { background: rgba(46,204,113,0.15); border-color: var(--green); color: var(--green); }
+.lh-vote-btn.kick.active { background: rgba(239,68,68,0.15); border-color: var(--red); color: var(--red); }
+.lh-vote-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Grace countdown */
+.lh-grace { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+.lh-grace.expired { color: var(--red); }
+
+/* Graveyard */
+.lh-graveyard-meta { display: flex; gap: 10px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; align-items: center; }
+.lh-eta-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; }
+.lh-avail { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.lh-avail.available { color: var(--green); }
+.lh-avail.unavailable { color: var(--text-muted); }
+
+.lh-graveyard-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+/* Action buttons */
+.lh-action-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); font-size: 12px;
+  cursor: pointer; transition: all 0.15s;
+}
+.lh-action-btn:hover:not(:disabled) { border-color: var(--text); color: var(--text); }
+.lh-action-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.lh-action-btn.primary:hover:not(:disabled) { opacity: 0.85; }
+.lh-action-btn.danger { background: rgba(239,68,68,0.15); border-color: var(--red); color: var(--red); }
+.lh-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Admin section */
+.lh-admin-section { margin-bottom: 28px; }
+.lh-admin-section h3 { display: flex; align-items: center; gap: 8px; font-size: 15px; margin-bottom: 12px; }
+.lh-muted { color: var(--text-muted); font-size: 13px; }
+
+/* Config sliders */
+.lh-config-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; gap: 16px; }
+.lh-config-row label { font-size: 13px; white-space: nowrap; min-width: 140px; }
+.lh-slider-group { display: flex; align-items: center; gap: 10px; flex: 1; }
+.lh-slider-group input[type="range"] { flex: 1; accent-color: var(--accent); }
+.lh-slider-value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
+.lh-config-divider { height: 1px; background: var(--border); margin: 12px 0; }
+.lh-config-save { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.lh-save-msg { font-size: 12px; }
+.lh-save-msg.ok { color: var(--green); }
+.lh-save-msg.err { color: var(--red); }
+
+/* States */
+.lh-loading { display: flex; align-items: center; gap: 10px; padding: 40px; color: var(--text-muted); justify-content: center; }
+.lh-error { display: flex; align-items: center; gap: 8px; padding: 20px; color: var(--red); }
+.lh-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 60px 20px; color: var(--text-muted); text-align: center; }
+
+/* Pending */
+.lh-pending-votes { font-size: 12px; color: var(--text-muted); }
+.lh-pending-actions { display: flex; gap: 8px; margin-top: 4px; }

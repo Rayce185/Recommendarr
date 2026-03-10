@@ -28,6 +28,7 @@ const HistoryPage = lazy(() => import("./pages/HistoryPage.jsx"));
 const WorldCinemaPage = lazy(() => import("./pages/WorldCinemaPage.jsx"));
 const DiscoveryFeedPage = lazy(() => import("./pages/DiscoveryFeedPage.jsx"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage.jsx"));
+const LibraryHealthPage = lazy(() => import("./pages/LibraryHealthPage.jsx"));
 
 export default function Recommendarr() {
   // ── Hash-based routing ──────────────────────────────────────
@@ -117,6 +118,7 @@ export default function Recommendarr() {
       case "feed":       return <DiscoveryFeedPage user={selectedUser} onCardClick={openDetail} />;
       case "import":     return <ListImportPage onCardClick={openDetail} />;
       case "notifications": return <NotificationsPage onNavigate={setView} />;
+      case "library-health": return <LibraryHealthPage subtab={hashSubtab} onSubtabChange={setSubtab} user={authUser} />;
       case "admin":      return <AdminPage subtab={hashSubtab} onSubtabChange={setSubtab} user={authUser?.username} />;
       default:           return <RecommendationsPage user={selectedUser} mode="tonight" onCardClick={openDetail} />;
     }
