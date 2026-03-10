@@ -40,3 +40,7 @@ from app.models.admin import (  # noqa: F401
 from app.models.library_health import (  # noqa: F401
     VitalityScore, SunsetItem, SunsetVote, KickedItem,
 )
+
+from app.models.push import (  # noqa: F401
+    PushSubscription,
+)

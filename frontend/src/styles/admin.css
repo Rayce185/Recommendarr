@@ -210,3 +210,20 @@
 }
 .status-ok { color: var(--green); }
 .status-err { color: var(--red); }
+
+/* ── Push Notification Toggle ──────────────────────────────────── */
+.push-toggle-section { margin: 8px 0; }
+.push-toggle-section .toggle-btn {
+  padding: 4px 14px; border-radius: 14px; border: 1px solid var(--border);
+  background: var(--bg-secondary); color: var(--text-muted); cursor: pointer;
+  font-size: 12px; transition: all 0.2s;
+}
+.push-toggle-section .toggle-btn.active {
+  background: var(--green, #22c55e); color: #fff; border-color: var(--green, #22c55e);
+}
+.push-toggle-section .toggle-btn:hover:not(:disabled) { opacity: 0.85; }
+.push-test-result {
+  font-size: 12px; padding: 4px 0; display: flex; align-items: center; gap: 4px;
+}
+.push-test-result.ok { color: var(--green, #22c55e); }
+.push-test-result.err { color: var(--red, #ef4444); }

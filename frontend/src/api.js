@@ -206,6 +206,13 @@ const api = {
   healthConfig: () => authFetch(`${API_BASE}/library-health/config`).then(r => r.json()),
   healthUpdateConfig: (data) => authFetch(`${API_BASE}/library-health/config`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
 
+  // Push notifications
+  pushVapidKey: () => fetch(`${API_BASE}/push/vapid-key`).then(r => r.json()),
+  pushSubscribe: (data) => authFetch(`${API_BASE}/push/subscribe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  pushUnsubscribe: (data) => authFetch(`${API_BASE}/push/unsubscribe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  pushStatus: () => authFetch(`${API_BASE}/push/status`).then(r => r.json()),
+  pushTest: (data) => authFetch(`${API_BASE}/push/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+
   // History
   recHistory: (u, opts = {}) => {
     const params = new URLSearchParams({ limit: opts.limit || 50, offset: opts.offset || 0 });
