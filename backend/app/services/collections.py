@@ -2,22 +2,28 @@
 
 Uses a 3-tier caching strategy:
   L1: In-memory dict (_movie_coll, _coll_cache) — fastest, lost on restart
-  L2: SQLite tables (movie_collection_map, collection_details, collection_results_cache)
-      — survives restarts, serves stale-while-revalidate
+  L2: Database tables (movie_collection_map, collection_details,
+      collection_results_cache) — survives restarts, serves stale-while-revalidate
   L3: TMDB API — source of truth, slowest
 """
 
 import asyncio
 import json
 import logging
-import sqlite3
 import time
 from dataclasses import dataclass, field
 
+from sqlalchemy import select
+
+from app.database import get_db, is_postgres
+from app.models.features import (
+    MovieCollectionMap, CollectionDetail, CollectionResultsCache,
+)
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = "/app/data/recommendarr.db"
 RESULTS_TTL = 21600  # 6 hours — after this, background refresh triggers
+
 
 
 @dataclass
@@ -55,116 +61,96 @@ class CollectionService:
         self.tautulli = tautulli
         self._movie_coll: dict[int, int | None] = {}
         self._coll_cache: dict[int, dict] = {}
-        self._init_db()
         self._load_persistent_caches()
-
-    def _init_db(self):
-        """Ensure all SQLite tables exist."""
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-            c.execute("""CREATE TABLE IF NOT EXISTS movie_collection_map (
-                tmdb_id INTEGER PRIMARY KEY,
-                collection_id INTEGER
-            )""")
-            c.execute("""CREATE TABLE IF NOT EXISTS collection_details (
-                collection_id INTEGER PRIMARY KEY,
-                data JSON NOT NULL,
-                fetched_at REAL NOT NULL
-            )""")
-            c.execute("""CREATE TABLE IF NOT EXISTS collection_results_cache (
-                username TEXT PRIMARY KEY,
-                data JSON NOT NULL,
-                computed_at REAL NOT NULL
-            )""")
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.warning(f"Collection DB init failed: {e}")
 
     def _load_persistent_caches(self):
         """Load L2 caches into L1 memory on startup."""
         try:
-            conn = sqlite3.connect(DB_PATH)
-            # Movie → collection mappings
-            rows = conn.execute("SELECT tmdb_id, collection_id FROM movie_collection_map").fetchall()
-            for tid, cid in rows:
-                self._movie_coll[tid] = cid
-            # Collection details
-            rows = conn.execute("SELECT collection_id, data FROM collection_details").fetchall()
-            for cid, data_str in rows:
-                try:
-                    self._coll_cache[cid] = json.loads(data_str)
-                except json.JSONDecodeError:
-                    pass
-            conn.close()
+            with get_db() as db:
+                rows = db.execute(select(MovieCollectionMap)).scalars().all()
+                for row in rows:
+                    self._movie_coll[row.tmdb_id] = row.collection_id
+
+                rows = db.execute(select(CollectionDetail)).scalars().all()
+                for row in rows:
+                    data = row.data if isinstance(row.data, dict) else json.loads(row.data)
+                    self._coll_cache[row.collection_id] = data
+
             if self._movie_coll:
-                logger.info(f"Loaded {len(self._movie_coll)} movie→collection + {len(self._coll_cache)} collection details from SQLite")
+                logger.info(
+                    f"Loaded {len(self._movie_coll)} movie→collection + "
+                    f"{len(self._coll_cache)} collection details from DB"
+                )
         except Exception as e:
             logger.warning(f"Could not load collection caches: {e}")
 
-    # ── SQLite persistence helpers ────────────────────────────────
+    # ── DB persistence helpers ────────────────────────────────────
 
     def _persist_movie_coll_batch(self, mappings: list[tuple[int, int | None]]):
         """Batch-save movie→collection mappings."""
         if not mappings:
             return
         try:
-            conn = sqlite3.connect(DB_PATH)
-            conn.executemany(
-                "INSERT OR REPLACE INTO movie_collection_map (tmdb_id, collection_id) VALUES (?, ?)",
-                mappings,
-            )
-            conn.commit()
-            conn.close()
+            with get_db() as db:
+                for tmdb_id, coll_id in mappings:
+                    existing = db.get(MovieCollectionMap, tmdb_id)
+                    if existing:
+                        existing.collection_id = coll_id
+                    else:
+                        db.add(MovieCollectionMap(
+                            tmdb_id=tmdb_id, collection_id=coll_id
+                        ))
+                db.commit()
         except Exception:
             pass
 
     def _persist_coll_detail(self, coll_id: int, data: dict):
-        """Save a collection's detail data to SQLite."""
+        """Save a collection's detail data to DB."""
         try:
-            conn = sqlite3.connect(DB_PATH)
-            conn.execute(
-                "INSERT OR REPLACE INTO collection_details (collection_id, data, fetched_at) VALUES (?, ?, ?)",
-                (coll_id, json.dumps(data), time.time()),
-            )
-            conn.commit()
-            conn.close()
+            with get_db() as db:
+                existing = db.get(CollectionDetail, coll_id)
+                if existing:
+                    existing.data = data
+                    existing.fetched_at = time.time()
+                else:
+                    db.add(CollectionDetail(
+                        collection_id=coll_id, data=data, fetched_at=time.time()
+                    ))
+                db.commit()
         except Exception:
             pass
 
     def get_cached_results(self, username: str) -> tuple[list[dict] | None, bool]:
-        """Return (cached_results, is_fresh) from SQLite L2 cache.
-        
+        """Return (cached_results, is_fresh) from L2 cache.
+
         Returns (None, False) if no cached data exists.
         Returns (data, True) if data exists and is within TTL.
         Returns (data, False) if data exists but is stale.
         """
         try:
-            conn = sqlite3.connect(DB_PATH)
-            row = conn.execute(
-                "SELECT data, computed_at FROM collection_results_cache WHERE username = ?",
-                (username,),
-            ).fetchone()
-            conn.close()
-            if row:
-                data = json.loads(row[0])
-                age = time.time() - row[1]
-                return data, age < RESULTS_TTL
-            return None, False
+            with get_db() as db:
+                row = db.get(CollectionResultsCache, username)
+                if row:
+                    data = row.data if isinstance(row.data, dict) else json.loads(row.data)
+                    age = time.time() - float(row.computed_at)
+                    return data, age < RESULTS_TTL
+                return None, False
         except Exception:
             return None, False
 
     def _persist_results(self, username: str, results: list[dict]):
-        """Save formatted collection results to SQLite."""
+        """Save formatted collection results to DB."""
         try:
-            conn = sqlite3.connect(DB_PATH)
-            conn.execute(
-                "INSERT OR REPLACE INTO collection_results_cache (username, data, computed_at) VALUES (?, ?, ?)",
-                (username, json.dumps(results), time.time()),
-            )
-            conn.commit()
-            conn.close()
+            with get_db() as db:
+                existing = db.get(CollectionResultsCache, username)
+                if existing:
+                    existing.data = results
+                    existing.computed_at = time.time()
+                else:
+                    db.add(CollectionResultsCache(
+                        username=username, data=results, computed_at=time.time()
+                    ))
+                db.commit()
         except Exception as e:
             logger.warning(f"Failed to persist collection results for {username}: {e}")
 
@@ -196,7 +182,7 @@ class CollectionService:
         # 3. Check collection membership (L1 → L2 → TMDB API)
         unchecked = [tid for tid in user_watched_tmdb if tid not in self._movie_coll]
         if unchecked:
-            sem = asyncio.Semaphore(15)  # Increased concurrency
+            sem = asyncio.Semaphore(15)
             new_mappings = []
 
             async def check_one(tid):
@@ -206,14 +192,23 @@ class CollectionService:
                     self._movie_coll[tid] = cid
                     new_mappings.append((tid, cid))
 
-            await asyncio.gather(*[check_one(tid) for tid in unchecked], return_exceptions=True)
+            await asyncio.gather(
+                *[check_one(tid) for tid in unchecked], return_exceptions=True
+            )
             self._persist_movie_coll_batch(new_mappings)
-            logger.info(f"Checked {len(unchecked)} movies for collection membership ({len(new_mappings)} persisted)")
+            logger.info(
+                f"Checked {len(unchecked)} movies for collection membership "
+                f"({len(new_mappings)} persisted)"
+            )
 
         # 4. Find unique collections
-        coll_ids = {self._movie_coll[tid] for tid in user_watched_tmdb if self._movie_coll.get(tid)}
+        coll_ids = {
+            self._movie_coll[tid]
+            for tid in user_watched_tmdb
+            if self._movie_coll.get(tid)
+        }
 
-        # 5. Fetch collection details (L1 → SQLite → TMDB API)
+        # 5. Fetch collection details (L1 → DB → TMDB API)
         new_colls = [cid for cid in coll_ids if cid not in self._coll_cache]
         if new_colls:
             sem = asyncio.Semaphore(10)
@@ -222,7 +217,9 @@ class CollectionService:
                 async with sem:
                     return await self.tmdb.get_collection(cid)
 
-            results = await asyncio.gather(*[fetch(cid) for cid in new_colls], return_exceptions=True)
+            results = await asyncio.gather(
+                *[fetch(cid) for cid in new_colls], return_exceptions=True
+            )
             for r in results:
                 if isinstance(r, dict) and r.get("collection_id"):
                     self._coll_cache[r["collection_id"]] = r
@@ -245,7 +242,10 @@ class CollectionService:
             missing = []
 
             for p in coll["parts"]:
-                poster = f"https://image.tmdb.org/t/p/w342{p['poster_path']}" if p.get("poster_path") else None
+                poster = (
+                    f"https://image.tmdb.org/t/p/w342{p['poster_path']}"
+                    if p.get("poster_path") else None
+                )
                 in_lib = p["tmdb_id"] in library_tmdb
                 watched = p["tmdb_id"] in user_watched_tmdb
 
@@ -272,8 +272,14 @@ class CollectionService:
                 continue
 
             pct = round((watched_count / total) * 100, 1)
-            poster = f"https://image.tmdb.org/t/p/w342{coll['poster_path']}" if coll.get("poster_path") else None
-            backdrop = f"https://image.tmdb.org/t/p/w1280{coll['backdrop_path']}" if coll.get("backdrop_path") else None
+            poster = (
+                f"https://image.tmdb.org/t/p/w342{coll['poster_path']}"
+                if coll.get("poster_path") else None
+            )
+            backdrop = (
+                f"https://image.tmdb.org/t/p/w1280{coll['backdrop_path']}"
+                if coll.get("backdrop_path") else None
+            )
 
             results.append(UserCollection(
                 collection_id=coll_id,

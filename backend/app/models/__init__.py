@@ -20,6 +20,7 @@ from app.models.features import (  # noqa: F401
     Friendship, PrivacySettings,
     ImportJob, DiscoveryCache,
     RegionalTrending, GroupNightSession,
+    MovieCollectionMap, CollectionDetail, CollectionResultsCache,
 )
 
 from app.models.pulse import (  # noqa: F401

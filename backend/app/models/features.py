@@ -164,3 +164,31 @@ class GroupNightSession(Base):
     picks: Mapped[str] = mapped_column(Text, nullable=False)  # JSON list
     title: Mapped[Optional[str]] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ── Collection Cache (replaces raw sqlite3 tables) ──────────────
+
+class MovieCollectionMap(Base):
+    """Maps TMDB movie ID → collection ID for franchise detection."""
+    __tablename__ = "movie_collection_map"
+
+    tmdb_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    collection_id: Mapped[Optional[int]] = mapped_column(Integer)
+
+
+class CollectionDetail(Base):
+    """Cached TMDB collection metadata (parts list, poster, etc.)."""
+    __tablename__ = "collection_details"
+
+    collection_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    data: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    fetched_at: Mapped[float] = mapped_column(Numeric(16, 4), nullable=False)
+
+
+class CollectionResultsCache(Base):
+    """Per-user computed collection results (stale-while-revalidate)."""
+    __tablename__ = "collection_results_cache"
+
+    username: Mapped[str] = mapped_column(String(100), primary_key=True)
+    data: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    computed_at: Mapped[float] = mapped_column(Numeric(16, 4), nullable=False)

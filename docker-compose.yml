@@ -1,6 +1,24 @@
 # Recommendarr — unified deployment
 # Pull from Docker Hub or build locally
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: Recommendarr-DB
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: recommendarr
+      POSTGRES_USER: recommendarr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-recommendarr_dev}
+    volumes:
+      - ${POSTGRES_DATA:-./pgdata}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recommendarr"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: 512m
+
   recommendarr:
     image: rayce185/recommendarr:latest
     build:
@@ -8,6 +26,9 @@ services:
       dockerfile: Dockerfile
     container_name: Recommendarr
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "${RECOMMENDARR_PORT:-5055}:5055"
     env_file:
@@ -15,6 +36,7 @@ services:
     environment:
       - TZ=${TZ:-Europe/Zurich}
       - DATA_DIR=/app/data
+      - DATABASE_URL=postgresql://recommendarr:${POSTGRES_PASSWORD:-recommendarr_dev}@Recommendarr-DB:5432/recommendarr
     volumes:
       - ${DATA_DIR:-./data}:/app/data
     healthcheck:
