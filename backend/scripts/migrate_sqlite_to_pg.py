@@ -78,6 +78,12 @@ def migrate():
     pg_inspector = inspect(pg_engine)
     pg_tables = set(pg_inspector.get_table_names())
 
+    # Disable FK constraints for migration (alphabetical order vs FK deps)
+    with pg_engine.connect() as conn:
+        conn.execute(text("SET session_replication_role = 'replica'"))
+        conn.commit()
+    logger.info("FK constraints disabled for migration")
+
     sqlite_tables = get_sqlite_tables(sqlite_conn)
     logger.info(f"Found {len(sqlite_tables)} SQLite tables")
 
@@ -106,6 +112,12 @@ def migrate():
         if not common_cols:
             logger.warning(f"  SKIP {table} — no common columns")
             continue
+
+        # Detect boolean columns in PG for SQLite int→bool coercion
+        bool_cols = set()
+        for col_info in pg_inspector.get_columns(table):
+            if col_info["name"] in common_cols and str(col_info["type"]) == "BOOLEAN":
+                bool_cols.add(col_info["name"])
 
         # Read all rows
         col_list = ", ".join(f"[{c}]" for c in common_cols)
@@ -136,6 +148,9 @@ def migrate():
                                 val = json.dumps(val)  # Re-serialize for PG text binding
                             except json.JSONDecodeError:
                                 pass
+                        # Coerce SQLite integer booleans (0/1) to Python bool
+                        if col in bool_cols and isinstance(val, int):
+                            val = bool(val)
                         row_dict[col] = val
                     batch.append(row_dict)
 
@@ -153,6 +168,12 @@ def migrate():
             except Exception as e:
                 session.rollback()
                 logger.error(f"  {table}: FAILED — {e}")
+
+    # Re-enable FK constraints
+    with pg_engine.connect() as conn:
+        conn.execute(text("SET session_replication_role = 'origin'"))
+        conn.commit()
+    logger.info("FK constraints re-enabled")
 
     # Reset PG sequences to max(id) + 1
     with pg_session_factory() as session:
