@@ -141,6 +141,7 @@ const api = {
   request: (id, type) => authFetch(`${API_BASE}/request/${id}?media_type=${type || "movie"}`, {
     method: "POST",
   }).then(r => r.json()),
+  compareProfiles: (users, domain = "all") => authFetch(`${API_BASE}/compare?users=${encodeURIComponent(users.join(","))}&domain=${domain}`).then(r => { if (!r.ok) return r.json().then(d => { throw new Error(d.detail || "Compare failed"); }); return r.json(); }),
   userPeers: (u) => authFetch(`${API_BASE}/users/${u}/peers`).then(r => r.json()),
   submitFeedback: (u, data) => authFetch(`${API_BASE}/users/${u}/feedback`, {
     method: "POST",
@@ -180,6 +181,38 @@ const api = {
   pulseUpdateSource: (id, data) => authFetch(`${API_BASE}/pulse/sources/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
   pulseDeleteSource: (id) => authFetch(`${API_BASE}/pulse/sources/${id}`, { method: "DELETE" }).then(r => r.json()),
   pulseDeactivateTheme: (id) => authFetch(`${API_BASE}/pulse/themes/${id}`, { method: "DELETE" }).then(r => r.json()),
+
+  // Library Health
+  healthStats: () => authFetch(`${API_BASE}/library-health/stats`).then(r => r.json()),
+  healthVitality: (opts = {}) => {
+    const p = new URLSearchParams();
+    if (opts.zone) p.set("zone", opts.zone);
+    if (opts.sort) p.set("sort", opts.sort);
+    if (opts.page) p.set("page", opts.page);
+    if (opts.per_page) p.set("per_page", opts.per_page);
+    if (opts.media_type) p.set("media_type", opts.media_type);
+    return authFetch(`${API_BASE}/library-health/vitality?${p}`).then(r => r.json());
+  },
+  healthVitalityDetail: (tmdbId, mediaType) => authFetch(`${API_BASE}/library-health/vitality/${tmdbId}/${mediaType}`).then(r => r.json()),
+  healthRecalculate: () => authFetch(`${API_BASE}/library-health/vitality/recalculate`, { method: "POST" }).then(r => r.json()),
+  healthSunset: () => authFetch(`${API_BASE}/library-health/sunset`).then(r => r.json()),
+  healthVote: (tmdbId, mediaType, vote) => authFetch(`${API_BASE}/library-health/sunset/${tmdbId}/${mediaType}/vote`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ vote }) }).then(r => r.json()),
+  healthVoteTally: (tmdbId, mediaType) => authFetch(`${API_BASE}/library-health/sunset/${tmdbId}/${mediaType}/votes`).then(r => r.json()),
+  healthPending: () => authFetch(`${API_BASE}/library-health/pending`).then(r => r.json()),
+  healthConfirmKick: (tmdbId, mediaType) => authFetch(`${API_BASE}/library-health/pending/${tmdbId}/${mediaType}/confirm`, { method: "POST" }).then(r => r.json()),
+  healthVetoKick: (tmdbId, mediaType) => authFetch(`${API_BASE}/library-health/pending/${tmdbId}/${mediaType}/veto`, { method: "POST" }).then(r => r.json()),
+  healthGraveyard: () => authFetch(`${API_BASE}/library-health/graveyard`).then(r => r.json()),
+  healthRedownload: (id) => authFetch(`${API_BASE}/library-health/graveyard/${id}/redownload`, { method: "POST" }).then(r => r.json()),
+  healthCheckAvailability: (id) => authFetch(`${API_BASE}/library-health/graveyard/${id}/check-availability`, { method: "POST" }).then(r => r.json()),
+  healthConfig: () => authFetch(`${API_BASE}/library-health/config`).then(r => r.json()),
+  healthUpdateConfig: (data) => authFetch(`${API_BASE}/library-health/config`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+
+  // Push notifications
+  pushVapidKey: () => fetch(`${API_BASE}/push/vapid-key`).then(r => r.json()),
+  pushSubscribe: (data) => authFetch(`${API_BASE}/push/subscribe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  pushUnsubscribe: (data) => authFetch(`${API_BASE}/push/unsubscribe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  pushStatus: () => authFetch(`${API_BASE}/push/status`).then(r => r.json()),
+  pushTest: (data) => authFetch(`${API_BASE}/push/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
 
   // History
   recHistory: (u, opts = {}) => {
@@ -223,3 +256,13 @@ const routing = {
 };
 
 export { instances, routing };
+
+// ── Onboarding / Setup ──────────────────────────────────────────
+const setup = {
+  status: () => fetch(`${API_BASE}/setup/status`).then(r => r.json()),
+  testIntegration: (data) => fetch(`${API_BASE}/setup/integrations/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  save: (settings) => authFetch(`${API_BASE}/setup/save`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings }) }).then(r => r.json()),
+  complete: () => authFetch(`${API_BASE}/setup/complete`, { method: "POST" }).then(r => r.json()),
+};
+
+export { setup };

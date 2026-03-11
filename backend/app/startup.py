@@ -22,14 +22,16 @@ logger = logging.getLogger("recommendarr")
 async def _probe_services(stack) -> dict[str, bool]:
     """Probe all upstream services and return status map."""
     probes = {}
-    for name, client in [
-        ("tautulli", stack.tautulli),
-        ("seerr", stack.seerr),
-        ("radarr", stack.radarr),
-        ("sonarr_tv", stack.sonarr_tv),
-        ("sonarr_anime", stack.sonarr_anime),
-    ]:
+    service_getters = [
+        ("tautulli", lambda: stack.tautulli),
+        ("seerr", lambda: stack.seerr),
+        ("radarr", lambda: stack.radarr),
+        ("sonarr_tv", lambda: stack.sonarr_tv),
+        ("sonarr_anime", lambda: stack.sonarr_anime),
+    ]
+    for name, getter in service_getters:
         try:
+            client = getter()
             probes[name] = await client.test_connection()
         except Exception:
             probes[name] = False
@@ -50,11 +52,12 @@ async def _init_plex(stack, probes: dict):
                 if not stack.plex.machine_id:
                     await stack.plex.init()
                 tvdb_to_tmdb: dict[int, int] = {}
-                for sonarr_name, sonarr_client in [
-                    ("sonarr_tv", stack.sonarr_tv),
-                    ("sonarr_anime", stack.sonarr_anime),
+                for sonarr_name, sonarr_getter in [
+                    ("sonarr_tv", lambda: stack.sonarr_tv),
+                    ("sonarr_anime", lambda: stack.sonarr_anime),
                 ]:
                     try:
+                        sonarr_client = sonarr_getter()
                         all_series = await sonarr_client.get_all_series()
                         for s in all_series:
                             if s.tvdb_id and s.tmdb_id:
@@ -231,6 +234,25 @@ async def _warm_profiles():
         logger.warning(f"Profile warming error: {e}")
 
 
+
+
+async def _vitality_daily_loop():
+    """Background task: run vitality recalculation daily.
+    
+    First run 5 minutes after startup (let warmup finish),
+    then every 24 hours.
+    """
+    await asyncio.sleep(300)  # 5 min after startup
+    while True:
+        try:
+            from app.services.vitality_scheduler import recalculate_vitality
+            result = await recalculate_vitality()
+            logger.info("Daily vitality recalc: %s", result)
+        except Exception as e:
+            logger.error("Vitality recalculation failed: %s", e)
+        await asyncio.sleep(86400)  # 24 hours
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: init DB, migrate data, build service stack, probe integrations."""
@@ -280,6 +302,9 @@ async def lifespan(app: FastAPI):
     scheduler = get_scheduler()
     scheduler.start()
     logger.info("Scheduled refresh background task started")
+
+    asyncio.create_task(_vitality_daily_loop())
+    logger.info("Vitality scoring daily task started")
 
     yield
 

@@ -20,6 +20,7 @@ from app.models.features import (  # noqa: F401
     Friendship, PrivacySettings,
     ImportJob, DiscoveryCache,
     RegionalTrending, GroupNightSession,
+    MovieCollectionMap, CollectionDetail, CollectionResultsCache,
 )
 
 from app.models.pulse import (  # noqa: F401
@@ -35,4 +36,12 @@ from app.models.admin import (  # noqa: F401
     Plugin,
     AppSetting, UserPreference, RoutingRule, RequestLog, AiSetting,
     RefreshSchedule,
+)
+
+from app.models.library_health import (  # noqa: F401
+    VitalityScore, SunsetItem, SunsetVote, KickedItem,
+)
+
+from app.models.push import (  # noqa: F401
+    PushSubscription,
 )

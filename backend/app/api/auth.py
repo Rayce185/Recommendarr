@@ -10,12 +10,13 @@ Endpoints:
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 from pydantic import BaseModel
 
 from app.auth.plex_oauth import get_plex_user, check_server_access
 from app.auth.jwt_handler import create_token, TokenPayload, get_current_user
 from app.config import settings
+from app.middleware.rate_limit import limiter, AUTH_RATE
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,8 @@ class PlexAuthRequest(BaseModel):
 
 
 @router.post("/plex")
-async def auth_plex(body: PlexAuthRequest, bg: BackgroundTasks):
+@limiter.limit(AUTH_RATE)
+async def auth_plex(request: Request, body: PlexAuthRequest, bg: BackgroundTasks):
     """Authenticate with a Plex auth token (from frontend OAuth flow).
 
     Same pattern as Overseerr's POST /auth/plex:

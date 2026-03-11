@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { Film, Loader2, LogIn, Eye } from "lucide-react";
 import { api } from "./api.js";
 import "./styles/index.css";
@@ -9,6 +9,8 @@ import { useAuth } from "./hooks/useAuth.js";
 import { useRefresh } from "./hooks/useRefresh.js";
 import { useDetailModal } from "./hooks/useDetailModal.js";
 import Sidebar from "./components/Sidebar.jsx";
+import OnboardingWizard from "./components/OnboardingWizard.jsx";
+import { setup } from "./api.js";
 
 const RecommendationsPage = lazy(() => import("./pages/RecommendationsPage.jsx"));
 const MoodPage = lazy(() => import("./pages/MoodPage.jsx"));
@@ -28,6 +30,8 @@ const HistoryPage = lazy(() => import("./pages/HistoryPage.jsx"));
 const WorldCinemaPage = lazy(() => import("./pages/WorldCinemaPage.jsx"));
 const DiscoveryFeedPage = lazy(() => import("./pages/DiscoveryFeedPage.jsx"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage.jsx"));
+const LibraryHealthPage = lazy(() => import("./pages/LibraryHealthPage.jsx"));
+const TasteComparePage = lazy(() => import("./pages/TasteComparePage.jsx"));
 
 export default function Recommendarr() {
   // ── Hash-based routing ──────────────────────────────────────
@@ -62,6 +66,7 @@ export default function Recommendarr() {
   }, []);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [navBadges, setNavBadges] = useState({});
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape" && mobileMenuOpen) setMobileMenuOpen(false); };
     window.addEventListener("keydown", handler);
@@ -72,6 +77,15 @@ export default function Recommendarr() {
   useEffect(() => {
     api.health().then(d => d?.version && setAppVersion(d.version)).catch(() => {});
   }, []);
+
+  // ── Onboarding wizard ──────────────────────────────────────
+  const [showWizard, setShowWizard] = useState(false);
+  useEffect(() => {
+    if (!authUser?.is_admin) { setShowWizard(false); return; }
+    setup.status()
+      .then(s => { if (!s.complete) setShowWizard(true); })
+      .catch(() => {});
+  }, [authUser]);
 
   // ── Toast + Auth + Refresh + Detail hooks ─────────────────
   const { toasts, addToast } = useToast();
@@ -109,6 +123,7 @@ export default function Recommendarr() {
       case "world-cinema": return <WorldCinemaPage user={selectedUser} onCardClick={openDetail} />;
       case "watchlist":  return <WatchlistPage user={selectedUser} onCardClick={openDetail} />;
       case "profile":    return <TasteProfilePage user={selectedUser} />;
+      case "compare":   return <TasteComparePage user={selectedUser} />;
       case "wrapped":    return <WrappedPage user={selectedUser} />;
       case "social":     return <SocialPage user={selectedUser} />;
       case "history":    return <HistoryPage user={selectedUser} onCardClick={openDetail} />;
@@ -117,16 +132,31 @@ export default function Recommendarr() {
       case "feed":       return <DiscoveryFeedPage user={selectedUser} onCardClick={openDetail} />;
       case "import":     return <ListImportPage onCardClick={openDetail} />;
       case "notifications": return <NotificationsPage onNavigate={setView} />;
+      case "library-health": return <LibraryHealthPage subtab={hashSubtab} onSubtabChange={setSubtab} user={authUser} />;
       case "admin":      return <AdminPage subtab={hashSubtab} onSubtabChange={setSubtab} user={authUser?.username} />;
       default:           return <RecommendationsPage user={selectedUser} mode="tonight" onCardClick={openDetail} />;
     }
   };
 
+  // Sidebar badge: fetch sunset count for Library Health nav item
+  useEffect(() => {
+    if (!authUser) { setNavBadges({}); return; }
+    const fetchBadges = () => {
+      api.healthStats().then(s => {
+        const sunset = s?.zones?.sunset || 0;
+        setNavBadges(prev => sunset !== prev["library-health"] ? { ...prev, "library-health": sunset } : prev);
+      }).catch(() => {});
+    };
+    fetchBadges();
+    const iv = setInterval(fetchBadges, 120000); // refresh every 2min
+    return () => clearInterval(iv);
+  }, [authUser]);
+
   return (
     <>
       <div className="app-layout">
         <Sidebar
-          view={view} setView={setView}
+          view={view} setView={setView} navBadges={navBadges}
           mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen}
           authUser={authUser} authLoading={authLoading} loginLoading={loginLoading}
           handlePlexLogin={handlePlexLogin} handleLogout={handleLogout}
@@ -169,6 +199,12 @@ export default function Recommendarr() {
         />
       )}
       <ToastContainer toasts={toasts} />
+      {showWizard && (
+        <OnboardingWizard
+          onComplete={() => setShowWizard(false)}
+          onRefresh={handleRefresh}
+        />
+      )}
     </>
   );
 }

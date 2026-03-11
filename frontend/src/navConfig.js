@@ -2,7 +2,7 @@ import {
   Newspaper,
   Play, Download, RefreshCw, Sparkles, TrendingUp, Search, Globe,
   Layers, Users, Bookmark, Upload, Activity, CalendarDays, Bell,
-  Heart, BarChart3, Settings, History,
+  Heart, BarChart3, Settings, History, HeartPulse, GitCompare,
 } from "lucide-react";
 
 const navItems = [
@@ -23,8 +23,10 @@ const navItems = [
   { id: "notifications", label: "Notifications", icon: Bell, section: "Profile" },
   { id: "profile", label: "Taste Profile", icon: Heart, section: "Profile" },
   { id: "wrapped", label: "Plex Wrapped", icon: BarChart3, section: "Profile" },
+  { id: "compare", label: "Taste Radar", icon: GitCompare, section: "Profile" },
   { id: "social", label: "Social", icon: Users, section: "Profile" },
   { id: "history", label: "Rec History", icon: History, section: "Profile" },
+  { id: "library-health", label: "Library Health", icon: HeartPulse, section: "Library" },
   { id: "admin", label: "System Settings", icon: Settings, section: "Admin" },
 ];
 

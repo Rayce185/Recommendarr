@@ -471,3 +471,10 @@
   border-color: var(--accent);
   background: var(--accent-dim);
 }
+
+/* Nav badge (sunset count etc.) */
+.nav-badge {
+  font-size: 10px; font-weight: 700; padding: 1px 6px;
+  border-radius: 8px; background: #f59e0b; color: #000;
+  margin-left: auto; line-height: 1.4;
+}

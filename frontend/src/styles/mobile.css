@@ -151,6 +151,28 @@
     .admin-card input[type="text"] {
       font-size: 14px;
     }
+
+    /* Library Health responsive */
+    .lh-overview .admin-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
+    .lh-sunset-card, .lh-graveyard-card, .lh-pending-card {
+      flex-direction: column;
+      gap: 10px;
+    }
+    .lh-sunset-poster {
+      width: 100%; min-width: unset; aspect-ratio: 16/9;
+    }
+    .lh-sunset-poster.small {
+      width: 100%; min-width: unset; aspect-ratio: 16/9;
+    }
+    .lh-config-row {
+      flex-direction: column; align-items: flex-start; gap: 6px;
+    }
+    .lh-config-row label { min-width: unset; }
+    .lh-slider-group { width: 100%; }
+    .lh-dist-chart { height: 80px; }
+    .lh-sunset-footer { flex-direction: column; align-items: flex-start; }
   }
 
   /* ── Extra-small screens ── */
@@ -262,4 +284,11 @@
   .social-genre-chip.unique {
     background: rgba(234,179,8,0.15);
     color: var(--yellow, #eab308);
-  }
+  
+    /* Library Health extra-small */
+    .lh-overview .admin-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .lh-vote-row { width: 100%; }
+    .lh-vote-btn { flex: 1; justify-content: center; }
+}

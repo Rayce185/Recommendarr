@@ -244,6 +244,15 @@ class RefreshScheduler:
                         f"tonight={counts[0]}, grab={counts[1]}, rediscover={counts[2]} "
                         f"in {elapsed_ms}ms")
 
+            # Push notification — best-effort, never blocks refresh
+            try:
+                from app.services.push_triggers import notify_recs_ready
+                await notify_recs_ready(username, {
+                    "tonight": counts[0], "grab": counts[1], "rediscover": counts[2],
+                })
+            except Exception:
+                pass  # Push is optional
+
         except Exception as e:
             elapsed_ms = int((time.time() - start) * 1000)
             self._record_error(username, str(e))

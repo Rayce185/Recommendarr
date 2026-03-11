@@ -8,13 +8,14 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query, HTTPException, Depends
+from fastapi import APIRouter, Query, HTTPException, Depends, Request
 
 from app.services.factory import get_stack
 from app.services.profile_overrides import get_override_store
 from app.services.feedback import get_feedback_store
 from app.auth.jwt_handler import TokenPayload, get_current_user
 from app.config import settings
+from app.middleware.rate_limit import limiter, RECOMMENDATION_RATE
 from app.services.cache import get_cache
 from app.services.recommender import RecommendationRequest, Recommendation
 from app.services.ai_mood import parse_mood_ai
@@ -28,7 +29,9 @@ router = APIRouter()
 # ── Core recommendation endpoints ────────────────────────────────
 
 @router.get("/recommend/{username}")
+@limiter.limit(RECOMMENDATION_RATE)
 async def get_recommendations(
+    request: Request,
     username: str,
     mode: str = Query("tonight", pattern="^(tonight|grab|rediscover|mood|group)$"),
     domain: str = Query("all", pattern="^(all|movies|tv|anime)$"),
@@ -157,7 +160,9 @@ async def get_recommendations(
 
 
 @router.get("/recommend/{username}/group")
+@limiter.limit(RECOMMENDATION_RATE)
 async def get_group_recommendations(
+    request: Request,
     username: str,
     users: str = Query(..., description="Comma-separated usernames including requesting user"),
     domain: str = Query("all", pattern="^(all|movies|tv|anime)$"),

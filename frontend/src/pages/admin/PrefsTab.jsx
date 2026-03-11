@@ -1,5 +1,6 @@
-import { Monitor, RefreshCw, Globe, CheckCircle2, Loader2, Clock, Sparkles } from "lucide-react";
+import { Monitor, RefreshCw, Globe, CheckCircle2, Loader2, Clock, Sparkles, Bell } from "lucide-react";
 import { api } from "../../api.js";
+import PushNotificationToggle from "../../components/PushNotificationToggle.jsx";
 
 const PREF_DESCRIPTIONS = {
   rec_count: "Number of recommendations to generate per mode (higher = slower but more variety)",
@@ -77,6 +78,15 @@ export default function PrefsTab({
             {prefsSaving === "device" && <span style={{ marginLeft: 8, color: "var(--green)", fontWeight: 600 }}><CheckCircle2 size={11} style={{ verticalAlign: -1 }} /> Saved!</span>}
           </div>
         )}
+      </div>
+
+      {/* Push Notifications */}
+      <div style={{ background: "var(--bg-elevated)", borderRadius: 8, padding: 16 }}>
+        <h4 style={{ margin: "0 0 8px" }}><Bell size={15} /> Push Notifications</h4>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 12px" }}>
+          Receive native push notifications for new recommendations, sunset votes, and group nights.
+        </p>
+        <PushNotificationToggle />
       </div>
 
       {/* Auto-Refresh Schedule */}
