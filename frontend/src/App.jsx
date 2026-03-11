@@ -9,6 +9,8 @@ import { useAuth } from "./hooks/useAuth.js";
 import { useRefresh } from "./hooks/useRefresh.js";
 import { useDetailModal } from "./hooks/useDetailModal.js";
 import Sidebar from "./components/Sidebar.jsx";
+import OnboardingWizard from "./components/OnboardingWizard.jsx";
+import { setup } from "./api.js";
 
 const RecommendationsPage = lazy(() => import("./pages/RecommendationsPage.jsx"));
 const MoodPage = lazy(() => import("./pages/MoodPage.jsx"));
@@ -74,6 +76,15 @@ export default function Recommendarr() {
   useEffect(() => {
     api.health().then(d => d?.version && setAppVersion(d.version)).catch(() => {});
   }, []);
+
+  // ── Onboarding wizard ──────────────────────────────────────
+  const [showWizard, setShowWizard] = useState(false);
+  useEffect(() => {
+    if (!authUser?.is_admin) { setShowWizard(false); return; }
+    setup.status()
+      .then(s => { if (!s.complete) setShowWizard(true); })
+      .catch(() => {});
+  }, [authUser]);
 
   // ── Toast + Auth + Refresh + Detail hooks ─────────────────
   const { toasts, addToast } = useToast();
@@ -186,6 +197,12 @@ export default function Recommendarr() {
         />
       )}
       <ToastContainer toasts={toasts} />
+      {showWizard && (
+        <OnboardingWizard
+          onComplete={() => setShowWizard(false)}
+          onRefresh={handleRefresh}
+        />
+      )}
     </>
   );
 }

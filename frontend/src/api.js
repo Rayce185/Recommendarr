@@ -255,3 +255,13 @@ const routing = {
 };
 
 export { instances, routing };
+
+// ── Onboarding / Setup ──────────────────────────────────────────
+const setup = {
+  status: () => fetch(`${API_BASE}/setup/status`).then(r => r.json()),
+  testIntegration: (data) => fetch(`${API_BASE}/setup/integrations/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+  save: (settings) => authFetch(`${API_BASE}/setup/save`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings }) }).then(r => r.json()),
+  complete: () => authFetch(`${API_BASE}/setup/complete`, { method: "POST" }).then(r => r.json()),
+};
+
+export { setup };
