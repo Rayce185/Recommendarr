@@ -1,0 +1,286 @@
+/* ── Taste Compare / Radar Chart ─────────────────────────── */
+
+.radar-chart-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 16px 0 24px;
+}
+
+.radar-svg {
+  max-width: 100%;
+}
+
+.radar-svg .radar-label {
+  fill: var(--text-muted);
+  font-size: 10px;
+  font-family: inherit;
+  pointer-events: none;
+}
+
+.radar-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.radar-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.radar-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.radar-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* ── Picker ──────────────────────────────────────────────── */
+
+.compare-picker {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.compare-selected {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.compare-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: 1.5px solid;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+.compare-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.compare-chip-remove {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  line-height: 1;
+}
+
+.compare-chip-remove:hover {
+  color: var(--red);
+}
+
+.compare-add-select {
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: 1.5px dashed var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.compare-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.compare-domain-select {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+}
+
+.compare-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px !important;
+  font-size: 13px !important;
+}
+
+.compare-hint {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-dim);
+}
+
+.compare-hint svg {
+  margin-bottom: 12px;
+  opacity: 0.3;
+}
+
+.compare-hint p {
+  font-size: 0.85rem;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+/* ── Stats grid ──────────────────────────────────────────── */
+
+.compare-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.compare-stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-top: 3px solid;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.compare-stat-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.compare-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  padding: 3px 0;
+  color: var(--text-secondary);
+}
+
+.compare-stat-row strong {
+  color: var(--text-primary);
+}
+
+/* ── Pairwise similarity ─────────────────────────────────── */
+
+.compare-pairs {
+  margin-top: 24px;
+}
+
+.compare-pairs h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  margin-bottom: 12px;
+}
+
+.compare-pair-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 48px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-faint, var(--border));
+}
+
+.pair-users {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pair-bar-track {
+  height: 8px;
+  background: var(--bg-tertiary, var(--bg-secondary));
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.pair-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.pair-pct {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: right;
+}
+
+.pair-shared {
+  grid-column: 1 / -1;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  padding-left: 4px;
+}
+
+/* ── Keyword comparison ──────────────────────────────────── */
+
+.compare-keywords {
+  margin-top: 24px;
+}
+
+.compare-keywords h3 {
+  font-size: 0.92rem;
+  margin-bottom: 12px;
+}
+
+.compare-kw-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.compare-kw-col {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.compare-kw-user {
+  font-weight: 600;
+  font-size: 0.82rem;
+  margin-bottom: 8px;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .compare-pair-row {
+    grid-template-columns: 100px 1fr 40px;
+  }
+
+  .compare-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

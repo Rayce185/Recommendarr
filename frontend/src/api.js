@@ -141,6 +141,7 @@ const api = {
   request: (id, type) => authFetch(`${API_BASE}/request/${id}?media_type=${type || "movie"}`, {
     method: "POST",
   }).then(r => r.json()),
+  compareProfiles: (users, domain = "all") => authFetch(`${API_BASE}/compare?users=${encodeURIComponent(users.join(","))}&domain=${domain}`).then(r => { if (!r.ok) return r.json().then(d => { throw new Error(d.detail || "Compare failed"); }); return r.json(); }),
   userPeers: (u) => authFetch(`${API_BASE}/users/${u}/peers`).then(r => r.json()),
   submitFeedback: (u, data) => authFetch(`${API_BASE}/users/${u}/feedback`, {
     method: "POST",

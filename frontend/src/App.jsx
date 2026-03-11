@@ -31,6 +31,7 @@ const WorldCinemaPage = lazy(() => import("./pages/WorldCinemaPage.jsx"));
 const DiscoveryFeedPage = lazy(() => import("./pages/DiscoveryFeedPage.jsx"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage.jsx"));
 const LibraryHealthPage = lazy(() => import("./pages/LibraryHealthPage.jsx"));
+const TasteComparePage = lazy(() => import("./pages/TasteComparePage.jsx"));
 
 export default function Recommendarr() {
   // ── Hash-based routing ──────────────────────────────────────
@@ -122,6 +123,7 @@ export default function Recommendarr() {
       case "world-cinema": return <WorldCinemaPage user={selectedUser} onCardClick={openDetail} />;
       case "watchlist":  return <WatchlistPage user={selectedUser} onCardClick={openDetail} />;
       case "profile":    return <TasteProfilePage user={selectedUser} />;
+      case "compare":   return <TasteComparePage user={selectedUser} />;
       case "wrapped":    return <WrappedPage user={selectedUser} />;
       case "social":     return <SocialPage user={selectedUser} />;
       case "history":    return <HistoryPage user={selectedUser} onCardClick={openDetail} />;

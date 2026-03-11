@@ -80,6 +80,7 @@ from app.api import friends
 from app.api import library_health
 from app.api import library_health_admin
 from app.api import push
+from app.api import compare
 
 app.include_router(health.router,                prefix="/api/v1", tags=["system"])
 app.include_router(users.router,                 prefix="/api/v1", tags=["users"])
@@ -117,6 +118,7 @@ app.include_router(series_progress.router, prefix="/api/v1", tags=["users"])
 app.include_router(library_health.router,    prefix="/api/v1", tags=["library-health"])
 app.include_router(library_health_admin.router, prefix="/api/v1", tags=["library-health"])
 app.include_router(push.router,                   prefix="/api/v1", tags=["push"])
+app.include_router(compare.router,                prefix="/api/v1", tags=["compare"])
 
 # ── Static files (frontend) ──────────────────────────────────────
 
