@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 
 from app.services.factory import get_stack, resolve_user_id
-from app.services.cache import get_cache
+from app.services.cache import get_cache, DATA_LAYER_TTL
 from app.services.collections import CollectionService
 from app.auth.jwt_handler import TokenPayload, get_current_user
 
@@ -117,28 +117,49 @@ async def get_collection_for_movie(
 
     Returns collection info with per-part watched/library status.
     Returns 204 (no content) if the movie is not part of a collection.
+    Uses generic cache (5 min TTL) to avoid repeated Radarr/Tautulli calls.
     """
+    cache = get_cache()
+    cache_key = f"collfor:{user.username}:{tmdb_id}"
+    cached = cache.get_generic(cache_key)
+    if cached is not None:
+        if cached == "__none__":
+            from fastapi.responses import Response
+            return Response(status_code=204)
+        return cached
+
     stack = get_stack()
     if not stack.tmdb:
         raise HTTPException(503, "TMDB not configured")
 
     coll_info = await stack.tmdb.get_movie_collection_id(tmdb_id)
     if not coll_info:
+        cache.set_generic(cache_key, "__none__", ttl=DATA_LAYER_TTL)
         from fastapi.responses import Response
         return Response(status_code=204)
 
     coll = await stack.tmdb.get_collection(coll_info["id"])
     if not coll:
+        cache.set_generic(cache_key, "__none__", ttl=DATA_LAYER_TTL)
         from fastapi.responses import Response
         return Response(status_code=204)
 
-    # Cross-reference with library + watch status
-    movies = await stack.radarr.get_all_movies()
-    library_tmdb = {m.tmdb_id for m in movies if m.tmdb_id}
+    # Cross-reference with library + watch status (shared cached sets — 30min TTL)
+    library_tmdb = cache.get_generic("_radarr_library_ids")
+    if library_tmdb is None:
+        movies = await stack.radarr.get_all_movies()
+        library_tmdb = [m.tmdb_id for m in movies if m.tmdb_id]
+        cache.set_generic("_radarr_library_ids", library_tmdb, ttl=DATA_LAYER_TTL)
+    library_tmdb = set(library_tmdb)
 
     uid = resolve_user_id(user.username)
-    history = await stack.tautulli.get_history(user_id=None, limit=10000)
-    user_watched = {e.tmdb_id for e in history if e.user_id == uid and e.media_type == "movie" and e.tmdb_id}
+    watched_key = f"_watched_ids:{user.username}"
+    user_watched = cache.get_generic(watched_key)
+    if user_watched is None:
+        history = await stack.tautulli.get_history(user_id=None, limit=10000)
+        user_watched = [e.tmdb_id for e in history if e.user_id == uid and e.media_type == "movie" and e.tmdb_id]
+        cache.set_generic(watched_key, user_watched, ttl=DATA_LAYER_TTL)
+    user_watched = set(user_watched)
 
     parts = []
     watched_count = 0
@@ -171,7 +192,7 @@ async def get_collection_for_movie(
     total = len(parts)
     poster_url = f"https://image.tmdb.org/t/p/w342{coll['poster_path']}" if coll.get("poster_path") else None
 
-    return {
+    result = {
         "collection_id": coll["collection_id"],
         "name": coll["name"],
         "poster_url": poster_url,
@@ -183,3 +204,5 @@ async def get_collection_for_movie(
         "parts": parts,
         "missing": missing,
     }
+    cache.set_generic(cache_key, result, ttl=DATA_LAYER_TTL)
+    return result

@@ -289,7 +289,7 @@ async def main():
 
     print("\n══════════════════════════════════════════════════")
     print("Bootstrap complete. Start the API with:")
-    print("  cd /mnt/user/system/claude/recommendarr/src/backend")
+    print("  cd /mnt/sys/system/claude/recommendarr/src/backend")
     print("  uvicorn app.main:app --host 0.0.0.0 --port 30800")
 
 

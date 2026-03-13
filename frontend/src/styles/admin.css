@@ -155,10 +155,41 @@
 }
 .cache-stat-card .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .cache-stat-card .value { font-size: 20px; font-weight: 600; color: var(--text); margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+/* User country quick-pick chips */
+.country-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.country-chip {
+  padding: 4px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.country-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.country-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.user-country-chips {
+  min-width: 100%;
+}
 @media (max-width: 600px) {
   .trending-subtabs { gap: 2px; }
   .trending-subtab { padding: 6px 10px; font-size: 12px; }
   .trending-filters { flex-direction: column; }
+  .country-chips { flex-wrap: wrap; }
   .filter-group select { width: 100%; }
 }
 .service-row {

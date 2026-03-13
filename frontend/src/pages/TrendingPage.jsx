@@ -45,7 +45,7 @@ function BuzzCard({ item, onCardClick }) {
   );
 }
 
-function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
+function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange, username }) {
   const [subtab, setSubtabRaw] = useState(initialSubtab || "global");
   const setSubtab = (t) => { setSubtabRaw(t); onSubtabChange?.(t); };
   const [items, setItems] = useState([]);
@@ -66,9 +66,18 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
   // Buzz filter
   const [buzzFilter, setBuzzFilter] = useState("all");
 
+  // Genre filter
+  const [genres, setGenres] = useState([]);
+  const [genreId, setGenreId] = useState(null);
+
+  // User's preferred countries from watch history
+  const [userCountries, setUserCountries] = useState([]);
+
   useEffect(() => {
     api.trendingCountries().then(d => setCountries(d.countries || [])).catch(() => {});
-  }, []);
+    api.trendingGenres().then(d => setGenres(d.genres || [])).catch(() => {});
+    if (username) api.userCountries(username).then(d => setUserCountries(d.countries || [])).catch(() => {});
+  }, [username]);
 
   useEffect(() => {
     if (subtab === "streaming") {
@@ -81,6 +90,8 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
   }, [subtab, providerRegion]);
 
   const load = useCallback(() => {
+    // Guard: skip load if streaming tab without a provider yet
+    if (subtab === "streaming" && !providerId) return;
     setLoading(true);
     setError(null);
 
@@ -99,11 +110,12 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
       opts.region = providerRegion;
       opts.provider_id = providerId;
     }
+    if (genreId) opts.genre_id = genreId;
     api.trendingExpanded(source, opts)
       .then(data => setItems(data.results || []))
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
-  }, [subtab, mediaType, region, providerId, providerRegion]);
+  }, [subtab, mediaType, region, providerId, providerRegion, genreId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -142,12 +154,35 @@ function TrendingPage({ onCardClick, subtab: initialSubtab, onSubtabChange }) {
               ]} />
             </div>
 
+            <div className="filter-group">
+              <label>Genre</label>
+              <CustomSelect value={genreId || ""} onChange={v => setGenreId(v ? Number(v) : null)}
+                options={[{ value: "", label: "All Genres" }, ...genres.map(g => ({ value: g.id, label: g.name }))]} />
+            </div>
+
             {subtab === "country" && (
-              <div className="filter-group">
-                <label>Country</label>
-                <CustomSelect value={region} onChange={setRegion}
-                  options={countries.map(c => ({ value: c.code, label: c.name }))} />
-              </div>
+              <>
+                {userCountries.length > 0 && (
+                  <div className="filter-group user-country-chips">
+                    <label>Your Countries</label>
+                    <div className="country-chips">
+                      {userCountries.map(c => (
+                        <button key={c.code}
+                          className={`country-chip ${region === c.code ? "active" : ""}`}
+                          onClick={() => setRegion(c.code)}
+                          title={`${c.watch_count} titles watched`}>
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="filter-group">
+                  <label>Country</label>
+                  <CustomSelect value={region} onChange={setRegion}
+                    options={countries.map(c => ({ value: c.code, label: c.name }))} />
+                </div>
+              </>
             )}
 
             {subtab === "streaming" && (

@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.config import settings
+from app.services.rate_limiter import setup_rate_limiter
 from app.startup import lifespan
 
 # ── Logging ──────────────────────────────────────────────────────
@@ -52,6 +53,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate limiting — 60 req/min per IP
+setup_rate_limiter(app)
+
+
 # ── Mount API routers ────────────────────────────────────────────
 
 from app.api import health, users, recommendations, auth, refresh, feedback
@@ -69,6 +74,8 @@ from app.api import history
 from app.api import setup, webhooks
 from app.api import group_night
 from app.api import admin_users
+from app.api import series_progress
+from app.api import friends
 
 app.include_router(health.router,                prefix="/api/v1", tags=["system"])
 app.include_router(users.router,                 prefix="/api/v1", tags=["users"])
@@ -97,10 +104,12 @@ app.include_router(calendar.router,              prefix="/api/v1", tags=["calend
 app.include_router(profile_transfer.router, prefix="/api/v1", tags=["profile"])
 app.include_router(notifications.router,      prefix="/api/v1", tags=["notifications"])
 app.include_router(history.router,            prefix="/api/v1", tags=["history"])
+app.include_router(friends.router,            prefix="/api/v1", tags=["social"])
 app.include_router(setup.router,             prefix="/api/v1", tags=["setup"])
 app.include_router(webhooks.router,          prefix="/api/v1", tags=["webhooks"])
 app.include_router(group_night.router,       prefix="/api/v1", tags=["group-night"])
 app.include_router(admin_users.router,       prefix="/api/v1", tags=["admin"])
+app.include_router(series_progress.router, prefix="/api/v1", tags=["users"])
 
 # ── Static files (frontend) ──────────────────────────────────────
 

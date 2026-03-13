@@ -12,6 +12,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative;
 }
 .cal-month-nav button {
   background: var(--bg-card);
@@ -76,7 +77,7 @@
 }
 .cal-day {
   background: var(--bg-card);
-  min-height: 90px;
+  min-height: 130px;
   padding: 6px;
   position: relative;
   transition: background 0.15s;
@@ -102,8 +103,8 @@
   align-items: center;
 }
 .cal-day-thumb {
-  width: 28px;
-  height: 42px;
+  width: 38px;
+  height: 57px;
   border-radius: 4px;
   overflow: hidden;
   position: relative;
@@ -137,6 +138,33 @@
   font-size: 10px;
   color: var(--text-muted);
   font-weight: 600;
+}
+
+
+/* Poster hover tooltip */
+.cal-day-thumb[data-tooltip] {
+  position: relative;
+}
+.cal-day-thumb[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 50;
+  pointer-events: none;
 }
 
 /* Day detail panel */
@@ -245,10 +273,39 @@
 
 @media (max-width: 768px) {
   .cal-controls { flex-direction: column; align-items: stretch; }
-  .cal-day { min-height: 60px; padding: 4px; }
-  .cal-day-thumb { width: 22px; height: 33px; }
+  .cal-day { min-height: 90px; padding: 4px; }
+  .cal-day-thumb { width: 30px; height: 45px; }
   .cal-day-num { font-size: 11px; }
   .cal-detail-grid { grid-template-columns: 1fr; }
   .calendar-filters { gap: 10px; }
   .calendar-filters select { width: 100%; }
 }
+
+/* ── Month/Year Picker ──────────────────────────── */
+.cal-month-clickable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.cal-month-clickable:hover { color: var(--accent); }
+
+.month-picker {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  z-index: 100; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px; min-width: 220px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.month-picker-year-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; font-weight: 600; font-size: 0.95rem;
+}
+.month-picker-year-nav button {
+  background: none; border: none; color: var(--text-secondary); cursor: pointer;
+  padding: 4px 6px; border-radius: 4px;
+}
+.month-picker-year-nav button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.month-picker-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.month-picker-btn {
+  background: none; border: 1px solid transparent; color: var(--text-secondary);
+  padding: 6px 4px; border-radius: 6px; cursor: pointer; font-size: 0.82rem;
+  transition: all 0.15s;
+}
+.month-picker-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.month-picker-active { background: var(--accent) !important; color: #fff !important; font-weight: 600; }
+.month-picker-today { border-color: var(--accent); }

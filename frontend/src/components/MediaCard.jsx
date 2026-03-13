@@ -84,6 +84,16 @@ function MediaCard({ item, onClick, onFeedback }) {
         {item.is_watched && <div className="card-badge badge-watched"><Eye size={10} /> Seen</div>}
         {item.in_library === true && !item.is_watched && <div className="card-badge badge-library">In Library</div>}
         {item.in_library === false && <div className="card-badge badge-grab">Not in Library</div>}
+        {item.series_progress && item.series_progress.completion_pct != null && (
+          <div className="card-progress-bar" title={`${item.series_progress.watched_episodes}/${item.series_progress.total_episodes || "?"} episodes (${item.series_progress.completion_pct}%)`}>
+            <div className="card-progress-fill" style={{
+              width: `${item.series_progress.completion_pct}%`,
+              background: item.series_progress.completion_pct >= 90 ? "var(--green)" :
+                item.series_progress.completion_pct >= 50 ? "var(--blue)" : "var(--accent)"
+            }} />
+            <span className="card-progress-label">{Math.round(item.series_progress.completion_pct)}%</span>
+          </div>
+        )}
       </div>
       <div className="card-info">
         <h3>{item.title}</h3>

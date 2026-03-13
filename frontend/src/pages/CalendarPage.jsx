@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Calendar, Film, Tv, Loader2, ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
 import { api } from "../api.js";
 
@@ -23,8 +23,8 @@ function getMonthGrid(year, month) {
 
 function DayCell({ cell, dateKey, items, isToday, isSelected, onClick }) {
   const dayItems = items || [];
-  const show = dayItems.slice(0, 3);
-  const extra = dayItems.length - 3;
+  const show = dayItems.slice(0, 4);
+  const extra = dayItems.length - 4;
   return (
     <div className={`cal-day ${cell.current ? "" : "cal-day-dim"} ${isToday ? "cal-day-today" : ""} ${isSelected ? "cal-day-selected" : ""} ${dayItems.length > 0 ? "cal-day-has-items" : ""}`}
       onClick={() => dayItems.length > 0 && onClick?.(dateKey)}>
@@ -32,7 +32,7 @@ function DayCell({ cell, dateKey, items, isToday, isSelected, onClick }) {
       {show.length > 0 && (
         <div className="cal-day-posters">
           {show.map((item, i) => (
-            <div key={i} className="cal-day-thumb" title={item.title}>
+            <div key={i} className="cal-day-thumb" data-tooltip={item.title}>
               {item.poster ? <img src={item.poster} alt="" /> : <div className="cal-thumb-empty">{item.media_type === "movie" ? "M" : "T"}</div>}
               {item.monitored && <div className="cal-thumb-dot" />}
             </div>
@@ -71,6 +71,38 @@ function DayDetail({ dateKey, items, onCardClick, onClose }) {
   );
 }
 
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function MonthPicker({ viewYear, viewMonth, onSelect, onClose }) {
+  const ref = useRef(null);
+  const [pickerYear, setPickerYear] = useState(viewYear);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  return (
+    <div className="month-picker" ref={ref}>
+      <div className="month-picker-year-nav">
+        <button onClick={() => setPickerYear(y => y - 1)}><ChevronLeft size={14} /></button>
+        <span>{pickerYear}</span>
+        <button onClick={() => setPickerYear(y => y + 1)}><ChevronRight size={14} /></button>
+      </div>
+      <div className="month-picker-grid">
+        {MONTHS.map((m, i) => (
+          <button key={m}
+            className={`month-picker-btn ${i === viewMonth && pickerYear === viewYear ? "month-picker-active" : ""} ${i === new Date().getMonth() && pickerYear === new Date().getFullYear() ? "month-picker-today" : ""}`}
+            onClick={() => { onSelect(pickerYear, i); onClose(); }}>
+            {m}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function CalendarPage({ onCardClick }) {
@@ -82,6 +114,7 @@ export default function CalendarPage({ onCardClick }) {
   const [mediaType, setMediaType] = useState("all");
   const [source, setSource] = useState("all");
   const [selectedDay, setSelectedDay] = useState(null);
+  const [showPicker, setShowPicker] = useState(false);
 
   const monthLabel = new Date(viewYear, viewMonth).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
@@ -131,7 +164,8 @@ export default function CalendarPage({ onCardClick }) {
       <div className="cal-controls">
         <div className="cal-month-nav">
           <button onClick={() => navMonth(-1)}><ChevronLeft size={18} /></button>
-          <span className="cal-month-label">{monthLabel}</span>
+          <span className="cal-month-label cal-month-clickable" onClick={() => setShowPicker(p => !p)}>{monthLabel}</span>
+            {showPicker && <MonthPicker viewYear={viewYear} viewMonth={viewMonth} onSelect={(y,m) => { setViewYear(y); setViewMonth(m); setSelectedDay(null); }} onClose={() => setShowPicker(false)} />}
           <button onClick={() => navMonth(1)}><ChevronRight size={18} /></button>
           {(viewYear !== today.getFullYear() || viewMonth !== today.getMonth()) && (
             <button className="cal-today-btn" onClick={() => { setViewYear(today.getFullYear()); setViewMonth(today.getMonth()); setSelectedDay(null); }}>Today</button>

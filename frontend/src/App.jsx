@@ -102,7 +102,7 @@ export default function Recommendarr() {
       case "tonight": case "grab": case "rediscover":
         return <RecommendationsPage user={selectedUser} mode={view} onCardClick={openDetail} />;
       case "mood":       return <MoodPage user={selectedUser} onCardClick={openDetail} />;
-      case "trending":   return <TrendingPage onCardClick={openDetail} subtab={hashSubtab} onSubtabChange={setSubtab} />;
+      case "trending":   return <TrendingPage onCardClick={openDetail} subtab={hashSubtab} onSubtabChange={setSubtab} username={selectedUser} />;
       case "collections": return <CollectionsPage user={selectedUser} onCardClick={openDetail} />;
       case "group":      return <GroupNightPage user={selectedUser} allUsers={allUsers} onCardClick={openDetail} shareCode={hashSubtab} onSubtabChange={setSubtab} />;
       case "browse":     return <BrowsePage onCardClick={openDetail} />;

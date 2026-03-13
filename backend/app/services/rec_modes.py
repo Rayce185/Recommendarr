@@ -5,6 +5,7 @@ Modes use rec_scoring and rec_library for heavy lifting.
 """
 
 import logging
+import asyncio
 import random
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
@@ -138,7 +139,7 @@ async def mode_worth_grabbing(engine, req: RecommendationRequest) -> list[Recomm
                 candidates.append(await discover_to_candidate(item, "trending", resolver))
 
     # Source 4: Similar to high-completion watched titles (movies + TV)
-    history = await engine.tautulli.get_history(user_id=req._uid, limit=3000)
+    history = await engine.tautulli.get_history(user_id=req._uid, limit=500)
     seeds = [e for e in history if e.tmdb_id and e.completion_pct >= 85]
     seeds = random.sample(seeds, min(5, len(seeds))) if seeds else []
     for seed in seeds:
@@ -164,10 +165,13 @@ async def mode_worth_grabbing(engine, req: RecommendationRequest) -> list[Recomm
             unique.append(c)
     candidates = apply_filters(unique, req)
 
-    # Enrich top candidates
-    for c in candidates[:40]:
+    # Enrich top candidates in parallel batches of 10
+    async def _enrich_one(c):
         try:
-            detail = await get_detail(c["tmdb_id"], c.get("media_type", "movie"), engine.tmdb, engine.seerr)
+            detail = await asyncio.wait_for(
+                get_detail(c["tmdb_id"], c.get("media_type", "movie"), engine.tmdb, engine.seerr),
+                timeout=5.0,
+            )
             c["keywords"] = detail["keywords"]
             c["directors"] = detail["directors"]
             c["cast"] = [x["name"] if isinstance(x, dict) else x for x in detail.get("cast", [])[:5]]
@@ -179,6 +183,11 @@ async def mode_worth_grabbing(engine, req: RecommendationRequest) -> list[Recomm
                 c["trailer_site"] = detail["trailers"][0].get("site")
         except Exception as e:
             logger.debug(f"Enrich failed for {c.get('tmdb_id')}: {e}")
+
+    top = candidates[:40]
+    for batch_start in range(0, len(top), 10):
+        batch = top[batch_start:batch_start + 10]
+        await asyncio.gather(*[_enrich_one(c) for c in batch])
 
     pulse = _fetch_pulse()
     scored = []

@@ -20,6 +20,13 @@ personalized, explainable recommendations.
 - **Collection Tracking**: Detects partially watched franchises with completion progress and one-click requests
 - **Group Night**: Multi-user taste intersection recommendations
 - **Plex Wrapped**: Per-user viewing statistics and insights
+- **Friend System**: Send/accept/decline friend requests, activity feed, friend suggestions (≥30% taste overlap), privacy controls (visibility, anonymization, friend request blocking)
+- **Friend Activity Feed**: See what friends are watching with relative timestamps and completion status
+- **Group Night Friends**: Quick-select friends in Group Night user picker
+- **Genre Filters**: Filter trending results by any of 27 genres across all tabs
+- **User-Preferred Countries**: Auto-detected from watch history language distribution — quick-pick chips in By Country tab
+- **Series Progress**: Completion progress bars on TV recommendation cards
+- **Discovery Feed**: Personalized weekly mix based on taste profile
 - **Social Layer**: Taste overlap scores and server-wide trending
 - **World Cinema Map**: Geographic discovery with taste matching
 - **Cultural Pulse**: RSS-powered trending theme detection
@@ -49,6 +56,8 @@ personalized, explainable recommendations.
 
 - Persistent TMDB cache with parallel resolver and connection pooling
 - Startup warming — profiles, library, and recs pre-computed in background
+- User-countries endpoint cached (12s → instant on cache hit)
+- Friend activity uses single server-wide Tautulli pull (efficient, no per-friend queries)
 - 3-tier collection cache (SQLite + stale-while-revalidate)
 - Parallel TMDB enrichment and user-filtered history
 - Lazy AI explanations (compute on demand, not upfront)
@@ -57,8 +66,9 @@ personalized, explainable recommendations.
 
 - Single-container deployment (FastAPI + React + nginx + supervisor)
 - SQLite database for persistent state
-- Modular codebase — all files under 300 lines per §7.7 compliance
-- Multi-platform Docker images (amd64 + arm64)
+- Modular codebase — all files under 300 lines, zero dead code, zero import errors
+- 46+ REST API endpoints with JWT authentication
+- Docker image (amd64, arm64 planned)
 - Docker Hub: `rayce185/recommendarr`
 - GitHub Container Registry: `ghcr.io/rayce185/recommendarr`
 

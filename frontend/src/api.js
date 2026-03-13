@@ -40,7 +40,7 @@ const api = {
   },
   lazyExplain: (u, mode) => authFetch(`${API_BASE}/recommend/${u}/explain?mode=${mode}`, { method: "POST" }).then(r => r.json()),
   moodPresets: () => authFetch(`${API_BASE}/mood/presets`).then(r => r.json()),
-  moodParse: (q) => authFetch(`${API_BASE}/mood/parse?q=${encodeURIComponent(q)}`).then(r => r.json()),
+  moodParse: (q) => authFetch(`${API_BASE}/mood/parse?text=${encodeURIComponent(q)}`).then(r => r.json()),
   detail: (id, mediaType = "movie") => authFetch(`${API_BASE}/detail/${id}?media_type=${mediaType}`).then(r => r.json()),
   filterOptions: () => authFetch(`${API_BASE}/filters/options`).then(r => r.json()),
   watchlistAdd: (tmdbId, mediaType) => authFetch(`${API_BASE}/watchlist/add/${tmdbId}?media_type=${mediaType}`, { method: "POST" }).then(r => r.json()),
@@ -51,10 +51,13 @@ const api = {
     if (opts.media_type) params.set("media_type", opts.media_type);
     if (opts.region) params.set("region", opts.region);
     if (opts.provider_id) params.set("provider_id", opts.provider_id);
+    if (opts.genre_id) params.set("genre_id", opts.genre_id);
     if (opts.days) params.set("days", opts.days);
     if (opts.page) params.set("page", opts.page);
     return authFetch(`${API_BASE}/discover/trending?${params}`).then(r => r.json());
   },
+  trendingGenres: () => authFetch(`${API_BASE}/discover/genres`).then(r => r.json()),
+  userCountries: (username) => authFetch(`${API_BASE}/discover/user-countries/${encodeURIComponent(username)}`).then(r => r.json()),
   trendingCountries: () => authFetch(`${API_BASE}/discover/countries`).then(r => r.json()),
   trendingProviders: (region = "CH") => authFetch(`${API_BASE}/discover/providers?country=${region}`).then(r => r.json()),
   buzz: (subs) => authFetch(`${API_BASE}/discover/buzz${subs ? '?subreddits=' + encodeURIComponent(subs) : ''}`).then(r => r.json()),
@@ -128,6 +131,7 @@ const api = {
   refreshStart: () => authFetch(`${API_BASE}/cache/refresh`, { method: "POST" }).then(r => r.json()),
   refreshStatus: () => authFetch(`${API_BASE}/cache/refresh/status`).then(r => r.json()),
   myStaleness: () => authFetch(`${API_BASE}/cache/my-staleness`).then(r => r.json()),
+  seriesProgress: (username, tmdbIds = null) => authFetch(`${API_BASE}/users/${encodeURIComponent(username)}/series-progress${tmdbIds ? `?tmdb_ids=${tmdbIds.join(",")}` : ""}`).then(r => r.json()),
   getOverrides: (u) => authFetch(`${API_BASE}/users/${u}/profile/overrides`).then(r => r.json()),
   saveOverrides: (u, data) => authFetch(`${API_BASE}/users/${u}/profile/overrides`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)

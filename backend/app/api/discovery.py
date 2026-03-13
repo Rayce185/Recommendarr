@@ -18,30 +18,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _both_or_single(stack, media_type, source, **kw):
-    """Fetch both movies+TV when media_type='all', else single type."""
+async def _both_or_single(stack, media_type, source, genre_id=None, **kw):
+    """Fetch both movies+TV when media_type='all', else single type.
+    
+    genre_id: optional TMDB genre ID passed through to discover calls.
+    """
+    extra = {"with_genres": str(genre_id)} if genre_id else {}
+
+    async def _discover(mt):
+        if source == "country":
+            return await stack.tmdb.discover_by_country(kw["region"], mt, kw.get("page", 1), extra_params=extra)
+        elif source == "provider":
+            return await stack.tmdb.discover_by_provider(kw["provider_id"], kw.get("region", "CH"), mt, kw.get("page", 1), extra_params=extra)
+        elif source == "global":
+            return await stack.tmdb.discover_popular(mt, kw.get("page", 1), extra_params=extra)
+        else:  # new_releases
+            return await stack.tmdb.discover_new_releases(kw.get("days", 90), mt, kw.get("page", 1), extra_params=extra)
+
     if media_type == "all":
         import asyncio
-        if source == "country":
-            m_coro = stack.tmdb.discover_by_country(kw["region"], "movie", kw.get("page", 1))
-            t_coro = stack.tmdb.discover_by_country(kw["region"], "tv", kw.get("page", 1))
-        elif source == "provider":
-            m_coro = stack.tmdb.discover_by_provider(kw["provider_id"], kw.get("region", "CH"), "movie", kw.get("page", 1))
-            t_coro = stack.tmdb.discover_by_provider(kw["provider_id"], kw.get("region", "CH"), "tv", kw.get("page", 1))
-        else:  # new_releases
-            m_coro = stack.tmdb.discover_new_releases(kw.get("days", 90), "movie", kw.get("page", 1))
-            t_coro = stack.tmdb.discover_new_releases(kw.get("days", 90), "tv", kw.get("page", 1))
-        (m_res, m_pages), (t_res, t_pages) = await asyncio.gather(m_coro, t_coro)
-        # Interleave by popularity
+        (m_res, m_pages), (t_res, t_pages) = await asyncio.gather(
+            _discover("movie"), _discover("tv"))
         combined = sorted(m_res + t_res, key=lambda r: getattr(r, "popularity", 0), reverse=True)
         return combined[:20], max(m_pages, t_pages)
-    mt = media_type
-    if source == "country":
-        return await stack.tmdb.discover_by_country(kw["region"], mt, kw.get("page", 1))
-    elif source == "provider":
-        return await stack.tmdb.discover_by_provider(kw["provider_id"], kw.get("region", "CH"), mt, kw.get("page", 1))
-    else:
-        return await stack.tmdb.discover_new_releases(kw.get("days", 90), mt, kw.get("page", 1))
+    return await _discover(media_type)
 
 
 
@@ -53,6 +53,7 @@ async def get_trending(
     media_type: str = Query("all", pattern="^(all|movie|tv|anime)$"),
     region: str = Query("CH", max_length=2),
     provider_id: Optional[int] = Query(None, description="Streaming provider ID from /discover/providers"),
+    genre_id: Optional[int] = Query(None, description="TMDB genre ID to filter by"),
     days: int = Query(90, ge=7, le=365, description="New releases window in days"),
     page: int = Query(1, ge=1),
 ):
@@ -90,7 +91,11 @@ async def get_trending(
         }
 
     if stack.tmdb:
-        if source == "global":
+        if source == "global" and genre_id:
+            # Genre filter active — use discover API (trending endpoint doesn't support genres)
+            results, total_pages = await _both_or_single(
+                stack, media_type, "global", genre_id=genre_id, page=page)
+        elif source == "global":
             if media_type == "anime":
                 d = await stack.tmdb._get("/discover/tv", {
                     "sort_by": "popularity.desc",
@@ -106,15 +111,15 @@ async def get_trending(
                 results, total_pages = await stack.tmdb.get_trending(mt, "week", page)
         elif source == "country":
             results, total_pages = await _both_or_single(
-                stack, media_type, "country", region=region, page=page)
+                stack, media_type, "country", genre_id=genre_id, region=region, page=page)
         elif source == "provider":
             if not provider_id:
                 raise HTTPException(400, "provider_id required for source=provider")
             results, total_pages = await _both_or_single(
-                stack, media_type, "provider", region=region, page=page, provider_id=provider_id)
+                stack, media_type, "provider", genre_id=genre_id, region=region, page=page, provider_id=provider_id)
         elif source == "new_releases":
             results, total_pages = await _both_or_single(
-                stack, media_type, "new_releases", page=page, days=days)
+                stack, media_type, "new_releases", genre_id=genre_id, page=page, days=days)
         else:
             results, total_pages = [], 0
 
@@ -128,6 +133,8 @@ async def get_trending(
                 "page": page,
                 "vote_count.gte": 5,
             }
+            if genre_id:
+                anime_params["with_genres"] = f"16,{genre_id}"
             if source == "country":
                 anime_params["watch_region"] = region
             elif source == "provider" and provider_id:
@@ -186,3 +193,64 @@ async def get_streaming_providers(
 async def get_country_options():
     """Get available country options for regional trending."""
     return {"countries": COUNTRY_OPTIONS}
+
+
+@router.get("/discover/genres")
+async def get_genre_list():
+    """Get combined movie + TV genres for filter dropdowns."""
+    await ensure_genre_cache()
+    cache = get_genre_cache()
+    # Return sorted by name, deduplicated (movie & TV genres overlap)
+    genres = sorted(
+        [{"id": gid, "name": name} for gid, name in cache.items()],
+        key=lambda g: g["name"],
+    )
+    return {"genres": genres}
+
+
+# ISO 639-1 language → most common TMDB country code
+_LANG_TO_COUNTRY = {
+    "en": "US", "ja": "JP", "ko": "KR", "zh": "CN", "fr": "FR",
+    "de": "DE", "es": "ES", "it": "IT", "pt": "BR", "ru": "RU",
+    "hi": "IN", "th": "TH", "tr": "TR", "pl": "PL", "nl": "NL",
+    "sv": "SE", "da": "DK", "no": "NO", "fi": "FI", "cs": "CZ",
+    "hu": "HU", "ro": "RO", "el": "GR", "ar": "SA", "he": "IL",
+    "id": "ID", "ms": "MY", "vi": "VN", "tl": "PH", "uk": "UA",
+    "cn": "CN", "ta": "IN", "te": "IN", "ml": "IN",
+}
+
+
+@router.get("/discover/user-countries/{username}")
+async def get_user_countries(username: str):
+    """Get country suggestions based on user's watch history languages."""
+    from app.services.factory import get_stack
+    from app.services.cache import get_cache
+    cache = get_cache()
+    cache_key = f"user_countries:{username}"
+    cached = cache.get_generic(cache_key)
+    if cached is not None:
+        return cached
+    stack = get_stack()
+    if not stack.profiler:
+        return {"countries": []}
+    try:
+        profile = await stack.profiler.build_profile(username, domain="all")
+    except Exception:
+        return {"countries": []}
+    # Map languages to countries, skip unknowns
+    seen = set()
+    countries = []
+    for lang_aff in profile.top_languages(15):
+        code = _LANG_TO_COUNTRY.get(lang_aff.language)
+        if code and code not in seen:
+            seen.add(code)
+            # Find country name from COUNTRY_OPTIONS
+            name = next((c["name"] for c in COUNTRY_OPTIONS if c["code"] == code), code)
+            countries.append({
+                "code": code, "name": name,
+                "watch_count": lang_aff.watch_count,
+                "score": lang_aff.score,
+            })
+    result = {"countries": countries[:8]}
+    cache.set_generic(cache_key, result, ttl=3600)  # 1 hour
+    return result

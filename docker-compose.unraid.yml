@@ -1,10 +1,7 @@
 # Override for unRAID deployments using existing infrastructure.
 # Usage: docker compose -f docker-compose.yml -f docker-compose.unraid.yml up -d
-# Or use deploy.sh for the recommended single-container workflow.
 #
 # Copyright (c) 2026 VAASSEN GmbH / Ray Vaassen
-
-version: "3.8"
 
 services:
   recommendarr:
@@ -12,16 +9,6 @@ services:
     ports:
       - "30800:5055"
     volumes:
-      - /mnt/user/system/appdata/recommendarr:/app/data:rw
+      - /mnt/sys/system/appdata/recommendarr:/app/data:rw
     env_file:
       - deploy.env
-
-  # Disable bundled services — using existing unRAID containers
-  recommendarr-db:
-    profiles: ["standalone"]
-  recommendarr-chromadb:
-    profiles: ["standalone"]
-
-networks:
-  recommendarr:
-    driver: bridge

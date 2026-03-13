@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from app.config import settings
 from app.services.factory import build_stack, init_user_map, get_stack
 from app.services.rec_library import get_library_candidates
-from app.services.cache import get_cache
+from app.services.cache import get_cache, DATA_LAYER_TTL
 
 logger = logging.getLogger("recommendarr")
 
@@ -113,6 +113,23 @@ async def _warm_profiles():
             logger.info(f"Library cache warmed ({time.monotonic()-_start:.1f}s)")
         except Exception as e:
             logger.debug(f"Library warming skipped: {e}")
+
+        # Pre-warm data-layer caches (Radarr library IDs + per-user watched IDs)
+        # Eliminates ~20s cold-start on collection-for-movie endpoint
+        try:
+            _start = time.monotonic()
+            movies = await s.radarr.get_all_movies()
+            library_ids = [m.tmdb_id for m in movies if m.tmdb_id]
+            cache.set_generic("_radarr_library_ids", library_ids, ttl=DATA_LAYER_TTL)
+            from app.services.factory import resolve_user_id as _resolve_uid
+            history = await s.tautulli.get_history(user_id=None, limit=10000)
+            for username in active:
+                uid = _resolve_uid(username)
+                watched = [e.tmdb_id for e in history if e.user_id == uid and e.media_type == "movie" and e.tmdb_id]
+                cache.set_generic(f"_watched_ids:{username}", watched, ttl=DATA_LAYER_TTL)
+            logger.info(f"Data-layer cache warmed: {len(library_ids)} library IDs, {len(active)} users ({time.monotonic()-_start:.1f}s)")
+        except Exception as e:
+            logger.debug(f"Data-layer warming skipped: {e}")
 
         # Enrich TVDB poster URLs with TMDB paths
         try:

@@ -16,6 +16,7 @@ function RecommendationsPage({ user, mode, onCardClick }) {
   const [refreshing, setRefreshing] = useState(false);
   const [staleness, setStaleness] = useState(null);
   const [filters, setFilters] = useState(loadSavedFilters);
+  const [seriesProgress, setSeriesProgress] = useState({});
 
   const modeConfig = {
     tonight: { title: "Watch Tonight", desc: "In your library, matched to your taste", icon: Play },
@@ -56,10 +57,23 @@ function RecommendationsPage({ user, mode, onCardClick }) {
         }
       })
       .catch(err => setError(err.message))
-      .finally(() => { setLoading(false); setRefreshing(false); api.myStaleness().then(setStaleness).catch(() => {}); });
+      .finally(() => {
+        setLoading(false); setRefreshing(false);
+        api.myStaleness().then(setStaleness).catch(() => {});
+      });
   }, [user, mode, filters]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Fetch series progress for TV items
+  useEffect(() => {
+    if (!user || !items.length) return;
+    const tvIds = items.filter(i => i.media_type === "tv").map(i => i.tmdb_id).filter(Boolean);
+    if (!tvIds.length) { setSeriesProgress({}); return; }
+    api.seriesProgress(user, tvIds)
+      .then(d => setSeriesProgress(d.items || {}))
+      .catch(() => setSeriesProgress({}));
+  }, [user, items]);
 
   const handleFeedback = useCallback(async (item, action) => {
     if (action === null) {
@@ -151,7 +165,7 @@ function RecommendationsPage({ user, mode, onCardClick }) {
          error ? <ErrorState message={error} onRetry={load} /> :
          items.length === 0 ? <EmptyState icon={cfg.icon} title="No recommendations" message={`No ${mode} picks found for this user.`} /> :
          <div className="card-grid">
-           {items.map((item, i) => <MediaCard key={`${item.tmdb_id}-${i}`} item={item} onClick={onCardClick} onFeedback={handleFeedback} />)}
+           {items.map((item, i) => <MediaCard key={`${item.tmdb_id}-${i}`} item={{...item, series_progress: seriesProgress[item.tmdb_id] || null}} onClick={onCardClick} onFeedback={handleFeedback} />)}
          </div>}
       </div>
     </>
