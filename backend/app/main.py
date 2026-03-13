@@ -4,7 +4,6 @@ SQLite DB for persistence, TMDB for metadata, Radarr/Sonarr for library.
 Optional ChromaDB sync for RAG pipeline integration.
 """
 
-import logging
 import os
 
 from fastapi import FastAPI
@@ -13,18 +12,17 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.config import settings
+from app.logging_config import setup_logging
 from app.services.rate_limiter import setup_rate_limiter
 from app.startup import lifespan
 
 # ── Logging ──────────────────────────────────────────────────────
 
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+setup_logging(
+    log_level=settings.log_level,
+    log_format=settings.log_format,
+    debug=settings.debug,
 )
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # ── App ──────────────────────────────────────────────────────────
 
@@ -55,6 +53,10 @@ app.add_middleware(
 
 # Rate limiting — 60 req/min per IP
 setup_rate_limiter(app)
+
+# Request context — injects request_id, user, method, path into logging
+from app.middleware.request_context import RequestContextMiddleware
+app.add_middleware(RequestContextMiddleware)
 
 
 # ── Mount API routers ────────────────────────────────────────────

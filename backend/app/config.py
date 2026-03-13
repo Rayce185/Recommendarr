@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     # App
     debug: bool = False
     log_level: str = "info"
+    log_format: str = "auto"  # json, text, or auto (json unless debug=True)
     recommendarr_port: int = 5055
 
     class Config:
@@ -79,8 +80,8 @@ def _apply_stored_overrides():
         overrides = store.get_all_overrides()
         if overrides:
             settings.apply_overrides(overrides)
-            print(f"[config] Applied {len(overrides)} setting overrides from store")
+            import logging; logging.getLogger("recommendarr.config").info(f"Applied {len(overrides)} setting overrides from store")
     except Exception as e:
-        print(f"[config] Could not load settings store: {e}")
+        import logging; logging.getLogger("recommendarr.config").warning(f"Could not load settings store: {e}")
 
 _apply_stored_overrides()
